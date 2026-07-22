@@ -1,13 +1,13 @@
-"""From-scratch Text2Cypher package."""
+"""从零实现的 Text2Cypher 包。"""
 
-from text2cypher.models import (
+from text2cypher.application.pipeline import Text2CypherPipeline
+from text2cypher.domain.models import (
     ChatPrompt,
     GraphSchema,
     LLMResponse,
     QueryResult,
     Text2CypherResponse,
 )
-from text2cypher.pipeline import Text2CypherPipeline
 
 __all__ = [
     "ChatPrompt",
@@ -17,4 +17,3 @@ __all__ = [
     "Text2CypherPipeline",
     "Text2CypherResponse",
 ]
-

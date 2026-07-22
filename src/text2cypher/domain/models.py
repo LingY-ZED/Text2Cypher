@@ -1,4 +1,4 @@
-"""Domain models shared by the pipeline and its adapters."""
+"""领域层的不可变模型。"""
 
 from __future__ import annotations
 
@@ -10,52 +10,52 @@ from typing import Any
 def _require_text(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:
-        raise ValueError(f"{field_name} must not be blank")
+        raise ValueError(f"{field_name}不能为空")
     return normalized
 
 
 @dataclass(frozen=True, slots=True)
 class PropertySchema:
-    """A property available on a node label or relationship type."""
+    """节点标签或关系类型可用的属性。"""
 
     name: str
     types: tuple[str, ...] = ()
     mandatory: bool = False
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _require_text(self.name, "property name"))
+        object.__setattr__(self, "name", _require_text(self.name, "属性名"))
         object.__setattr__(self, "types", tuple(self.types))
 
 
 @dataclass(frozen=True, slots=True)
 class NodeSchema:
-    """A node label and its available properties."""
+    """节点标签及其可用属性。"""
 
     name: str
     properties: tuple[PropertySchema, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _require_text(self.name, "node label"))
+        object.__setattr__(self, "name", _require_text(self.name, "节点标签"))
         object.__setattr__(self, "properties", tuple(self.properties))
 
 
 @dataclass(frozen=True, slots=True)
 class RelationshipSchema:
-    """A relationship type and its available properties."""
+    """关系类型及其可用属性。"""
 
     name: str
     properties: tuple[PropertySchema, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "name", _require_text(self.name, "relationship type")
+            self, "name", _require_text(self.name, "关系类型")
         )
         object.__setattr__(self, "properties", tuple(self.properties))
 
 
 @dataclass(frozen=True, slots=True)
 class RelationshipPattern:
-    """An observed directed relationship pattern in the graph."""
+    """图中观测到的有向关系模式。"""
 
     start_labels: tuple[str, ...]
     relationship_type: str
@@ -67,13 +67,13 @@ class RelationshipPattern:
         object.__setattr__(
             self,
             "relationship_type",
-            _require_text(self.relationship_type, "relationship type"),
+            _require_text(self.relationship_type, "关系类型"),
         )
 
 
 @dataclass(frozen=True, slots=True)
 class GraphSchema:
-    """The structured graph schema injected into a Text2Cypher prompt."""
+    """注入 Text2Cypher 提示词的结构化图谱 Schema。"""
 
     nodes: tuple[NodeSchema, ...] = ()
     relationships: tuple[RelationshipSchema, ...] = ()
@@ -87,19 +87,19 @@ class GraphSchema:
 
 @dataclass(frozen=True, slots=True)
 class ChatPrompt:
-    """System and user messages sent to a chat-completions LLM."""
+    """发送给聊天补全模型的系统消息和用户消息。"""
 
     system: str
     user: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "system", _require_text(self.system, "system prompt"))
-        object.__setattr__(self, "user", _require_text(self.user, "user prompt"))
+        object.__setattr__(self, "system", _require_text(self.system, "系统提示词"))
+        object.__setattr__(self, "user", _require_text(self.user, "用户提示词"))
 
 
 @dataclass(frozen=True, slots=True)
 class LLMResponse:
-    """The subset of an LLM response required by the parser."""
+    """解析器所需的模型响应子集。"""
 
     content: str
     model: str | None = None
@@ -108,7 +108,7 @@ class LLMResponse:
 
 @dataclass(frozen=True, slots=True)
 class ValidationReport:
-    """Evidence returned by a completed read-only validation step."""
+    """只读校验步骤完成后返回的证据。"""
 
     query_type: str
     notifications: tuple[str, ...] = ()
@@ -117,27 +117,30 @@ class ValidationReport:
         object.__setattr__(
             self,
             "query_type",
-            _require_text(self.query_type, "query type"),
+            _require_text(self.query_type, "查询类型"),
         )
         object.__setattr__(self, "notifications", tuple(self.notifications))
 
 
 @dataclass(frozen=True, slots=True)
 class QueryResult:
-    """A bounded, JSON-friendly set of records returned by Neo4j."""
+    """Neo4j 返回的、数量受限且 JSON 友好的记录集合。"""
 
     columns: tuple[str, ...]
     rows: tuple[Mapping[str, Any], ...]
     truncated: bool = False
+    duration_ms: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "columns", tuple(self.columns))
         object.__setattr__(self, "rows", tuple(self.rows))
+        if self.duration_ms is not None and self.duration_ms < 0:
+            raise ValueError("查询耗时不能为负数")
 
 
 @dataclass(frozen=True, slots=True)
 class Text2CypherResponse:
-    """The successful public result of one Text2Cypher request."""
+    """一次成功 Text2Cypher 请求的公开结果。"""
 
     question: str
     cypher: str

@@ -1,4 +1,6 @@
 docs/
+plans/
+todo.md
 .env
 .venv/
 __pycache__/
@@ -8,8 +10,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+tmp/
 build/
 dist/
 *.egg-info/
-
-todo.md

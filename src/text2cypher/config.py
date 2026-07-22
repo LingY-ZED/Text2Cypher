@@ -1,4 +1,4 @@
-"""Environment-backed settings for the future live adapters."""
+"""供真实适配器使用的环境变量配置。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime settings loaded from TEXT2CYPHER_ environment variables."""
+    """从 TEXT2CYPHER_ 环境变量加载的运行时配置。"""
 
     model_config = SettingsConfigDict(
         env_prefix="TEXT2CYPHER_",
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     @classmethod
     def from_environment(cls) -> Settings:
-        """Load settings from the configured environment and optional .env file."""
+        """从环境变量和可选 .env 文件加载配置。"""
 
         return cls()  # type: ignore[call-arg]
 
@@ -40,14 +40,14 @@ class Settings(BaseSettings):
     def non_blank(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("must not be blank")
+            raise ValueError("不能为空")
         return normalized
 
     @field_validator("neo4j_password", "llm_api_key")
     @classmethod
     def non_blank_secret(cls, value: SecretStr) -> SecretStr:
         if not value.get_secret_value().strip():
-            raise ValueError("must not be blank")
+            raise ValueError("不能为空")
         return value
 
     @field_validator("llm_base_url")
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     def normalize_llm_base_url(cls, value: str) -> str:
         normalized = value.strip().rstrip("/")
         if not normalized.startswith(("http://", "https://")):
-            raise ValueError("must be an http or https URL")
+            raise ValueError("必须是 http 或 https URL")
         return normalized
 
     @field_validator(
@@ -67,5 +67,5 @@ class Settings(BaseSettings):
     @classmethod
     def positive(cls, value: int) -> int:
         if value <= 0:
-            raise ValueError("must be positive")
+            raise ValueError("必须为正数")
         return value

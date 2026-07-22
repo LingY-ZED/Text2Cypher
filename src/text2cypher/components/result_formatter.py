@@ -1,15 +1,15 @@
-"""JSON output formatter used by the initial CLI."""
+"""组件层中查询结果的稳定 JSON 格式化器。"""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
-from text2cypher.models import QueryResult
+from text2cypher.domain.models import QueryResult
 
 
 class JsonResultFormatter:
-    """Render a successful response as readable UTF-8 JSON."""
+    """将成功响应渲染为易读的 UTF-8 JSON。"""
 
     def format(self, question: str, cypher: str, result: QueryResult) -> str:
         payload: dict[str, Any] = {
@@ -19,6 +19,6 @@ class JsonResultFormatter:
             "rows": list(result.rows),
             "row_count": len(result.rows),
             "truncated": result.truncated,
+            "duration_ms": result.duration_ms,
         }
         return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
-

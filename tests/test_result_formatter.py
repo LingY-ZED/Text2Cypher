@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from text2cypher.models import QueryResult
-from text2cypher.result_formatter import JsonResultFormatter
+from text2cypher.components.result_formatter import JsonResultFormatter
+from text2cypher.domain.models import QueryResult
 
 
 def test_json_formatter_preserves_chinese_values() -> None:
@@ -23,4 +23,3 @@ def test_json_formatter_preserves_chinese_values() -> None:
     assert payload["columns"] == ["服务名称"]
     assert payload["rows"][0]["服务名称"] == "ts-food-service"
     assert payload["truncated"] is True
-

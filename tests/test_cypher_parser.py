@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from text2cypher.cypher_parser import DefaultCypherParser
-from text2cypher.errors import CypherParseError
+from text2cypher.components.cypher_parser import DefaultCypherParser
+from text2cypher.domain.errors import CypherParseError
 
 
 @pytest.mark.parametrize(
@@ -24,4 +24,3 @@ def test_parser_normalizes_supported_response_shapes(raw: str, expected: str) ->
 def test_parser_rejects_empty_response() -> None:
     with pytest.raises(CypherParseError):
         DefaultCypherParser().parse("  ")
-

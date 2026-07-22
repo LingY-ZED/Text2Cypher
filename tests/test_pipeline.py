@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from text2cypher.errors import CypherValidationError, QuestionValidationError
-from text2cypher.models import (
+from text2cypher.application.pipeline import Text2CypherPipeline
+from text2cypher.domain.errors import CypherValidationError, QuestionValidationError
+from text2cypher.domain.models import (
     ChatPrompt,
     GraphSchema,
     LLMResponse,
@@ -11,7 +12,6 @@ from text2cypher.models import (
     Text2CypherResponse,
     ValidationReport,
 )
-from text2cypher.pipeline import Text2CypherPipeline
 
 
 class FakeSchemaFetcher:
@@ -135,7 +135,7 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
     class RejectingValidator(FakeValidator):
         def validate(self, cypher: str) -> ValidationReport:
             self.calls.append("validator")
-            raise CypherValidationError("unsafe")
+            raise CypherValidationError("不安全")
 
     pipeline = Text2CypherPipeline(
         schema_fetcher=FakeSchemaFetcher(calls),
@@ -147,8 +147,7 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
         result_formatter=FakeFormatter(calls),
     )
 
-    with pytest.raises(CypherValidationError, match="unsafe"):
+    with pytest.raises(CypherValidationError, match="不安全"):
         pipeline.run("列出服务")
 
     assert calls == ["schema", "prompt", "llm", "parser", "validator"]
-

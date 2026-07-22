@@ -25,10 +25,10 @@ def test_settings_normalize_llm_base_url_and_keep_secrets() -> None:
 
 
 def test_settings_reject_non_positive_limit() -> None:
-    with pytest.raises(ValidationError, match="must be positive"):
+    with pytest.raises(ValidationError, match="必须为正数"):
         Settings(**_settings_kwargs(), max_result_rows=0)
 
 
 def test_settings_reject_blank_secret() -> None:
-    with pytest.raises(ValidationError, match="must not be blank"):
+    with pytest.raises(ValidationError, match="不能为空"):
         Settings(**(_settings_kwargs() | {"llm_api_key": " "}))
