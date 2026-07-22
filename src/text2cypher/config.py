@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     llm_base_url: str
     llm_api_key: SecretStr
     llm_model: str
-    llm_timeout_seconds: int = 30
+    llm_timeout_seconds: int = 60
+    llm_max_tokens: int = 512
+    llm_disable_thinking: bool = False
     schema_timeout_seconds: int = 10
     query_timeout_seconds: int = 10
     max_result_rows: int = 100
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "llm_timeout_seconds",
+        "llm_max_tokens",
         "schema_timeout_seconds",
         "query_timeout_seconds",
         "max_result_rows",

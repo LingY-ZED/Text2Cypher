@@ -32,3 +32,15 @@ def test_settings_reject_non_positive_limit() -> None:
 def test_settings_reject_blank_secret() -> None:
     with pytest.raises(ValidationError, match="不能为空"):
         Settings(**(_settings_kwargs() | {"llm_api_key": " "}))
+
+
+def test_settings_supports_model_output_control() -> None:
+    settings = Settings(
+        **(
+            _settings_kwargs()
+            | {"llm_max_tokens": 256, "llm_disable_thinking": True}
+        )
+    )
+
+    assert settings.llm_max_tokens == 256
+    assert settings.llm_disable_thinking is True

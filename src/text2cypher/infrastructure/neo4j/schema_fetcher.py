@@ -62,9 +62,16 @@ class Neo4jSchemaFetcher:
             node_properties = self._fetch_node_properties()
             relationship_properties = self._fetch_relationship_properties()
             try:
-                patterns = self._fetch_visualization_patterns()
+                visualization_patterns = self._fetch_visualization_patterns()
             except (DriverError, Neo4jError):
                 patterns = self._fetch_fallback_patterns()
+            else:
+                try:
+                    observed_patterns = self._fetch_fallback_patterns()
+                except (DriverError, Neo4jError):
+                    patterns = visualization_patterns
+                else:
+                    patterns = observed_patterns or visualization_patterns
             return self._build_schema(
                 labels,
                 node_properties,

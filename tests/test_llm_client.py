@@ -53,6 +53,7 @@ def test_llm_client_sends_openai_compatible_request_and_extracts_response() -> N
                 {"role": "user", "content": "用户问题"},
             ],
             "temperature": 0,
+            "max_tokens": 512,
             "stream": False,
         },
     }
@@ -75,3 +76,28 @@ def test_llm_client_hides_response_body_when_service_returns_error() -> None:
     client.close()
     assert "不应泄露的服务响应" not in str(error.value)
     assert "test-api-key" not in str(error.value)
+
+
+def test_llm_client_only_sends_thinking_extension_when_enabled() -> None:
+    received: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "RETURN 1"}}]},
+        )
+
+    client = OpenAICompatibleLLMClient(
+        base_url="https://llm.example/v1",
+        api_key="test-api-key",
+        model="test-model",
+        timeout_seconds=5,
+        disable_thinking=True,
+        transport=httpx.MockTransport(handler),
+    )
+
+    client.generate(ChatPrompt(system="系统提示", user="用户问题"))
+    client.close()
+
+    assert received["thinking"] == {"type": "disabled"}

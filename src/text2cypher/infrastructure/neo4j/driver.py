@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from neo4j import Driver, GraphDatabase
+from neo4j import Driver, GraphDatabase, NotificationMinimumSeverity
 from neo4j.exceptions import DriverError, Neo4jError
 
 from text2cypher.config import Settings
@@ -29,6 +29,7 @@ class Neo4jDriverProvider:
                 self._settings.neo4j_username,
                 self._settings.neo4j_password.get_secret_value(),
             ),
+            warn_notification_severity=NotificationMinimumSeverity.OFF,
         )
         try:
             driver.verify_connectivity()

@@ -20,12 +20,16 @@ class OpenAICompatibleLLMClient:
         api_key: str,
         model: str,
         timeout_seconds: int,
+        max_tokens: int = 512,
+        disable_thinking: bool = False,
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._max_tokens = max_tokens
+        self._disable_thinking = disable_thinking
         self._client = client or httpx.Client(
             timeout=float(timeout_seconds),
             transport=transport,
@@ -42,8 +46,11 @@ class OpenAICompatibleLLMClient:
                 {"role": "user", "content": prompt.user},
             ],
             "temperature": 0,
+            "max_tokens": self._max_tokens,
             "stream": False,
         }
+        if self._disable_thinking:
+            payload["thinking"] = {"type": "disabled"}
         try:
             response = self._client.post(
                 f"{self._base_url}/chat/completions",

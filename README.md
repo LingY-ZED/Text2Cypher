@@ -49,6 +49,10 @@ python -m pip install -e ".[dev]"
 将 `.env.example` 复制为 `.env`，在本地填写 Neo4j 连接信息和模型 API Key。`.env`
 已被忽略，禁止提交真实密码或 API Key。
 
+DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
+`TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
+保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
+
 ## 运行
 
 ```powershell
@@ -88,3 +92,13 @@ pytest tests\integration\test_neo4j_readonly.py
 
 该集成测试只读取动态 Schema，并执行 `RETURN 1`，不会写入或修改图数据。后续验收计划见
 根目录 [todo.md](todo.md)。
+
+五类自然语言验收还可显式执行：
+
+```powershell
+$env:TEXT2CYPHER_RUN_ACCEPTANCE="1"
+pytest tests\integration\test_text2cypher_acceptance.py
+```
+
+该测试会调用真实模型与数据库；若模型服务网络暂不可用，对应用例会标记为跳过。验收问题和
+人工结果记录在 [阶段 2 计划](plans/phase-02-p1-acceptance.md)。

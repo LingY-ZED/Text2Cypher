@@ -26,6 +26,8 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             api_key=settings.llm_api_key.get_secret_value(),
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
+            max_tokens=settings.llm_max_tokens,
+            disable_thinking=settings.llm_disable_thinking,
         )
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(

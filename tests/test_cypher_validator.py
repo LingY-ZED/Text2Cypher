@@ -14,6 +14,14 @@ class FakeSummary:
     """模拟 Neo4j 的查询摘要。"""
 
     query_type: str
+    gql_status_objects: tuple[FakeStatus, ...] = ()
+
+
+@dataclass
+class FakeStatus:
+    """模拟 Neo4j 的 GQL 状态对象。"""
+
+    gql_status: str
 
 
 @dataclass
@@ -26,13 +34,23 @@ class FakeExplainResult:
 class FakeValidatorDriver:
     """记录 EXPLAIN 调用的模拟驱动。"""
 
-    def __init__(self, query_type: str = "r") -> None:
+    def __init__(
+        self,
+        query_type: str = "r",
+        statuses: tuple[FakeStatus, ...] = (),
+    ) -> None:
         self.calls: list[tuple[Any, dict[str, Any]]] = []
         self._query_type = query_type
+        self._statuses = statuses
 
     def execute_query(self, query: Any, **kwargs: Any) -> FakeExplainResult:
         self.calls.append((query, kwargs))
-        return FakeExplainResult(summary=FakeSummary(query_type=self._query_type))
+        return FakeExplainResult(
+            summary=FakeSummary(
+                query_type=self._query_type,
+                gql_status_objects=self._statuses,
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -69,3 +87,10 @@ def test_validator_rejects_non_read_query_type_after_explain() -> None:
 
     with pytest.raises(CypherValidationError, match="只读"):
         Neo4jCypherValidator(driver, "neo4j", 5).validate("RETURN 1")
+
+
+def test_validator_rejects_unknown_property_notification_after_explain() -> None:
+    driver = FakeValidatorDriver(statuses=(FakeStatus(gql_status="01N52"),))
+
+    with pytest.raises(CypherValidationError, match="不存在的属性"):
+        Neo4jCypherValidator(driver, "neo4j", 5).validate("RETURN 节点.不存在")

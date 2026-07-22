@@ -67,13 +67,31 @@ class Neo4jCypherValidator:
         query_type = getattr(summary, "query_type", None)
         if query_type != "r":
             raise CypherValidationError("Neo4j 未将 Cypher 判定为只读查询")
-        return ValidationReport(query_type=query_type)
+        status_codes = self._status_codes(summary)
+        if "01N52" in status_codes:
+            raise CypherValidationError("Cypher 使用了当前 Schema 中不存在的属性")
+        return ValidationReport(
+            query_type=query_type,
+            notifications=status_codes,
+        )
 
     @staticmethod
     def _summary(result: Any) -> Any:
         if hasattr(result, "summary"):
             return result.summary
         return result[1]
+
+    @staticmethod
+    def _status_codes(summary: Any) -> tuple[str, ...]:
+        statuses = getattr(summary, "gql_status_objects", ())
+        return tuple(
+            status_code
+            for status in statuses
+            if isinstance(
+                status_code := getattr(status, "gql_status", None),
+                str,
+            )
+        )
 
     @staticmethod
     def _sanitize(cypher: str) -> str:

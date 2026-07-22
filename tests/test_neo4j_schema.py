@@ -102,6 +102,7 @@ def test_schema_fetcher_normalizes_and_sorts_schema_from_builtin_procedures() ->
     assert schema.patterns[0].start_labels == ("微服务",)
     assert schema.patterns[0].relationship_type == "调用"
     assert schema.patterns[0].end_labels == ("接口",)
+    assert any("MATCH (start_node)" in call for call in driver.calls)
 
 
 def test_schema_fetcher_uses_fallback_when_visualization_procedure_fails() -> None:

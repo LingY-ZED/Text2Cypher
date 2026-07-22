@@ -1,0 +1,79 @@
+"""显式启用时执行五类真实 Text2Cypher 验收问题。"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+import pytest
+
+from text2cypher.application.bootstrap import build_pipeline
+from text2cypher.application.pipeline import Text2CypherPipeline
+from text2cypher.config import Settings
+from text2cypher.domain.errors import LLMGenerationError
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("TEXT2CYPHER_RUN_ACCEPTANCE") != "1",
+    reason="仅在显式设置 TEXT2CYPHER_RUN_ACCEPTANCE=1 时调用真实模型和数据库",
+)
+
+
+@dataclass(frozen=True)
+class AcceptanceCase:
+    """一条按查询意图而非参考 Cypher 文本断言的验收用例。"""
+
+    question: str
+    key_terms: tuple[str, ...]
+
+
+CASES = (
+    AcceptanceCase(
+        question="ts-food-service 有哪些 API 端点？",
+        key_terms=("ts-food-service",),
+    ),
+    AcceptanceCase(
+        question="getAllFood 方法调用了哪些下游服务？",
+        key_terms=("getAllFood",),
+    ),
+    AcceptanceCase(
+        question="哪些服务调用了 ts-train-food-service？",
+        key_terms=("ts-train-food-service",),
+    ),
+    AcceptanceCase(
+        question="ts-food-service 和 ts-delivery-service 之间有哪些 MQ 通信？",
+        key_terms=("ts-food-service", "ts-delivery-service"),
+    ),
+    AcceptanceCase(
+        question="列出所有微服务之间的 REST 调用关系统计",
+        key_terms=("跨服务调用",),
+    ),
+)
+
+
+@pytest.fixture
+def pipeline() -> Iterator[Text2CypherPipeline]:
+    """为每条真实验收用例创建并关闭完整生产流水线。"""
+
+    instance = build_pipeline(Settings.from_environment())
+    try:
+        yield instance
+    finally:
+        instance.close()
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.question)
+def test_text2cypher_acceptance(
+    pipeline: Text2CypherPipeline,
+    case: AcceptanceCase,
+) -> None:
+    """验证完整链路生成语义字段齐全且有实际结果的只读查询。"""
+
+    try:
+        response = pipeline.run(case.question)
+    except LLMGenerationError as error:
+        pytest.skip(f"外部模型服务暂不可用：{error}")
+
+    assert response.result.rows
+    assert response.result.columns
+    assert all(term in response.cypher for term in case.key_terms)
