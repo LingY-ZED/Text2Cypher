@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 
@@ -68,6 +69,74 @@ class RelationshipPattern:
             self,
             "relationship_type",
             _require_text(self.relationship_type, "关系类型"),
+        )
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class SchemaGraphEdge:
+    """Schema 图中一条未经推导的有向关系模式。"""
+
+    start_labels: tuple[str, ...]
+    relationship_type: str
+    end_labels: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "start_labels",
+            tuple(_require_text(label, "起点标签") for label in self.start_labels),
+        )
+        object.__setattr__(
+            self,
+            "relationship_type",
+            _require_text(self.relationship_type, "关系类型"),
+        )
+        object.__setattr__(
+            self,
+            "end_labels",
+            tuple(_require_text(label, "终点标签") for label in self.end_labels),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaGraph:
+    """由关系模式组成的轻量、有向且不可变的 Schema 图。"""
+
+    nodes: tuple[str, ...] = ()
+    edges: tuple[SchemaGraphEdge, ...] = ()
+    outgoing: Mapping[str, tuple[SchemaGraphEdge, ...]] = field(
+        default_factory=dict
+    )
+    incoming: Mapping[str, tuple[SchemaGraphEdge, ...]] = field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "nodes",
+            tuple(_require_text(node, "节点标签") for node in self.nodes),
+        )
+        object.__setattr__(self, "edges", tuple(self.edges))
+        object.__setattr__(
+            self,
+            "outgoing",
+            MappingProxyType(
+                {
+                    _require_text(label, "节点标签"): tuple(edges)
+                    for label, edges in self.outgoing.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "incoming",
+            MappingProxyType(
+                {
+                    _require_text(label, "节点标签"): tuple(edges)
+                    for label, edges in self.incoming.items()
+                }
+            ),
         )
 
 

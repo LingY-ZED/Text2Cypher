@@ -2,84 +2,156 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
+from text2cypher.components.schema_serializer import SchemaSerializer
 from text2cypher.domain.errors import PromptBuildError
-from text2cypher.domain.models import ChatPrompt, GraphSchema, PropertySchema
+from text2cypher.domain.models import ChatPrompt, GraphSchema
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelingConstraint:
+    text: str
+    required_node_properties: frozenset[str] = frozenset()
+    required_relationship_properties: frozenset[str] = frozenset()
 
 
 class DefaultPromptBuilder:
     """构造不含 Few-shot 选择的最小 Schema 约束提示词。"""
 
     system_instruction = (
-        "你是 Neo4j Cypher 专家。根据提供的图谱 Schema 和用户问题生成一条只读 "
-        "Cypher 查询。只能使用 Schema 中出现的节点标签、关系类型和属性名。"
-        "不得生成写入、管理、过程调用或解释性文字。响应只能包含 Cypher。"
+        "你是 Neo4j Cypher 专家。\n"
+        "只能使用提供的图谱 Schema。\n"
+        "必须严格遵守关系模式中给出的关系方向。\n"
+        "多跳路径只能首尾连接已给出的关系模式，且每一跳都不得反转。\n"
+        "不得使用 Schema 中不存在的节点标签、关系类型或属性。\n"
+        "引用节点或关系属性前，必须在关系模式中为对应元素绑定变量。\n"
+        "不得生成写入、管理或过程调用。\n"
+        "只能返回一条只读 Cypher，不输出解释文字。"
     )
     modeling_constraints = (
-        "代码知识图谱建模约束：归属于关系方向为子节点到父节点。从 API端点、方法或类"
-        "定位所属微服务时，必须使用 [:归属于*1..3]，不能使用单跳归属于关系替代。"
-        "调用关系方向为调用方到被调用方。方法查询下游服务时，必须找到 API类型为下游API"
-        "的 API端点，并直接返回其目标微服务属性；此时 API端点的归属于路径表示本地"
-        "调用位置，不能用于推断目标服务。"
-        "REST 跨服务调用统计必须遵循此结构：先匹配"
-        "(sourceApi:API端点)-[call:调用 {调用类型: '跨服务调用'}]->"
-        "(targetApi:API端点)，再让两个 API端点各自通过 [:归属于*1..3] 映射到"
-        "源和目标微服务，最后按两个服务名称和 count(call) 聚合。调用类型是关系属性，"
-        "不能以方法节点过滤，也不能从方法节点开始构造这类统计。"
-        "返回微服务名称时，必须使用服务名称属性，不得翻译或臆造英文 camelCase 属性。"
-        "查询某服务自身提供的 API端点时，必须以 API类型为上游API过滤，并通过归属于"
-        "多跳路径定位该服务。反向查询哪些服务调用某服务时，必须以 API端点的目标微服务"
-        "属性定位被调服务，再反向定位调用方法所属微服务。服务间 MQ 查询必须匹配微服务"
-        "之间直接的消息流关系，消息流类型必须为服务间消息依赖；不得引入方法、交换机或"
-        "队列等中间节点，可返回该消息流关系的交换机名称和队列名称属性。"
+        _ModelingConstraint(
+            text=(
+                "属性 `API类型` 的值 `上游API` 表示对外提供的 API，"
+                "值 `下游API` 表示访问下游目标的 API。"
+            ),
+            required_node_properties=frozenset({"API类型"}),
+        ),
+        _ModelingConstraint(
+            text=(
+                "属性 `目标微服务` 表示业务调用目标；本地层级或归属位置"
+                "不能替代该目标语义。"
+            ),
+            required_node_properties=frozenset({"目标微服务"}),
+        ),
+        _ModelingConstraint(
+            text=(
+                "对于反向查询哪些服务调用了指定服务的问题，必须先匹配"
+                "`目标微服务` 等于问题目标名称且 `API类型` 为 `下游API` 的节点；"
+                "该节点本身就是调用方路径的起点，查询中不得添加指向它的前置关系；"
+                "应从它开始首尾连接 Schema 中方向一致的关系模式，直至提供"
+                "`服务名称` 的调用方节点。"
+            ),
+            required_node_properties=frozenset(
+                {"API类型", "目标微服务", "服务名称"}
+            ),
+        ),
+        _ModelingConstraint(
+            text=(
+                "REST 跨服务调用由关系属性 `调用类型` 的值 `跨服务调用` 标识；"
+                "统计时应选择两端节点类型都提供 `API类型` 属性的关系模式，"
+                "将两端分别按 Schema 真实方向映射到提供 `服务名称` 属性的节点，"
+                "并对已绑定的该关系变量计数和按两端名称分组。"
+            ),
+            required_node_properties=frozenset({"API类型", "服务名称"}),
+            required_relationship_properties=frozenset({"调用类型"}),
+        ),
+        _ModelingConstraint(
+            text=(
+                "服务间 MQ 依赖由关系属性 `消息流类型` 的值 "
+                "`服务间消息依赖` 标识；应选择两端节点类型都提供 `服务名称` "
+                "属性的关系模式，并绑定关系变量后读取其属性。"
+            ),
+            required_node_properties=frozenset({"服务名称"}),
+            required_relationship_properties=frozenset({"消息流类型"}),
+        ),
+        _ModelingConstraint(
+            text=(
+                "返回服务名称时只能使用 Schema 中实际提供的 `服务名称` 属性，"
+                "不得翻译或杜撰属性名。"
+            ),
+            required_node_properties=frozenset({"服务名称"}),
+        ),
+        _ModelingConstraint(
+            text="若需返回交换机名称，应读取关系属性 `交换机名称`。",
+            required_relationship_properties=frozenset({"交换机名称"}),
+        ),
+        _ModelingConstraint(
+            text="若需返回队列名称，应读取关系属性 `队列名称`。",
+            required_relationship_properties=frozenset({"队列名称"}),
+        ),
     )
+
+    def __init__(
+        self,
+        schema_graph_builder: SchemaGraphBuilder | None = None,
+        schema_serializer: SchemaSerializer | None = None,
+    ) -> None:
+        self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
+        self._schema_serializer = schema_serializer or SchemaSerializer()
 
     def build(self, schema: GraphSchema, question: str) -> ChatPrompt:
         normalized_question = question.strip()
         if not normalized_question:
             raise PromptBuildError("问题不能为空")
 
-        return ChatPrompt(
-            system=f"{self.system_instruction}\n\n{self.modeling_constraints}",
-            user=(
-                "图谱结构：\n"
-                f"{self._render_schema(schema)}\n\n"
-                "必须遵守的建模规则：\n"
-                f"{self.modeling_constraints}\n\n"
-                "用户问题：\n"
-                f"{normalized_question}\n\n"
-                "只输出 Cypher："
-            ),
+        schema_graph = self._schema_graph_builder.build(schema)
+        serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
+        applicable_constraints = self._render_applicable_constraints(schema)
+        user_sections = [
+            "图谱 Schema：",
+            serialized_schema,
+        ]
+        if applicable_constraints:
+            user_sections.extend(
+                [
+                    "可适用的业务语义：",
+                    applicable_constraints,
+                ]
+            )
+        user_sections.extend(
+            [
+                "用户问题：",
+                normalized_question,
+                "只输出 Cypher：",
+            ]
         )
 
-    @staticmethod
-    def _render_properties(properties: tuple[PropertySchema, ...]) -> str:
-        if not properties:
-            return "（未观察到属性）"
-        values = []
-        for property_schema in properties:
-            type_text = " | ".join(property_schema.types) or "未知类型"
-            required = "（必填）" if property_schema.mandatory else ""
-            values.append(f"{property_schema.name}: {type_text}{required}")
-        return ", ".join(values)
+        return ChatPrompt(
+            system=self.system_instruction,
+            user="\n\n".join(user_sections),
+        )
 
     @classmethod
-    def _render_schema(cls, schema: GraphSchema) -> str:
-        node_lines = [
-            f"- {node.name} {{{cls._render_properties(node.properties)}}}"
+    def _render_applicable_constraints(cls, schema: GraphSchema) -> str:
+        available_node_properties = {
+            property_schema.name
             for node in schema.nodes
-        ] or ["- （未观察到节点标签）"]
-        relationship_lines = [
-            (
-                f"- {relationship.name} "
-                f"{{{cls._render_properties(relationship.properties)}}}"
-            )
+            for property_schema in node.properties
+        }
+        available_relationship_properties = {
+            property_schema.name
             for relationship in schema.relationships
-        ] or ["- （未观察到关系类型）"]
+            for property_schema in relationship.properties
+        }
         return "\n".join(
-            [
-                "节点属性：",
-                *node_lines,
-                "关系属性：",
-                *relationship_lines,
-            ]
+            f"- {constraint.text}"
+            for constraint in cls.modeling_constraints
+            if (
+                constraint.required_node_properties
+                <= available_node_properties
+                and constraint.required_relationship_properties
+                <= available_relationship_properties
+            )
         )
