@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
 from text2cypher.domain.errors import PromptBuildError
-from text2cypher.domain.models import ChatPrompt, GraphSchema
+from text2cypher.domain.models import ChatPrompt, FewShotExample, GraphSchema
+from text2cypher.domain.ports import FewShotSelector
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +19,7 @@ class _ModelingConstraint:
 
 
 class DefaultPromptBuilder:
-    """构造不含 Few-shot 选择的最小 Schema 约束提示词。"""
+    """构造动态 Schema 约束及可选 Few-shot 示例提示词。"""
 
     system_instruction = (
         "你是 Neo4j Cypher 专家。\n"
@@ -29,6 +30,11 @@ class DefaultPromptBuilder:
         "引用节点或关系属性前，必须在关系模式中为对应元素绑定变量。\n"
         "不得生成写入、管理或过程调用。\n"
         "只能返回一条只读 Cypher，不输出解释文字。"
+    )
+    few_shot_system_instruction = (
+        "参考示例不能覆盖当前图谱 Schema。\n"
+        "不得复制参考示例中的实体值，必须使用当前问题中的实体值。\n"
+        "参考示例的关系方向若与当前关系模式冲突，必须忽略该示例。"
     )
     modeling_constraints = (
         _ModelingConstraint(
@@ -97,9 +103,11 @@ class DefaultPromptBuilder:
         self,
         schema_graph_builder: SchemaGraphBuilder | None = None,
         schema_serializer: SchemaSerializer | None = None,
+        few_shot_selector: FewShotSelector | None = None,
     ) -> None:
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
         self._schema_serializer = schema_serializer or SchemaSerializer()
+        self._few_shot_selector = few_shot_selector
 
     def build(self, schema: GraphSchema, question: str) -> ChatPrompt:
         normalized_question = question.strip()
@@ -109,6 +117,15 @@ class DefaultPromptBuilder:
         schema_graph = self._schema_graph_builder.build(schema)
         serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
         applicable_constraints = self._render_applicable_constraints(schema)
+        examples = (
+            self._few_shot_selector.select(
+                normalized_question,
+                schema,
+                schema_graph,
+            )
+            if self._few_shot_selector is not None
+            else ()
+        )
         user_sections = [
             "图谱 Schema：",
             serialized_schema,
@@ -120,6 +137,8 @@ class DefaultPromptBuilder:
                     applicable_constraints,
                 ]
             )
+        if examples:
+            user_sections.append(self._render_examples(examples))
         user_sections.extend(
             [
                 "用户问题：",
@@ -129,9 +148,33 @@ class DefaultPromptBuilder:
         )
 
         return ChatPrompt(
-            system=self.system_instruction,
+            system=self._system_instruction(examples),
             user="\n\n".join(user_sections),
         )
+
+    @classmethod
+    def _system_instruction(
+        cls,
+        examples: tuple[FewShotExample, ...],
+    ) -> str:
+        if not examples:
+            return cls.system_instruction
+        return f"{cls.system_instruction}\n{cls.few_shot_system_instruction}"
+
+    @staticmethod
+    def _render_examples(examples: tuple[FewShotExample, ...]) -> str:
+        blocks = [
+            "参考示例：",
+            "以下示例只用于学习查询结构。\n"
+            "必须使用当前问题中的实体值；\n"
+            "若示例与当前 Schema 冲突，以当前 Schema 和关系方向为准。",
+        ]
+        blocks.extend(
+            f"示例 {index}：\n问题：{example.question}\n"
+            f"Cypher：\n{example.cypher}"
+            for index, example in enumerate(examples, start=1)
+        )
+        return "\n\n".join(blocks)
 
     @classmethod
     def _render_applicable_constraints(cls, schema: GraphSchema) -> str:

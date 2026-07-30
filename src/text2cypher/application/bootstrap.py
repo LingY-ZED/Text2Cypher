@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from text2cypher.components.cypher_parser import DefaultCypherParser
+from text2cypher.components.few_shot_selector import HybridFewShotSelector
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
 from text2cypher.config import Settings
+from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
@@ -18,6 +20,7 @@ from .pipeline import Text2CypherPipeline
 def build_pipeline(settings: Settings) -> Text2CypherPipeline:
     """在真实适配器完成后构造运行流水线。"""
 
+    prompt_builder = _build_prompt_builder(settings)
     driver_provider = Neo4jDriverProvider(settings)
     try:
         driver = driver_provider.driver
@@ -35,7 +38,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 settings.neo4j_database,
                 settings.schema_timeout_seconds,
             ),
-            prompt_builder=DefaultPromptBuilder(),
+            prompt_builder=prompt_builder,
             llm_client=llm_client,
             cypher_parser=DefaultCypherParser(),
             cypher_validator=Neo4jCypherValidator(
@@ -55,6 +58,22 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
     except Exception:
         driver_provider.close()
         raise
+
+
+def _build_prompt_builder(settings: Settings) -> DefaultPromptBuilder:
+    """按配置构造 Zero-shot 或动态 Few-shot PromptBuilder。"""
+
+    if not settings.few_shot_enabled:
+        return DefaultPromptBuilder()
+
+    examples = JsonFewShotExampleLoader(settings.few_shot_library_path).load()
+    selector = HybridFewShotSelector(
+        examples,
+        top_k=settings.few_shot_top_k,
+        min_score=settings.few_shot_min_score,
+        max_chars=settings.few_shot_max_chars,
+    )
+    return DefaultPromptBuilder(few_shot_selector=selector)
 
 
 def _close_resources(
