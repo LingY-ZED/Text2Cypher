@@ -39,10 +39,11 @@ _ALLOWED_START = re.compile(
 _FORBIDDEN_CYPHER = re.compile(
     r"\b(?:"
     r"CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|ALTER|GRANT|DENY|"
-    r"REVOKE|CALL|FOREACH|LOAD\s+CSV"
+    r"REVOKE|FOREACH|LOAD\s+CSV"
     r")\b",
     re.IGNORECASE,
 )
+_CALL_CLAUSE = re.compile(r"\bCALL\s+(?:\{|[A-Za-z_`])", re.IGNORECASE)
 
 
 class JsonFewShotExampleLoader:
@@ -229,6 +230,7 @@ class JsonFewShotExampleLoader:
             raise FewShotLibraryError("Few-shot Cypher 必须以只读子句开始")
         if (
             _FORBIDDEN_CYPHER.search(cypher)
+            or _CALL_CLAUSE.search(cypher)
             or ";" in cypher
             or "//" in cypher
             or "/*" in cypher

@@ -6,7 +6,12 @@ import os
 
 import pytest
 
+from text2cypher.components.few_shot_schema_filter import (
+    FewShotSchemaCompatibilityFilter,
+)
+from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.config import Settings
+from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
@@ -47,3 +52,45 @@ def test_real_neo4j_schema_and_readonly_query() -> None:
     assert schema.nodes or schema.relationships or schema.patterns
     assert report.query_type == "r"
     assert result.rows == ({"数值": 1},)
+
+
+def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
+    """验证 18 条黄金示例符合实时 Schema 并逐条通过 EXPLAIN。"""
+
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings)
+    try:
+        driver = provider.driver
+        schema = Neo4jSchemaFetcher(
+            driver,
+            settings.neo4j_database,
+            settings.schema_timeout_seconds,
+        ).fetch()
+        schema_graph = SchemaGraphBuilder().build(schema)
+        compatibility_filter = FewShotSchemaCompatibilityFilter()
+        validator = Neo4jCypherValidator(
+            driver,
+            settings.neo4j_database,
+            settings.query_timeout_seconds,
+        )
+        examples = JsonFewShotExampleLoader().load()
+
+        incompatible = [
+            example.id
+            for example in examples
+            if not compatibility_filter.is_compatible(
+                example,
+                schema,
+                schema_graph,
+            )
+        ]
+        reports = {
+            example.id: validator.validate(example.cypher)
+            for example in examples
+        }
+    finally:
+        provider.close()
+
+    assert incompatible == []
+    assert len(reports) == 18
+    assert all(report.query_type == "r" for report in reports.values())

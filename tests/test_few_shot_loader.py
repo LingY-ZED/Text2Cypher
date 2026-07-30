@@ -62,6 +62,19 @@ def test_loader_builds_immutable_domain_examples(tmp_path: Path) -> None:
         example.question = "不能修改"  # type: ignore[misc]
 
 
+def test_loader_allows_call_as_relationship_variable_name(
+    tmp_path: Path,
+) -> None:
+    library_path = tmp_path / "examples.json"
+    payload = _example_payload()
+    payload["cypher"] = "MATCH (a:A)-[call:R]->(b:B) RETURN call.kind"
+    _write_library(library_path, [payload])
+
+    examples = JsonFewShotExampleLoader(library_path).load()
+
+    assert examples[0].cypher == payload["cypher"]
+
+
 def test_loader_rejects_duplicate_ids(tmp_path: Path) -> None:
     library_path = tmp_path / "examples.json"
     _write_library(
