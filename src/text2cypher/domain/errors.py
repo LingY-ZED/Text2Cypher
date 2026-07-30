@@ -9,6 +9,10 @@ class ConfigurationError(Text2CypherError):
     """运行时配置缺失或不合法时抛出。"""
 
 
+class FewShotLibraryError(ConfigurationError):
+    """Few-shot 示例库不存在或内容非法。"""
+
+
 class QuestionValidationError(Text2CypherError):
     """用户问题为空或不合法时抛出。"""
 

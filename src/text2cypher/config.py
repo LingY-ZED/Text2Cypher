@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,6 +29,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 60
     llm_max_tokens: int = 512
     llm_disable_thinking: bool = False
+    few_shot_enabled: bool = True
+    few_shot_top_k: int = 3
+    few_shot_min_score: float = 0.18
+    few_shot_max_chars: int = 3500
+    few_shot_library_path: Path | None = None
     schema_timeout_seconds: int = 10
     query_timeout_seconds: int = 10
     max_result_rows: int = 100
@@ -63,6 +71,7 @@ class Settings(BaseSettings):
     @field_validator(
         "llm_timeout_seconds",
         "llm_max_tokens",
+        "few_shot_max_chars",
         "schema_timeout_seconds",
         "query_timeout_seconds",
         "max_result_rows",
@@ -71,4 +80,25 @@ class Settings(BaseSettings):
     def positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("必须为正数")
+        return value
+
+    @field_validator("few_shot_top_k")
+    @classmethod
+    def valid_few_shot_top_k(cls, value: int) -> int:
+        if not 1 <= value <= 3:
+            raise ValueError("必须在 1 到 3 之间")
+        return value
+
+    @field_validator("few_shot_min_score")
+    @classmethod
+    def valid_few_shot_min_score(cls, value: float) -> float:
+        if not 0 <= value <= 1:
+            raise ValueError("必须在 0 到 1 之间")
+        return value
+
+    @field_validator("few_shot_library_path", mode="before")
+    @classmethod
+    def empty_few_shot_library_path(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value

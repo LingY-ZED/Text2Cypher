@@ -7,9 +7,11 @@ from typing import Any, Protocol, runtime_checkable
 
 from text2cypher.domain.models import (
     ChatPrompt,
+    FewShotExample,
     GraphSchema,
     LLMResponse,
     QueryResult,
+    SchemaGraph,
     ValidationReport,
 )
 
@@ -26,6 +28,18 @@ class PromptBuilder(Protocol):
     """构造与模型服务商无关的聊天提示词。"""
 
     def build(self, schema: GraphSchema, question: str) -> ChatPrompt: ...
+
+
+@runtime_checkable
+class FewShotSelector(Protocol):
+    """从当前 Schema 兼容的示例中选择与问题最相关的子集。"""
+
+    def select(
+        self,
+        question: str,
+        schema: GraphSchema,
+        schema_graph: SchemaGraph,
+    ) -> tuple[FewShotExample, ...]: ...
 
 
 @runtime_checkable

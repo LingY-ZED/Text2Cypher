@@ -155,6 +155,101 @@ class GraphSchema:
 
 
 @dataclass(frozen=True, slots=True)
+class FewShotSchemaRequirements:
+    """一条 Few-shot 示例适用所需的精确 Schema 子集。"""
+
+    node_labels: tuple[str, ...] = ()
+    relationship_types: tuple[str, ...] = ()
+    node_properties: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    relationship_properties: Mapping[str, tuple[str, ...]] = field(
+        default_factory=dict
+    )
+    patterns: tuple[RelationshipPattern, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "node_labels",
+            tuple(_require_text(label, "节点标签") for label in self.node_labels),
+        )
+        object.__setattr__(
+            self,
+            "relationship_types",
+            tuple(
+                _require_text(relationship_type, "关系类型")
+                for relationship_type in self.relationship_types
+            ),
+        )
+        object.__setattr__(
+            self,
+            "node_properties",
+            MappingProxyType(
+                {
+                    _require_text(label, "节点标签"): tuple(
+                        _require_text(property_name, "节点属性名")
+                        for property_name in properties
+                    )
+                    for label, properties in self.node_properties.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "relationship_properties",
+            MappingProxyType(
+                {
+                    _require_text(relationship_type, "关系类型"): tuple(
+                        _require_text(property_name, "关系属性名")
+                        for property_name in properties
+                    )
+                    for relationship_type, properties
+                    in self.relationship_properties.items()
+                }
+            ),
+        )
+        object.__setattr__(self, "patterns", tuple(self.patterns))
+
+
+@dataclass(frozen=True, slots=True)
+class FewShotExample:
+    """一条自然语言到只读 Cypher 的黄金示例。"""
+
+    id: str
+    category: str
+    question: str
+    cypher: str
+    aliases: tuple[str, ...]
+    tags: tuple[str, ...]
+    schema_requirements: FewShotSchemaRequirements
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "id", _require_text(self.id, "示例 ID"))
+        object.__setattr__(
+            self,
+            "category",
+            _require_text(self.category, "示例分类"),
+        )
+        object.__setattr__(
+            self,
+            "question",
+            _require_text(self.question, "示例问题"),
+        )
+        object.__setattr__(
+            self,
+            "cypher",
+            _require_text(self.cypher, "示例 Cypher"),
+        )
+        aliases = tuple(_require_text(alias, "示例别名") for alias in self.aliases)
+        if not aliases:
+            raise ValueError("示例别名不能为空")
+        object.__setattr__(self, "aliases", aliases)
+        tags = tuple(_require_text(tag, "示例标签") for tag in self.tags)
+        if not tags:
+            raise ValueError("示例标签不能为空")
+        object.__setattr__(self, "tags", tags)
+
+
+@dataclass(frozen=True, slots=True)
 class ChatPrompt:
     """发送给聊天补全模型的系统消息和用户消息。"""
 
