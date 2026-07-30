@@ -77,3 +77,24 @@ def test_text2cypher_acceptance(
     assert response.result.rows
     assert response.result.columns
     assert all(term in response.cypher for term in case.key_terms)
+
+
+def test_compound_method_impact_acceptance(
+    pipeline: Text2CypherPipeline,
+) -> None:
+    """验证复合影响问题由一条查询同时表达上游和下游分支。"""
+
+    question = (
+        "修改 FoodServiceImpl.getAllFood 会影响哪些上游调用方和下游服务？"
+    )
+    try:
+        response = pipeline.run(question)
+    except LLMGenerationError as error:
+        pytest.skip(f"外部模型服务暂不可用：{error}")
+
+    assert response.result.rows
+    assert {"上游调用方", "下游服务"} <= set(response.result.columns)
+    assert "FoodServiceImpl" in response.cypher
+    assert "getAllFood" in response.cypher
+    assert response.cypher.upper().count("OPTIONAL MATCH") >= 2
+    assert ";" not in response.cypher

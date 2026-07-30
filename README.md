@@ -5,13 +5,15 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出。
+结构化结果输出，并支持基于实时 Schema 过滤和本地混合排序的动态 Few-shot。
 
 ## 流程
 
 ```text
 用户自然语言问题
   → SchemaFetcher
+  → SchemaGraphBuilder
+  → FewShotSelector
   → PromptBuilder
   → LLMClient
   → CypherParser
@@ -29,7 +31,9 @@ src/text2cypher/
 ├── components/             # Prompt、Parser、Formatter 等纯处理组件
 ├── infrastructure/
 │   ├── neo4j/              # Driver、Schema、校验、执行适配器
-│   └── llm/                # OpenAI 兼容模型客户端
+│   ├── llm/                # OpenAI 兼容模型客户端
+│   └── few_shot/           # 版本化 JSON 示例库加载
+├── resources/              # 包内默认 Few-shot 黄金示例
 ├── interfaces/             # 命令行入口
 ├── config.py               # 环境变量配置
 └── __main__.py             # python -m 入口
@@ -52,6 +56,21 @@ python -m pip install -e ".[dev]"
 DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
+
+Few-shot 默认启用，最多选择 3 条与实时 Schema 兼容且与问题相关的示例：
+
+```dotenv
+TEXT2CYPHER_FEW_SHOT_ENABLED=true
+TEXT2CYPHER_FEW_SHOT_TOP_K=3
+TEXT2CYPHER_FEW_SHOT_MIN_SCORE=0.18
+TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
+TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
+```
+
+空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。设置
+`TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过示例文件加载并恢复 Zero-shot。
+数据格式、兼容规则和扩展方法见
+[Few-shot 设计](docs/few-shot-design.md)。
 
 ## 运行
 
@@ -90,15 +109,17 @@ $env:TEXT2CYPHER_RUN_INTEGRATION="1"
 pytest tests\integration\test_neo4j_readonly.py
 ```
 
-该集成测试只读取动态 Schema，并执行 `RETURN 1`，不会写入或修改图数据。后续验收计划见
-根目录 [todo.md](todo.md)。
+该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 18 条黄金示例逐条执行
+`EXPLAIN`，不会写入或修改图数据。后续验收计划见根目录 [todo.md](todo.md)。
 
 五类自然语言验收还可显式执行：
 
 ```powershell
 $env:TEXT2CYPHER_RUN_ACCEPTANCE="1"
+$env:TEXT2CYPHER_LLM_DISABLE_THINKING="true"
 pytest tests\integration\test_text2cypher_acceptance.py
 ```
 
-该测试会调用真实模型与数据库；若模型服务网络暂不可用，对应用例会标记为跳过。验收问题和
-人工结果记录在 [阶段 2 计划](plans/phase-02-p1-acceptance.md)。
+该测试会调用真实模型与数据库，覆盖原有五类问题和复合上下游影响问题；若模型服务网络
+暂不可用，对应用例会标记为跳过。阶段设计见
+[Phase 03 计划](plans/phase-03-p2-few-shot.md)。

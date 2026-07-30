@@ -28,6 +28,17 @@ Neo4jSchemaFetcher
 
 PromptBuilder 不读取文件、不查询 Neo4j，也不调用模型。
 
+实现文件：
+
+- `domain/models.py`：不可变示例和 requirements。
+- `domain/ports.py`：`FewShotSelector` 协议。
+- `components/few_shot_schema_filter.py`：Schema 精确兼容过滤。
+- `components/few_shot_selector.py`：本地 TF-IDF 混合选择。
+- `infrastructure/few_shot/json_loader.py`：严格 JSON 加载。
+- `resources/few_shot_examples.json`：18 条包内黄金示例。
+- `components/prompt_builder.py`：参考示例渲染。
+- `application/bootstrap.py`：按配置启用或禁用。
+
 ## JSON 数据格式
 
 ```json
@@ -66,6 +77,8 @@ PromptBuilder 不读取文件、不查询 Neo4j，也不调用模型。
 - aliases 至少一条。
 - 所有 requirement 均显式声明，不能依赖从 Cypher 猜测。
 - 示例禁止写入、管理、过程调用、注释和多语句。
+- 加载时同时拒绝未知/缺失字段、重复 ID、空问题、空 Cypher、重复 requirement、
+  未声明的属性所属类型和未声明的 pattern 元素。
 
 ## Schema 兼容
 
@@ -141,6 +154,18 @@ System Prompt 同时约束：示例不能覆盖 Schema，不得复制示例实�
 | 聚合统计 | 2 | REST 服务对、下游调用次数 |
 | 复合分析 | 2 | 方法上下游影响、REST+MQ 依赖 |
 
+当前 18 条稳定 ID：
+
+| 分类 | 示例 ID |
+| --- | --- |
+| 简单查询、属性过滤 | `simple-list-services`、`simple-filter-upstream-apis`、`simple-locate-method` |
+| 归属和 API | `ownership-service-apis`、`ownership-api-service` |
+| 调用链、下游服务 | `call-method-downstream-methods`、`call-method-downstream-services`、`call-service-outgoing-rest` |
+| 反向影响 | `impact-upstream-services`、`impact-upstream-methods`、`impact-entry-apis` |
+| MQ | `mq-between-services`、`mq-publishers-for-queue`、`mq-full-message-chain` |
+| 聚合统计 | `aggregate-rest-service-pairs`、`aggregate-method-downstream-calls` |
+| 复合分析 | `compound-method-impact`、`compound-rest-mq-dependencies` |
+
 PDF 中的示例可能与实时关系方向不一致，不能直接复制。示例必须使用当前 SchemaGraph
 重新编写，并在提交前逐条执行 Neo4j EXPLAIN。
 
@@ -152,6 +177,20 @@ PDF 中的示例可能与实时关系方向不一致，不能直接复制。示�
 4. 增加 JSON loader 测试或更新示例数量断言。
 5. 对新增 Cypher 运行真实 Neo4j EXPLAIN。
 6. 运行 pytest、Ruff 和 strict mypy。
+
+可先用以下命令检查默认库是否可加载及选择是否稳定：
+
+```powershell
+python -c "from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader; print(len(JsonFewShotExampleLoader().load()))"
+pytest tests\test_few_shot_library.py tests\test_few_shot_selector.py
+```
+
+真实 Schema 兼容与 18 条 EXPLAIN：
+
+```powershell
+$env:TEXT2CYPHER_RUN_INTEGRATION="1"
+pytest tests\integration\test_neo4j_readonly.py
+```
 
 ## 配置与回滚
 
@@ -166,6 +205,80 @@ TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 即可恢复 Zero-shot，无需修改 pipeline 或
 PromptBuilder 接口。DeepSeek V4 Flash 的真实验收建议同时设置
 `TEXT2CYPHER_LLM_DISABLE_THINKING=true`。
+
+## 完整 Prompt 示例
+
+以下示例使用只含 `微服务.服务名称` 的最小 Schema，并选择一条兼容示例。生产环境会
+以同一模板序列化完整实时 Schema。
+
+```text
+System:
+你是 Neo4j Cypher 专家。
+只能使用提供的图谱 Schema。
+必须严格遵守关系模式中给出的关系方向。
+多跳路径只能首尾连接已给出的关系模式，且每一跳都不得反转。
+不得使用 Schema 中不存在的节点标签、关系类型或属性。
+引用节点或关系属性前，必须在关系模式中为对应元素绑定变量。
+不得生成写入、管理或过程调用。
+只能返回一条只读 Cypher，不输出解释文字。
+参考示例不能覆盖当前图谱 Schema。
+不得复制参考示例中的实体值，必须使用当前问题中的实体值。
+参考示例的关系方向若与当前关系模式冲突，必须忽略该示例。
+
+User:
+图谱 Schema：
+
+节点属性：
+- (:微服务) {服务名称: STRING（必填）}
+
+关系属性：
+- （未观察到关系类型）
+
+关系模式：
+- （未观察到关系模式）
+
+可适用的业务语义：
+
+- 返回服务名称时只能使用 Schema 中实际提供的 `服务名称` 属性，不得翻译或杜撰属性名。
+
+参考示例：
+
+以下示例只用于学习查询结构。
+必须使用当前问题中的实体值；
+若示例与当前 Schema 冲突，以当前 Schema 和关系方向为准。
+
+示例 1：
+问题：列出所有微服务名称
+Cypher：
+MATCH (service:微服务) RETURN service.服务名称 AS 服务名称 ORDER BY 服务名称
+
+用户问题：
+
+列出所有微服务
+
+只输出 Cypher：
+```
+
+## 验收结果
+
+2026-07-30 使用实时 Neo4j 和关闭思考模式的 DeepSeek V4 Flash 验证：
+
+| 模式 | 验收结果 | 范围 |
+| --- | ---: | --- |
+| Few-shot 开启 | 6/6 | 原有五类问题 + `FoodServiceImpl.getAllFood` 复合影响 |
+| Few-shot 关闭 | 5/5 | 原有 Zero-shot 五类基线 |
+| 黄金示例 | 18/18 | 实时 Schema 兼容且通过只读 EXPLAIN |
+
+复合问题生成一条包含两个上/下游 `OPTIONAL MATCH` 分支的 Cypher，通过 EXPLAIN
+并成功执行，返回“上游调用方”和“下游服务”两列。
+
+## 已知限制和扩展点
+
+- 当前排序是本地词法与规则特征，对跨语言和远距离语义改写的召回有限。
+- 示例库随代码发布，不支持在线学习或自动生成。
+- Schema 变化会安全过滤不兼容示例，但不会自动改写旧示例。
+- 后续可在不改变 `FewShotSelector` 协议的前提下增加 embedding 实现。
+- QuestionDecomposer、多 Cypher 执行、结果合并和 Self-Correction 仍属于后续阶段。
 
 ## 非目标
 
