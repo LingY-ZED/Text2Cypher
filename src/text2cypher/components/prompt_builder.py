@@ -53,24 +53,15 @@ class DefaultPromptBuilder:
         ),
         _ModelingConstraint(
             text=(
-                "对于反向查询哪些服务调用了指定服务的问题，必须先匹配"
-                "`目标微服务` 等于问题目标名称且 `API类型` 为 `下游API` 的节点；"
-                "该节点本身就是调用方路径的起点，查询中不得添加指向它的前置关系；"
-                "应从它开始首尾连接 Schema 中方向一致的关系模式，直至提供"
-                "`服务名称` 的调用方节点。"
+                "REST 跨服务调用由关系属性 `调用类型` 的值 `跨服务调用` 标识；"
+                "调用方服务应从源 API 的真实归属路径获取，业务目标服务应优先"
+                "使用源 API 的 `目标微服务` 属性，不得用目标 API 的本地归属位置"
+                "替代；服务间统计应排除调用方与目标服务相同的结果，并使用"
+                "DISTINCT 关系计数避免归属路径扇出导致重复计数。"
             ),
             required_node_properties=frozenset(
                 {"API类型", "目标微服务", "服务名称"}
             ),
-        ),
-        _ModelingConstraint(
-            text=(
-                "REST 跨服务调用由关系属性 `调用类型` 的值 `跨服务调用` 标识；"
-                "统计时应选择两端节点类型都提供 `API类型` 属性的关系模式，"
-                "将两端分别按 Schema 真实方向映射到提供 `服务名称` 属性的节点，"
-                "并对已绑定的该关系变量计数和按两端名称分组。"
-            ),
-            required_node_properties=frozenset({"API类型", "服务名称"}),
             required_relationship_properties=frozenset({"调用类型"}),
         ),
         _ModelingConstraint(
@@ -88,14 +79,6 @@ class DefaultPromptBuilder:
                 "不得翻译或杜撰属性名。"
             ),
             required_node_properties=frozenset({"服务名称"}),
-        ),
-        _ModelingConstraint(
-            text="若需返回交换机名称，应读取关系属性 `交换机名称`。",
-            required_relationship_properties=frozenset({"交换机名称"}),
-        ),
-        _ModelingConstraint(
-            text="若需返回队列名称，应读取关系属性 `队列名称`。",
-            required_relationship_properties=frozenset({"队列名称"}),
         ),
     )
 

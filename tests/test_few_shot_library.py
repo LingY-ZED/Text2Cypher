@@ -119,6 +119,10 @@ def test_all_default_examples_match_frozen_code_knowledge_schema(
             "call-method-downstream-services",
         ),
         (
+            "getAllFood 方法调用了哪些方法？",
+            "call-method-downstream-methods",
+        ),
+        (
             "哪些服务调用了 ts-train-food-service？",
             "impact-upstream-services",
         ),
@@ -150,3 +154,22 @@ def test_default_library_selects_expected_golden_example(
     selected = selector.select(question, code_knowledge_schema, graph)
 
     assert selected[0].id == expected_id
+
+
+def test_default_library_does_not_contain_known_invalid_cypher() -> None:
+    examples = JsonFewShotExampleLoader().load()
+    catalog = "\n".join(
+        f"{example.question}\n{example.cypher}" for example in examples
+    )
+
+    assert "'/api/v1/foods'" not in catalog
+    assert "food.queue" not in catalog
+    assert "food-exchange" not in catalog
+    assert "[call_rel:调用*1..5]" not in catalog
+    assert "call_rel.调用类型 AS 调用类型" not in catalog
+    assert (
+        "'/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}'"
+        in catalog
+    )
+    assert "food_delivery" in catalog
+    assert "'(default)'" in catalog

@@ -92,14 +92,13 @@ def test_business_semantics_are_included_only_for_available_properties() -> None
     assert "`上游API`" in prompt.user
     assert "`下游API`" in prompt.user
     assert "`目标微服务` 表示业务调用目标" in prompt.user
-    assert "反向查询哪些服务调用了指定服务" in prompt.user
-    assert "该节点本身就是调用方路径的起点" in prompt.user
     assert "`跨服务调用`" in prompt.user
-    assert "两端节点类型都提供 `API类型`" in prompt.user
+    assert "业务目标服务应优先使用源 API 的 `目标微服务` 属性" in prompt.user
+    assert "DISTINCT 关系计数" in prompt.user
     assert "`服务间消息依赖`" in prompt.user
     assert "两端节点类型都提供 `服务名称`" in prompt.user
-    assert "关系属性 `交换机名称`" in prompt.user
-    assert "关系属性 `队列名称`" in prompt.user
+    assert "关系属性 `交换机名称`" not in prompt.user
+    assert "关系属性 `队列名称`" not in prompt.user
     assert "可适用的业务语义" not in prompt.system
 
     unrelated_prompt = DefaultPromptBuilder().build(

@@ -35,7 +35,7 @@
     "id": "simple-locate-method",
     "category": "simple_filter",
     "question": "查找 FoodServiceImpl 类中的 getAllFood 方法",
-    "cypher": "MATCH (method:方法) WHERE method.所属类名 = 'FoodServiceImpl' AND method.方法名 = 'getAllFood' RETURN method.全限定名 AS 全限定名, method.方法签名 AS 方法签名",
+    "cypher": "MATCH (method:方法) WHERE method.所属类名 ENDS WITH '.FoodServiceImpl' AND method.方法名 = 'getAllFood' RETURN method.全限定名 AS 全限定名, method.方法签名 AS 方法签名",
     "aliases": ["按类名和方法名定位代码方法", "查询指定类的指定方法"],
     "tags": ["属性过滤", "方法", "限定名"],
     "schema_requirements": {
@@ -85,15 +85,15 @@
   {
     "id": "ownership-api-service",
     "category": "ownership_api",
-    "question": "/api/v1/foods 接口属于哪个微服务？",
-    "cypher": "MATCH (api:API端点)-[:归属于]->(method:方法)-[:归属于]->(class_node:类)-[:归属于]->(service:微服务) WHERE api.接口路径 = '/api/v1/foods' RETURN DISTINCT service.服务名称 AS 服务名称",
+    "question": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId} 接口属于哪个微服务？",
+    "cypher": "MATCH (api:API端点)-[:归属于]->(method:方法)-[:归属于]->(class_node:类)-[:归属于]->(service:微服务) WHERE api.API类型 = '上游API' AND api.接口路径 = '/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}' RETURN DISTINCT service.服务名称 AS 服务名称",
     "aliases": ["根据接口路径查询所属服务", "API 归属于哪个服务"],
     "tags": ["归属", "接口路径", "微服务"],
     "schema_requirements": {
       "node_labels": ["API端点", "方法", "类", "微服务"],
       "relationship_types": ["归属于"],
       "node_properties": {
-        "API端点": ["接口路径"],
+        "API端点": ["API类型", "接口路径"],
         "微服务": ["服务名称"]
       },
       "relationship_properties": {},
@@ -120,14 +120,14 @@
     "id": "call-method-downstream-methods",
     "category": "call_downstream",
     "question": "getAllFood 方法直接调用了哪些方法？",
-    "cypher": "MATCH (caller:方法)-[call_rel:调用]->(callee:方法) WHERE caller.方法名 = 'getAllFood' AND call_rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT callee.所属类名 AS 所属类名, callee.方法名 AS 方法名, call_rel.调用类型 AS 调用类型 ORDER BY 所属类名, 方法名",
+    "cypher": "MATCH (caller:方法)-[call_rel:调用]->(callee:方法) WHERE caller.方法名 = 'getAllFood' AND call_rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN callee.全限定名 AS 被调用方法, collect(DISTINCT call_rel.调用类型) AS 调用类型 ORDER BY 被调用方法",
     "aliases": ["查询某方法的直接下游方法", "方法调用链的下一跳"],
     "tags": ["方法调用", "下游", "调用链"],
     "schema_requirements": {
       "node_labels": ["方法"],
       "relationship_types": ["调用"],
       "node_properties": {
-        "方法": ["方法名", "所属类名"]
+        "方法": ["方法名", "全限定名"]
       },
       "relationship_properties": {
         "调用": ["调用类型"]
@@ -145,7 +145,7 @@
     "id": "call-method-downstream-services",
     "category": "call_downstream",
     "question": "getAllFood 方法调用了哪些下游服务？",
-    "cypher": "MATCH (caller:方法)-[call_rel:调用]->(api:API端点) WHERE caller.方法名 = 'getAllFood' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径, call_rel.调用类型 AS 调用类型 ORDER BY 下游服务, 接口路径",
+    "cypher": "MATCH (caller:方法)-[remote:调用]->(api:API端点) WHERE caller.方法名 = 'getAllFood' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
     "aliases": ["查询方法依赖的远程服务", "方法访问了哪些下游 API"],
     "tags": ["调用", "下游服务", "REST", "目标微服务"],
     "schema_requirements": {
@@ -171,15 +171,15 @@
     "id": "call-service-outgoing-rest",
     "category": "call_downstream",
     "question": "ts-food-service 发起了哪些 REST 下游调用？",
-    "cypher": "MATCH (service:微服务)<-[:归属于]-(class_node:类)<-[:归属于]-(method:方法)-[call_rel:调用]->(api:API端点) WHERE service.服务名称 = 'ts-food-service' AND api.API类型 = '下游API' AND call_rel.调用类型 IN ['远程调用', '跨服务调用', '接口调用'] RETURN DISTINCT method.方法名 AS 调用方法, api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径, call_rel.调用类型 AS 调用类型 ORDER BY 下游服务, 接口路径",
+    "cypher": "MATCH (service:微服务)<-[:归属于]-(class_node:类)<-[:归属于]-(method:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-food-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT method.全限定名 AS 调用方法, api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
     "aliases": ["查询服务调用的远程接口", "服务依赖哪些 REST 服务"],
-    "tags": ["REST", "跨服务调用", "下游服务"],
+    "tags": ["REST", "远程调用", "下游服务"],
     "schema_requirements": {
       "node_labels": ["微服务", "类", "方法", "API端点"],
       "relationship_types": ["归属于", "调用"],
       "node_properties": {
         "微服务": ["服务名称"],
-        "方法": ["方法名"],
+        "方法": ["全限定名"],
         "API端点": ["API类型", "目标微服务", "接口路径"]
       },
       "relationship_properties": {
@@ -208,18 +208,25 @@
     "id": "impact-upstream-services",
     "category": "reverse_impact",
     "question": "哪些服务调用了 ts-train-food-service？",
-    "cypher": "MATCH (api:API端点)-[:归属于]->(method:方法)-[:归属于]->(class_node:类)-[:归属于]->(caller:微服务) WHERE api.API类型 = '下游API' AND api.目标微服务 = 'ts-train-food-service' RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+    "cypher": "MATCH (source_api:API端点)-[cross:调用]->(target_api:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(caller_service:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND target_api.API类型 = '上游API' AND source_api.目标微服务 = 'ts-train-food-service' AND caller_service.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller_service.服务名称 AS 上游服务 ORDER BY 上游服务",
     "aliases": ["反向查询目标服务的调用方", "目标微服务被哪些服务依赖"],
     "tags": ["反向影响", "上游服务", "目标微服务"],
     "schema_requirements": {
       "node_labels": ["API端点", "方法", "类", "微服务"],
-      "relationship_types": ["归属于"],
+      "relationship_types": ["调用", "归属于"],
       "node_properties": {
         "API端点": ["API类型", "目标微服务"],
         "微服务": ["服务名称"]
       },
-      "relationship_properties": {},
+      "relationship_properties": {
+        "调用": ["调用类型"]
+      },
       "patterns": [
+        {
+          "start_labels": ["API端点"],
+          "relationship_type": "调用",
+          "end_labels": ["API端点"]
+        },
         {
           "start_labels": ["API端点"],
           "relationship_type": "归属于",
@@ -242,22 +249,40 @@
     "id": "impact-upstream-methods",
     "category": "reverse_impact",
     "question": "哪些方法调用了 ts-train-food-service？",
-    "cypher": "MATCH (api:API端点)-[:归属于]->(method:方法) WHERE api.API类型 = '下游API' AND api.目标微服务 = 'ts-train-food-service' RETURN DISTINCT method.全限定名 AS 上游方法 ORDER BY 上游方法",
+    "cypher": "MATCH (source_api:API端点)-[cross:调用]->(target_api:API端点), (source_api)-[:归属于]->(caller_method:方法)-[:归属于]->(:类)-[:归属于]->(caller_service:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND target_api.API类型 = '上游API' AND source_api.目标微服务 = 'ts-train-food-service' AND caller_service.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller_method.全限定名 AS 上游方法, caller_service.服务名称 AS 上游服务 ORDER BY 上游方法",
     "aliases": ["反向查询调用目标服务的方法", "服务变更会影响哪些调用方法"],
     "tags": ["反向影响", "上游方法", "目标微服务"],
     "schema_requirements": {
-      "node_labels": ["API端点", "方法"],
-      "relationship_types": ["归属于"],
+      "node_labels": ["API端点", "方法", "类", "微服务"],
+      "relationship_types": ["调用", "归属于"],
       "node_properties": {
         "API端点": ["API类型", "目标微服务"],
-        "方法": ["全限定名"]
+        "方法": ["全限定名"],
+        "微服务": ["服务名称"]
       },
-      "relationship_properties": {},
+      "relationship_properties": {
+        "调用": ["调用类型"]
+      },
       "patterns": [
+        {
+          "start_labels": ["API端点"],
+          "relationship_type": "调用",
+          "end_labels": ["API端点"]
+        },
         {
           "start_labels": ["API端点"],
           "relationship_type": "归属于",
           "end_labels": ["方法"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
+        },
+        {
+          "start_labels": ["类"],
+          "relationship_type": "归属于",
+          "end_labels": ["微服务"]
         }
       ]
     }
@@ -266,27 +291,29 @@
     "id": "impact-entry-apis",
     "category": "reverse_impact",
     "question": "修改 FoodServiceImpl.getAllFood 会影响哪些入口 API？",
-    "cypher": "MATCH (entry_api:API端点)-[:归属于]->(entry_method:方法)-[:调用*0..5]->(changed:方法) WHERE changed.所属类名 = 'FoodServiceImpl' AND changed.方法名 = 'getAllFood' AND entry_api.API类型 = '上游API' RETURN DISTINCT entry_api.接口路径 AS 入口接口, entry_api.请求方式 AS 请求方式 ORDER BY 入口接口",
+    "cypher": "MATCH (entry_method:方法)-[:调用*0..5]->(changed:方法), (entry_method)-[entry_call:调用]->(entry_api:API端点) WHERE changed.方法名 = 'getAllFood' AND changed.所属类名 ENDS WITH '.FoodServiceImpl' AND entry_call.调用类型 = '接口入口' AND entry_api.API类型 = '上游API' RETURN DISTINCT entry_api.接口路径 AS 入口接口, entry_api.请求方式 AS 请求方式 ORDER BY 入口接口",
     "aliases": ["方法变更的入口接口影响分析", "反向追踪方法的上游 API"],
     "tags": ["影响分析", "入口API", "上游", "调用链"],
     "schema_requirements": {
       "node_labels": ["API端点", "方法"],
-      "relationship_types": ["归属于", "调用"],
+      "relationship_types": ["调用"],
       "node_properties": {
         "API端点": ["API类型", "接口路径", "请求方式"],
         "方法": ["所属类名", "方法名"]
       },
-      "relationship_properties": {},
+      "relationship_properties": {
+        "调用": ["调用类型"]
+      },
       "patterns": [
         {
-          "start_labels": ["API端点"],
-          "relationship_type": "归属于",
+          "start_labels": ["方法"],
+          "relationship_type": "调用",
           "end_labels": ["方法"]
         },
         {
           "start_labels": ["方法"],
           "relationship_type": "调用",
-          "end_labels": ["方法"]
+          "end_labels": ["API端点"]
         }
       ]
     }
@@ -319,8 +346,8 @@
   {
     "id": "mq-publishers-for-queue",
     "category": "mq",
-    "question": "哪些方法向 food.queue 队列发布消息？",
-    "cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列) WHERE queue.队列名称 = 'food.queue' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称 ORDER BY 发布方法",
+    "question": "哪些方法向 food_delivery 队列发布消息？",
+    "cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列) WHERE queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称 ORDER BY 发布方法",
     "aliases": ["反向查询消息队列的发布者", "谁向指定队列发送 MQ 消息"],
     "tags": ["MQ", "发布", "路由", "消息队列"],
     "schema_requirements": {
@@ -351,8 +378,8 @@
   {
     "id": "mq-full-message-chain",
     "category": "mq",
-    "question": "查询 food-exchange 上从发布方法到消费方法的完整消息链",
-    "cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法) WHERE exchange.交换机名称 = 'food-exchange' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法 ORDER BY 发布方法, 消费方法",
+    "question": "查询 (default) 交换机上经过 food_delivery 队列的完整消息链",
+    "cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法) WHERE exchange.交换机名称 = '(default)' AND queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法 ORDER BY 发布方法, 消费方法",
     "aliases": ["追踪 MQ 发布路由消费链路", "交换机连接了哪些生产者和消费者"],
     "tags": ["MQ", "发布", "路由", "消费", "消息链"],
     "schema_requirements": {
@@ -389,13 +416,14 @@
     "id": "aggregate-rest-service-pairs",
     "category": "aggregate",
     "question": "列出所有微服务之间的 REST 调用关系统计",
-    "cypher": "MATCH (source_api:API端点)-[call_rel:调用]->(target_api:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(source_service:微服务), (target_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(target_service:微服务) WHERE call_rel.调用类型 = '跨服务调用' RETURN source_service.服务名称 AS 调用方服务, target_service.服务名称 AS 被调用服务, count(call_rel) AS 调用次数 ORDER BY 调用次数 DESC, 调用方服务, 被调用服务",
+    "cypher": "MATCH (source_api:API端点)-[cross:调用]->(target_api:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(source_service:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND target_api.API类型 = '上游API' AND source_api.目标微服务 IS NOT NULL AND source_service.服务名称 <> source_api.目标微服务 RETURN source_service.服务名称 AS 调用方服务, source_api.目标微服务 AS 被调用服务, count(DISTINCT cross) AS 调用关系数 ORDER BY 调用关系数 DESC, 调用方服务, 被调用服务",
     "aliases": ["统计服务间 REST 依赖", "按服务对汇总跨服务调用次数"],
     "tags": ["REST", "聚合", "统计", "跨服务调用"],
     "schema_requirements": {
       "node_labels": ["API端点", "方法", "类", "微服务"],
       "relationship_types": ["调用", "归属于"],
       "node_properties": {
+        "API端点": ["API类型", "目标微服务"],
         "微服务": ["服务名称"]
       },
       "relationship_properties": {
@@ -429,7 +457,7 @@
     "id": "aggregate-method-downstream-calls",
     "category": "aggregate",
     "question": "统计 getAllFood 对各下游服务的调用次数",
-    "cypher": "MATCH (caller:方法)-[call_rel:调用]->(api:API端点) WHERE caller.方法名 = 'getAllFood' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(call_rel) AS 调用次数 ORDER BY 调用次数 DESC, 下游服务",
+    "cypher": "MATCH (caller:方法)-[remote:调用]->(api:API端点) WHERE caller.方法名 = 'getAllFood' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
     "aliases": ["方法调用每个远程服务多少次", "按目标服务汇总方法调用"],
     "tags": ["聚合", "下游服务", "调用次数"],
     "schema_requirements": {
@@ -439,7 +467,9 @@
         "方法": ["方法名"],
         "API端点": ["API类型", "目标微服务"]
       },
-      "relationship_properties": {},
+      "relationship_properties": {
+        "调用": ["调用类型"]
+      },
       "patterns": [
         {
           "start_labels": ["方法"],
@@ -453,7 +483,7 @@
     "id": "compound-method-impact",
     "category": "compound",
     "question": "修改 FoodServiceImpl.getAllFood 会影响哪些上游调用方和下游服务？",
-    "cypher": "MATCH (changed:方法) WHERE changed.所属类名 = 'FoodServiceImpl' AND changed.方法名 = 'getAllFood' OPTIONAL MATCH (upstream:方法)-[:调用]->(changed) OPTIONAL MATCH (changed)-[:调用]->(downstream_api:API端点) WHERE downstream_api.API类型 = '下游API' RETURN collect(DISTINCT upstream.全限定名) AS 上游调用方, collect(DISTINCT downstream_api.目标微服务) AS 下游服务",
+    "cypher": "MATCH (changed:方法) WHERE changed.方法名 = 'getAllFood' AND changed.所属类名 ENDS WITH '.FoodServiceImpl' OPTIONAL MATCH (upstream:方法)-[up_call:调用]->(changed) WHERE up_call.调用类型 IN ['普通调用', '接口调用', '调用链'] OPTIONAL MATCH (changed)-[down_call:调用]->(downstream_api:API端点) WHERE down_call.调用类型 = '远程调用' AND downstream_api.API类型 = '下游API' RETURN collect(DISTINCT upstream.全限定名) AS 上游调用方, collect(DISTINCT downstream_api.目标微服务) AS 下游服务",
     "aliases": ["综合分析方法变更的上下游影响", "同时查询方法调用方和远程依赖"],
     "tags": ["复合影响", "上游", "下游", "方法调用", "REST"],
     "schema_requirements": {
@@ -463,7 +493,9 @@
         "方法": ["所属类名", "方法名", "全限定名"],
         "API端点": ["API类型", "目标微服务"]
       },
-      "relationship_properties": {},
+      "relationship_properties": {
+        "调用": ["调用类型"]
+      },
       "patterns": [
         {
           "start_labels": ["方法"],
@@ -482,7 +514,7 @@
     "id": "compound-rest-mq-dependencies",
     "category": "compound",
     "question": "综合查询 ts-food-service 的 REST 和 MQ 下游依赖",
-    "cypher": "MATCH (source:微服务) WHERE source.服务名称 = 'ts-food-service' OPTIONAL MATCH (source)<-[:归属于]-(class_node:类)<-[:归属于]-(method:方法)-[:调用]->(api:API端点) WHERE api.API类型 = '下游API' OPTIONAL MATCH (source)-[mq:消息流]->(mq_target:微服务) WHERE mq.消息流类型 = '服务间消息依赖' RETURN collect(DISTINCT api.目标微服务) AS REST下游服务, collect(DISTINCT mq_target.服务名称) AS MQ下游服务",
+    "cypher": "MATCH (source:微服务) WHERE source.服务名称 = 'ts-food-service' OPTIONAL MATCH (source)<-[:归属于]-(class_node:类)<-[:归属于]-(method:方法)-[rest:调用]->(api:API端点) WHERE rest.调用类型 = '远程调用' AND api.API类型 = '下游API' OPTIONAL MATCH (source)-[mq:消息流]->(mq_target:微服务) WHERE mq.消息流类型 = '服务间消息依赖' RETURN collect(DISTINCT api.目标微服务) AS REST下游服务, collect(DISTINCT mq_target.服务名称) AS MQ下游服务",
     "aliases": ["同时分析服务的同步和异步依赖", "查询服务的 REST 与消息下游"],
     "tags": ["复合依赖", "REST", "MQ", "下游服务"],
     "schema_requirements": {
@@ -493,6 +525,7 @@
         "API端点": ["API类型", "目标微服务"]
       },
       "relationship_properties": {
+        "调用": ["调用类型"],
         "消息流": ["消息流类型"]
       },
       "patterns": [
