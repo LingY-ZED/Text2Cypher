@@ -110,9 +110,10 @@ pytest tests\integration\test_neo4j_readonly.py
 ```
 
 该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 18 条黄金示例逐条执行
-`EXPLAIN`，不会写入或修改图数据。后续验收计划见根目录 [todo.md](todo.md)。
+`EXPLAIN` 和真实查询，检查精确列名、非空结果、黄金行数及关键实体；不会写入或修改
+图数据。数据库快照变化后应显式复核并更新黄金结果。
 
-五类自然语言验收还可显式执行：
+真实自然语言验收还可显式执行：
 
 ```powershell
 $env:TEXT2CYPHER_RUN_ACCEPTANCE="1"
@@ -120,6 +121,6 @@ $env:TEXT2CYPHER_LLM_DISABLE_THINKING="true"
 pytest tests\integration\test_text2cypher_acceptance.py
 ```
 
-该测试会调用真实模型与数据库，覆盖原有五类问题和复合上下游影响问题；若模型服务网络
-暂不可用，对应用例会标记为跳过。阶段设计见
+该测试会调用真实模型与数据库，覆盖原有五类问题、直接方法调用问题和复合上下游影响
+问题；若模型服务网络暂不可用，对应用例会标记为跳过。阶段设计见
 [Phase 03 计划](plans/phase-03-p2-few-shot.md)。

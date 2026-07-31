@@ -167,7 +167,8 @@ System Prompt 同时约束：示例不能覆盖 Schema，不得复制示例实�
 | 复合分析 | `compound-method-impact`、`compound-rest-mq-dependencies` |
 
 PDF 中的示例可能与实时关系方向不一致，不能直接复制。示例必须使用当前 SchemaGraph
-重新编写，并在提交前逐条执行 Neo4j EXPLAIN。
+重新编写，并在提交前逐条执行 Neo4j `EXPLAIN` 和真实只读查询。仅通过语法检查不足以
+成为黄金示例：每条查询还必须返回非空结果，并与当前数据库事实一致。
 
 ## 添加示例
 
@@ -175,8 +176,9 @@ PDF 中的示例可能与实时关系方向不一致，不能直接复制。示�
 2. 用 SchemaGraph 核对每条边的方向和端点。
 3. 增加 selector 排名测试，确保至少一个自然语言改写能选中该示例。
 4. 增加 JSON loader 测试或更新示例数量断言。
-5. 对新增 Cypher 运行真实 Neo4j EXPLAIN。
-6. 运行 pytest、Ruff 和 strict mypy。
+5. 对新增 Cypher 运行真实 Neo4j `EXPLAIN` 和只读执行，检查列名、非空结果及关键值。
+6. 检查聚合查询是否因归属路径扇出产生重复计数。
+7. 运行 pytest、Ruff 和 strict mypy。
 
 可先用以下命令检查默认库是否可加载及选择是否稳定：
 
@@ -185,7 +187,7 @@ python -c "from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoa
 pytest tests\test_few_shot_library.py tests\test_few_shot_selector.py
 ```
 
-真实 Schema 兼容与 18 条 EXPLAIN：
+真实 Schema 兼容、18 条 EXPLAIN 与黄金结果语义：
 
 ```powershell
 $env:TEXT2CYPHER_RUN_INTEGRATION="1"
@@ -261,16 +263,27 @@ MATCH (service:微服务) RETURN service.服务名称 AS 服务名称 ORDER BY �
 
 ## 验收结果
 
-2026-07-30 使用实时 Neo4j 和关闭思考模式的 DeepSeek V4 Flash 验证：
+2026-07-31 使用实时 Neo4j 和关闭思考模式的 DeepSeek V4 Flash 验证：
 
 | 模式 | 验收结果 | 范围 |
 | --- | ---: | --- |
-| Few-shot 开启 | 6/6 | 原有五类问题 + `FoodServiceImpl.getAllFood` 复合影响 |
-| Few-shot 关闭 | 5/5 | 原有 Zero-shot 五类基线 |
-| 黄金示例 | 18/18 | 实时 Schema 兼容且通过只读 EXPLAIN |
+| Few-shot 开启 | 7/7 | 原有五类问题 + 直接方法调用 + 复合影响 |
+| Few-shot 关闭 | 5/5 | 2026-07-30 的 Zero-shot 五类基线 |
+| 黄金示例 | 18/18 | Schema 兼容、EXPLAIN、真实执行和结果语义均通过 |
 
 复合问题生成一条包含两个上/下游 `OPTIONAL MATCH` 分支的 Cypher，通过 EXPLAIN
-并成功执行，返回“上游调用方”和“下游服务”两列。
+并成功执行，返回“上游调用方”和“下游服务”两列。新增的“getAllFood 方法调用了哪些
+方法？”也成功选择直接方法调用示例并完成端到端执行。
+
+18 条示例当前锁定的结果行数依次为：
+
+```text
+41, 203, 1, 12, 1, 1, 3, 3, 1, 1, 1, 1, 4, 4, 49, 3, 1, 1
+```
+
+其中服务间直连 `消息流` 关系把默认交换机保存为空字符串，而详细 MQ 链中的
+`消息交换机.交换机名称` 保存为 `(default)`；验收分别按这两种真实存储值断言。数据库
+快照变化时必须重新审查这些精确行数和事实值，不能只机械更新断言。
 
 ## 已知限制和扩展点
 

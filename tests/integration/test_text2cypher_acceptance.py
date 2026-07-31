@@ -1,4 +1,4 @@
-"""显式启用时执行五类真实 Text2Cypher 验收问题。"""
+"""显式启用时执行真实 Text2Cypher 验收问题。"""
 
 from __future__ import annotations
 
@@ -34,6 +34,10 @@ CASES = (
     ),
     AcceptanceCase(
         question="getAllFood 方法调用了哪些下游服务？",
+        key_terms=("getAllFood",),
+    ),
+    AcceptanceCase(
+        question="getAllFood 方法调用了哪些方法？",
         key_terms=("getAllFood",),
     ),
     AcceptanceCase(
