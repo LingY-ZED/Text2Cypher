@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     llm_disable_thinking: bool = False
     few_shot_enabled: bool = True
     few_shot_top_k: int = 3
-    few_shot_min_score: float = 0.18
     few_shot_max_chars: int = 3500
     few_shot_library_path: Path | None = None
     schema_timeout_seconds: int = 10
@@ -87,13 +86,6 @@ class Settings(BaseSettings):
     def valid_few_shot_top_k(cls, value: int) -> int:
         if not 1 <= value <= 3:
             raise ValueError("必须在 1 到 3 之间")
-        return value
-
-    @field_validator("few_shot_min_score")
-    @classmethod
-    def valid_few_shot_min_score(cls, value: float) -> float:
-        if not 0 <= value <= 1:
-            raise ValueError("必须在 0 到 1 之间")
         return value
 
     @field_validator("few_shot_library_path", mode="before")

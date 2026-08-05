@@ -8,7 +8,23 @@ from text2cypher.application.bootstrap import _build_few_shot_router
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
-from text2cypher.domain.models import GraphSchema, NodeSchema, PropertySchema
+from text2cypher.domain.models import (
+    ChatPrompt,
+    GraphSchema,
+    LLMResponse,
+    NodeSchema,
+    PropertySchema,
+)
+
+
+class StubLLMClient:
+    def __init__(self, content: str = '{"selected_ids":[]}') -> None:
+        self._content = content
+        self.prompts: list[ChatPrompt] = []
+
+    def generate(self, prompt: ChatPrompt) -> LLMResponse:
+        self.prompts.append(prompt)
+        return LLMResponse(content=self._content)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -36,7 +52,10 @@ def _service_schema() -> GraphSchema:
 
 
 def test_bootstrap_enables_default_few_shot_library() -> None:
-    router = _build_few_shot_router(_settings())
+    router_client = StubLLMClient(
+        '{"selected_ids":["simple-list-services"]}'
+    )
+    router = _build_few_shot_router(_settings(), router_client)
     assert router is not None
 
     examples = router.route("列出所有微服务", _service_schema())
@@ -48,6 +67,7 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
 
     assert "参考示例：" in prompt.user
     assert "列出所有微服务名称" in prompt.user
+    assert len(router_client.prompts) == 1
 
 
 def test_bootstrap_disabled_preserves_zero_shot_and_skips_library_load(
@@ -64,7 +84,8 @@ def test_bootstrap_disabled_preserves_zero_shot_and_skips_library_load(
         _settings(
             few_shot_enabled=False,
             few_shot_library_path=Path("missing.json"),
-        )
+        ),
+        StubLLMClient(),
     )
 
     assert router is None
@@ -80,5 +101,6 @@ def test_bootstrap_enabled_fails_fast_for_missing_custom_library(
             _settings(
                 few_shot_enabled=True,
                 few_shot_library_path=missing_path,
-            )
+            ),
+            StubLLMClient(),
         )

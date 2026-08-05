@@ -5,7 +5,7 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出，并支持基于实时 Schema 过滤和本地混合排序的动态 Few-shot。
+结构化结果输出，并支持基于实时 Schema 过滤和 LLM Router 的动态 Few-shot。
 
 ## 流程
 
@@ -13,7 +13,7 @@ Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API�
 用户自然语言问题
   → SchemaFetcher
   → SchemaGraphBuilder
-  → FewShotSelector
+  → FewShotRouter
   → PromptBuilder
   → LLMClient
   → CypherParser
@@ -57,20 +57,20 @@ DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 
-Few-shot 默认启用，最多选择 3 条与实时 Schema 兼容且与问题相关的示例：
+Few-shot 默认启用。系统先按实时 Schema 过滤候选，再使用与 Cypher 生成共享的模型
+选择最多 3 条相关示例；Router 不可用或返回无效内容时自动回退 Zero-shot：
 
 ```dotenv
 TEXT2CYPHER_FEW_SHOT_ENABLED=true
 TEXT2CYPHER_FEW_SHOT_TOP_K=3
-TEXT2CYPHER_FEW_SHOT_MIN_SCORE=0.18
 TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
 TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 ```
 
 空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。设置
 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过示例文件加载并恢复 Zero-shot。
-数据格式、兼容规则和扩展方法见
-[Few-shot 设计](docs/few-shot-design.md)。
+数据格式和 Schema 兼容规则见 [Few-shot 设计](docs/few-shot-design.md)；本地 Router
+改造方案见 `docs/llm-router-design.md`。
 
 ## 运行
 

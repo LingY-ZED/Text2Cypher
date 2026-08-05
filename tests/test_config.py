@@ -53,7 +53,6 @@ def test_settings_has_production_few_shot_defaults() -> None:
 
     assert settings.few_shot_enabled is True
     assert settings.few_shot_top_k == 3
-    assert settings.few_shot_min_score == 0.18
     assert settings.few_shot_max_chars == 3500
     assert settings.few_shot_library_path is None
 
@@ -64,15 +63,6 @@ def test_settings_rejects_few_shot_top_k_outside_supported_range(
 ) -> None:
     with pytest.raises(ValidationError, match="必须在 1 到 3 之间"):
         Settings(**_settings_kwargs(), few_shot_top_k=top_k)
-
-
-@pytest.mark.parametrize("min_score", [-0.01, 1.01])
-def test_settings_rejects_few_shot_min_score_outside_unit_interval(
-    min_score: float,
-) -> None:
-    with pytest.raises(ValidationError, match="必须在 0 到 1 之间"):
-        Settings(**_settings_kwargs(), few_shot_min_score=min_score)
-
 
 def test_settings_rejects_non_positive_few_shot_character_budget() -> None:
     with pytest.raises(ValidationError, match="必须为正数"):

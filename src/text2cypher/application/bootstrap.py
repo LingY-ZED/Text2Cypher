@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.components.cypher_parser import DefaultCypherParser
-from text2cypher.components.few_shot_selector import HybridFewShotSelector
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
 from text2cypher.config import Settings
-from text2cypher.domain.ports import FewShotRouter
+from text2cypher.domain.ports import FewShotRouter, LLMClient
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
@@ -33,7 +33,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             max_tokens=settings.llm_max_tokens,
             disable_thinking=settings.llm_disable_thinking,
         )
-        few_shot_router = _build_few_shot_router(settings)
+        few_shot_router = _build_few_shot_router(settings, llm_client)
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(
                 driver,
@@ -65,17 +65,20 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
         raise
 
 
-def _build_few_shot_router(settings: Settings) -> FewShotRouter | None:
-    """按配置构造本地过渡 Router；后续由 LLM Router 替换。"""
+def _build_few_shot_router(
+    settings: Settings,
+    llm_client: LLMClient,
+) -> FewShotRouter | None:
+    """按配置构造复用主模型客户端的 LLM Few-shot Router。"""
 
     if not settings.few_shot_enabled:
         return None
 
     examples = JsonFewShotExampleLoader(settings.few_shot_library_path).load()
-    return HybridFewShotSelector(
+    return LLMFewShotRouter(
         examples,
+        llm_client,
         top_k=settings.few_shot_top_k,
-        min_score=settings.few_shot_min_score,
         max_chars=settings.few_shot_max_chars,
     )
 

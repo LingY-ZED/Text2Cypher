@@ -7,7 +7,6 @@ import pytest
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
-from text2cypher.components.few_shot_selector import HybridFewShotSelector
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.models import (
     GraphSchema,
@@ -108,51 +107,6 @@ def test_all_default_examples_match_frozen_code_knowledge_schema(
     ]
 
     assert incompatible == []
-
-
-@pytest.mark.parametrize(
-    ("question", "expected_id"),
-    [
-        ("ts-food-service 有哪些 API 端点？", "ownership-service-apis"),
-        (
-            "getAllFood 方法调用了哪些下游服务？",
-            "call-method-downstream-services",
-        ),
-        (
-            "getAllFood 方法调用了哪些方法？",
-            "call-method-downstream-methods",
-        ),
-        (
-            "哪些服务调用了 ts-train-food-service？",
-            "impact-upstream-services",
-        ),
-        (
-            "ts-food-service 和 ts-delivery-service 之间有哪些 MQ 通信？",
-            "mq-between-services",
-        ),
-        (
-            "列出所有微服务之间的 REST 调用关系统计",
-            "aggregate-rest-service-pairs",
-        ),
-        (
-            "修改 FoodServiceImpl.getAllFood 会影响哪些上游调用方和下游服务？",
-            "compound-method-impact",
-        ),
-    ],
-)
-def test_default_library_selects_expected_golden_example(
-    code_knowledge_schema: GraphSchema,
-    question: str,
-    expected_id: str,
-) -> None:
-    selector = HybridFewShotSelector(
-        JsonFewShotExampleLoader().load(),
-        top_k=1,
-    )
-
-    selected = selector.route(question, code_knowledge_schema)
-
-    assert selected[0].id == expected_id
 
 
 def test_default_library_does_not_contain_known_invalid_cypher() -> None:
