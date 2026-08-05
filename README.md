@@ -67,10 +67,9 @@ TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
 TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 ```
 
-空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。设置
-`TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过示例文件加载并恢复 Zero-shot。
-数据格式和 Schema 兼容规则见 [Few-shot 设计](docs/few-shot-design.md)；本地 Router
-改造方案见 `docs/llm-router-design.md`。
+空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。Router 只接收通过
+实时 Schema 兼容过滤的候选元数据。设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过
+示例文件加载并恢复 Zero-shot。
 
 ## 运行
 

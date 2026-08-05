@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.pipeline import Text2CypherPipeline
-from text2cypher.domain.errors import CypherValidationError, QuestionValidationError
+from text2cypher.domain.errors import (
+    CypherValidationError,
+    LLMGenerationError,
+    QuestionValidationError,
+)
 from text2cypher.domain.models import (
     ChatPrompt,
     FewShotExample,
@@ -73,6 +78,22 @@ class FakeLLMClient:
         self.calls = calls
 
     def generate(self, prompt: ChatPrompt) -> LLMResponse:
+        assert prompt.user == "user"
+        self.calls.append("llm")
+        return LLMResponse(content="raw")
+
+
+class RouterFailureThenFinalLLMClient:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+        self._router_attempted = False
+
+    def generate(self, prompt: ChatPrompt) -> LLMResponse:
+        if not self._router_attempted:
+            self._router_attempted = True
+            assert "示例路由器" in prompt.system
+            self.calls.append("router_llm")
+            raise LLMGenerationError("router unavailable")
         assert prompt.user == "user"
         self.calls.append("llm")
         return LLMResponse(content="raw")
@@ -183,6 +204,45 @@ def test_pipeline_skips_router_when_few_shot_is_disabled() -> None:
     assert prompt_builder.examples == ()
     assert calls == [
         "schema",
+        "prompt",
+        "llm",
+        "parser",
+        "validator",
+        "executor",
+        "formatter",
+    ]
+
+
+def test_pipeline_continues_zero_shot_when_router_model_call_fails() -> None:
+    calls: list[str] = []
+    prompt_builder = FakePromptBuilder(calls)
+    shared_llm_client = RouterFailureThenFinalLLMClient(calls)
+    example = FewShotExample(
+        id="fallback-example",
+        category="test",
+        question="示例",
+        cypher="MATCH (n) RETURN n",
+        aliases=("别名",),
+        tags=("测试",),
+        schema_requirements=FewShotSchemaRequirements(),
+    )
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=prompt_builder,
+        llm_client=shared_llm_client,
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=FakeFormatter(calls),
+        few_shot_router=LLMFewShotRouter((example,), shared_llm_client),
+    )
+
+    pipeline.run("列出服务")
+
+    assert prompt_builder.examples == ()
+    assert calls == [
+        "schema",
+        "router_llm",
         "prompt",
         "llm",
         "parser",
