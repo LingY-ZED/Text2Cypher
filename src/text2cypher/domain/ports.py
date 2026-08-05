@@ -11,7 +11,6 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
-    SchemaGraph,
     ValidationReport,
 )
 
@@ -27,18 +26,22 @@ class SchemaFetcher(Protocol):
 class PromptBuilder(Protocol):
     """构造与模型服务商无关的聊天提示词。"""
 
-    def build(self, schema: GraphSchema, question: str) -> ChatPrompt: ...
+    def build(
+        self,
+        schema: GraphSchema,
+        question: str,
+        examples: tuple[FewShotExample, ...] = (),
+    ) -> ChatPrompt: ...
 
 
 @runtime_checkable
-class FewShotSelector(Protocol):
-    """从当前 Schema 兼容的示例中选择与问题最相关的子集。"""
+class FewShotRouter(Protocol):
+    """根据问题和实时 Schema 路由可用于最终 Prompt 的示例。"""
 
-    def select(
+    def route(
         self,
         question: str,
         schema: GraphSchema,
-        schema_graph: SchemaGraph,
     ) -> tuple[FewShotExample, ...]: ...
 
 

@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from text2cypher.application.bootstrap import _build_prompt_builder
+from text2cypher.application.bootstrap import _build_few_shot_router
+from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
 from text2cypher.domain.models import GraphSchema, NodeSchema, PropertySchema
@@ -35,9 +36,15 @@ def _service_schema() -> GraphSchema:
 
 
 def test_bootstrap_enables_default_few_shot_library() -> None:
-    builder = _build_prompt_builder(_settings())
+    router = _build_few_shot_router(_settings())
+    assert router is not None
 
-    prompt = builder.build(_service_schema(), "列出所有微服务")
+    examples = router.route("列出所有微服务", _service_schema())
+    prompt = DefaultPromptBuilder().build(
+        _service_schema(),
+        "列出所有微服务",
+        examples,
+    )
 
     assert "参考示例：" in prompt.user
     assert "列出所有微服务名称" in prompt.user
@@ -53,17 +60,14 @@ def test_bootstrap_disabled_preserves_zero_shot_and_skips_library_load(
         "text2cypher.application.bootstrap.JsonFewShotExampleLoader.load",
         fail_if_loaded,
     )
-    builder = _build_prompt_builder(
+    router = _build_few_shot_router(
         _settings(
             few_shot_enabled=False,
             few_shot_library_path=Path("missing.json"),
         )
     )
 
-    prompt = builder.build(_service_schema(), "列出所有微服务")
-
-    assert "参考示例" not in prompt.user
-    assert "参考示例" not in prompt.system
+    assert router is None
 
 
 def test_bootstrap_enabled_fails_fast_for_missing_custom_library(
@@ -72,7 +76,7 @@ def test_bootstrap_enabled_fails_fast_for_missing_custom_library(
     missing_path = tmp_path / "missing.json"
 
     with pytest.raises(FewShotLibraryError, match="无法读取"):
-        _build_prompt_builder(
+        _build_few_shot_router(
             _settings(
                 few_shot_enabled=True,
                 few_shot_library_path=missing_path,

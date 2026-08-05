@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from text2cypher.components.few_shot_selector import HybridFewShotSelector
-from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.models import (
     FewShotExample,
     FewShotSchemaRequirements,
@@ -40,11 +39,7 @@ def _select(
     schema: GraphSchema | None = None,
 ) -> tuple[FewShotExample, ...]:
     current_schema = schema or GraphSchema()
-    return selector.select(
-        question,
-        current_schema,
-        SchemaGraphBuilder().build(current_schema),
-    )
+    return selector.route(question, current_schema)
 
 
 def _intent_examples() -> tuple[FewShotExample, ...]:

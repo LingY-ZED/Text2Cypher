@@ -10,6 +10,7 @@ from text2cypher.domain.ports import (
     CypherExecutor,
     CypherParser,
     CypherValidator,
+    FewShotRouter,
     LLMClient,
     PromptBuilder,
     ResultFormatter,
@@ -30,6 +31,7 @@ class Text2CypherPipeline:
         cypher_validator: CypherValidator,
         cypher_executor: CypherExecutor,
         result_formatter: ResultFormatter,
+        few_shot_router: FewShotRouter | None = None,
         close_callback: Callable[[], None] | None = None,
     ) -> None:
         self._schema_fetcher = schema_fetcher
@@ -39,6 +41,7 @@ class Text2CypherPipeline:
         self._cypher_validator = cypher_validator
         self._cypher_executor = cypher_executor
         self._result_formatter = result_formatter
+        self._few_shot_router = few_shot_router
         self._close_callback = close_callback
         self._closed = False
 
@@ -48,7 +51,16 @@ class Text2CypherPipeline:
             raise QuestionValidationError("问题不能为空")
 
         schema = self._schema_fetcher.fetch()
-        prompt = self._prompt_builder.build(schema, normalized_question)
+        examples = (
+            self._few_shot_router.route(normalized_question, schema)
+            if self._few_shot_router is not None
+            else ()
+        )
+        prompt = self._prompt_builder.build(
+            schema,
+            normalized_question,
+            examples,
+        )
         llm_response = self._llm_client.generate(prompt)
         cypher = self._cypher_parser.parse(llm_response.content)
         self._cypher_validator.validate(cypher)

@@ -8,7 +8,6 @@ from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
 from text2cypher.domain.errors import PromptBuildError
 from text2cypher.domain.models import ChatPrompt, FewShotExample, GraphSchema
-from text2cypher.domain.ports import FewShotSelector
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,13 +85,16 @@ class DefaultPromptBuilder:
         self,
         schema_graph_builder: SchemaGraphBuilder | None = None,
         schema_serializer: SchemaSerializer | None = None,
-        few_shot_selector: FewShotSelector | None = None,
     ) -> None:
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
         self._schema_serializer = schema_serializer or SchemaSerializer()
-        self._few_shot_selector = few_shot_selector
 
-    def build(self, schema: GraphSchema, question: str) -> ChatPrompt:
+    def build(
+        self,
+        schema: GraphSchema,
+        question: str,
+        examples: tuple[FewShotExample, ...] = (),
+    ) -> ChatPrompt:
         normalized_question = question.strip()
         if not normalized_question:
             raise PromptBuildError("问题不能为空")
@@ -100,15 +102,6 @@ class DefaultPromptBuilder:
         schema_graph = self._schema_graph_builder.build(schema)
         serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
         applicable_constraints = self._render_applicable_constraints(schema)
-        examples = (
-            self._few_shot_selector.select(
-                normalized_question,
-                schema,
-                schema_graph,
-            )
-            if self._few_shot_selector is not None
-            else ()
-        )
         user_sections = [
             "图谱 Schema：",
             serialized_schema,

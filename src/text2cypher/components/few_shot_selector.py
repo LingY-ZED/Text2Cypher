@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
+from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.models import (
     FewShotExample,
     GraphSchema,
-    SchemaGraph,
 )
 
 _ASCII_TOKEN = re.compile(r"[a-z0-9_$]+(?:[./:-][a-z0-9_$]+)*")
@@ -57,6 +57,7 @@ class HybridFewShotSelector:
         min_score: float = 0.18,
         max_chars: int = 3500,
         compatibility_filter: FewShotSchemaCompatibilityFilter | None = None,
+        schema_graph_builder: SchemaGraphBuilder | None = None,
     ) -> None:
         if not 1 <= top_k <= 3:
             raise ValueError("top_k 必须在 1 到 3 之间")
@@ -71,17 +72,18 @@ class HybridFewShotSelector:
         self._compatibility_filter = (
             compatibility_filter or FewShotSchemaCompatibilityFilter()
         )
+        self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
 
-    def select(
+    def route(
         self,
         question: str,
         schema: GraphSchema,
-        schema_graph: SchemaGraph,
     ) -> tuple[FewShotExample, ...]:
         normalized_question = question.strip()
         if not normalized_question:
             return ()
 
+        schema_graph = self._schema_graph_builder.build(schema)
         compatible = tuple(
             example
             for example in self._examples

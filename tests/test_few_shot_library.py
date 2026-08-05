@@ -145,13 +145,12 @@ def test_default_library_selects_expected_golden_example(
     question: str,
     expected_id: str,
 ) -> None:
-    graph = SchemaGraphBuilder().build(code_knowledge_schema)
     selector = HybridFewShotSelector(
         JsonFewShotExampleLoader().load(),
         top_k=1,
     )
 
-    selected = selector.select(question, code_knowledge_schema, graph)
+    selected = selector.route(question, code_knowledge_schema)
 
     assert selected[0].id == expected_id
 

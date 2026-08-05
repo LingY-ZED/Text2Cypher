@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from text2cypher.components.few_shot_selector import HybridFewShotSelector
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.errors import PromptBuildError
 from text2cypher.domain.models import (
@@ -13,7 +12,6 @@ from text2cypher.domain.models import (
     PropertySchema,
     RelationshipPattern,
     RelationshipSchema,
-    SchemaGraph,
 )
 
 
@@ -214,18 +212,6 @@ def test_prompt_injects_selected_examples_between_semantics_and_question() -> No
         ),
     )
 
-    class RecordingSelector:
-        def select(
-            self,
-            question: str,
-            schema: GraphSchema,
-            schema_graph: SchemaGraph,
-        ) -> tuple[FewShotExample, ...]:
-            assert question == "查询当前实体"
-            assert schema.nodes[0].name == "Entity"
-            assert schema_graph.nodes == ("Entity",)
-            return examples
-
     schema = GraphSchema(
         nodes=(
             NodeSchema(
@@ -235,9 +221,11 @@ def test_prompt_injects_selected_examples_between_semantics_and_question() -> No
         )
     )
 
-    prompt = DefaultPromptBuilder(
-        few_shot_selector=RecordingSelector(),
-    ).build(schema, "查询当前实体")
+    prompt = DefaultPromptBuilder().build(
+        schema,
+        "查询当前实体",
+        examples,
+    )
 
     assert prompt.user.index("图谱 Schema：") < prompt.user.index(
         "可适用的业务语义："
@@ -258,52 +246,12 @@ def test_prompt_injects_selected_examples_between_semantics_and_question() -> No
     assert prompt.user.endswith("只输出 Cypher：")
 
 
-def test_empty_selection_preserves_exact_zero_shot_prompt() -> None:
-    class EmptySelector:
-        def select(
-            self,
-            question: str,
-            schema: GraphSchema,
-            schema_graph: SchemaGraph,
-        ) -> tuple[FewShotExample, ...]:
-            del question, schema, schema_graph
-            return ()
-
+def test_explicit_empty_examples_preserve_exact_zero_shot_prompt() -> None:
     schema = GraphSchema(nodes=(NodeSchema("City"),))
 
     zero_shot = DefaultPromptBuilder().build(schema, "列出城市")
-    fallback = DefaultPromptBuilder(
-        few_shot_selector=EmptySelector(),
-    ).build(schema, "列出城市")
+    fallback = DefaultPromptBuilder().build(schema, "列出城市", ())
 
     assert fallback == zero_shot
     assert "参考示例" not in fallback.user
     assert "参考示例" not in fallback.system
-
-
-def test_incompatible_external_schema_does_not_leak_example_schema() -> None:
-    example = _few_shot_example(
-        "current-database-example",
-        "查询内部服务",
-        "MATCH (service:InternalService) RETURN service.name",
-        FewShotSchemaRequirements(
-            node_labels=("InternalService",),
-            node_properties={"InternalService": ("name",)},
-        ),
-    )
-    selector = HybridFewShotSelector(
-        (example,),
-        min_score=0,
-    )
-    external_schema = GraphSchema(
-        nodes=(NodeSchema("Person", (PropertySchema("name"),)),)
-    )
-
-    prompt = DefaultPromptBuilder(
-        few_shot_selector=selector,
-    ).build(external_schema, "查询人员")
-    combined = f"{prompt.system}\n{prompt.user}"
-
-    assert "参考示例" not in combined
-    assert "InternalService" not in combined
-    assert "Person" in combined

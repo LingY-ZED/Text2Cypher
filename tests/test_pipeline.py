@@ -6,6 +6,8 @@ from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.domain.errors import CypherValidationError, QuestionValidationError
 from text2cypher.domain.models import (
     ChatPrompt,
+    FewShotExample,
+    FewShotSchemaRequirements,
     GraphSchema,
     LLMResponse,
     QueryResult,
@@ -26,12 +28,44 @@ class FakeSchemaFetcher:
 class FakePromptBuilder:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
+        self.examples: tuple[FewShotExample, ...] | None = None
 
-    def build(self, schema: GraphSchema, question: str) -> ChatPrompt:
+    def build(
+        self,
+        schema: GraphSchema,
+        question: str,
+        examples: tuple[FewShotExample, ...] = (),
+    ) -> ChatPrompt:
         assert schema == GraphSchema()
         assert question == "列出服务"
+        self.examples = examples
         self.calls.append("prompt")
         return ChatPrompt(system="system", user="user")
+
+
+class FakeFewShotRouter:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def route(
+        self,
+        question: str,
+        schema: GraphSchema,
+    ) -> tuple[FewShotExample, ...]:
+        assert question == "列出服务"
+        assert schema == GraphSchema()
+        self.calls.append("router")
+        return (
+            FewShotExample(
+                id="service-list",
+                category="simple",
+                question="列出服务",
+                cypher="MATCH (n) RETURN n",
+                aliases=("服务列表",),
+                tags=("服务",),
+                schema_requirements=FewShotSchemaRequirements(),
+            ),
+        )
 
 
 class FakeLLMClient:
@@ -95,6 +129,7 @@ def _pipeline(calls: list[str]) -> Text2CypherPipeline:
         cypher_validator=FakeValidator(calls),
         cypher_executor=FakeExecutor(calls),
         result_formatter=FakeFormatter(calls),
+        few_shot_router=FakeFewShotRouter(calls),
     )
 
 
@@ -111,6 +146,7 @@ def test_pipeline_runs_every_stage_in_order() -> None:
     )
     assert calls == [
         "schema",
+        "router",
         "prompt",
         "llm",
         "parser",
@@ -129,6 +165,33 @@ def test_pipeline_rejects_blank_question_before_any_stage() -> None:
     assert calls == []
 
 
+def test_pipeline_skips_router_when_few_shot_is_disabled() -> None:
+    calls: list[str] = []
+    prompt_builder = FakePromptBuilder(calls)
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=prompt_builder,
+        llm_client=FakeLLMClient(calls),
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=FakeFormatter(calls),
+    )
+
+    pipeline.run("列出服务")
+
+    assert prompt_builder.examples == ()
+    assert calls == [
+        "schema",
+        "prompt",
+        "llm",
+        "parser",
+        "validator",
+        "executor",
+        "formatter",
+    ]
+
+
 def test_pipeline_stops_before_execution_when_validation_fails() -> None:
     calls: list[str] = []
 
@@ -145,9 +208,17 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
         cypher_validator=RejectingValidator(calls),
         cypher_executor=FakeExecutor(calls),
         result_formatter=FakeFormatter(calls),
+        few_shot_router=FakeFewShotRouter(calls),
     )
 
     with pytest.raises(CypherValidationError, match="不安全"):
         pipeline.run("列出服务")
 
-    assert calls == ["schema", "prompt", "llm", "parser", "validator"]
+    assert calls == [
+        "schema",
+        "router",
+        "prompt",
+        "llm",
+        "parser",
+        "validator",
+    ]
