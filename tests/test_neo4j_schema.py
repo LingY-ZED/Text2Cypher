@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from neo4j.exceptions import ServiceUnavailable
+from neo4j.exceptions import ClientError, ServiceUnavailable
 
+from text2cypher.components.retry import RetryPolicy
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 
 
@@ -37,15 +38,24 @@ class FakeSchemaRelationship:
 class FakeSchemaDriver:
     """按内置过程名称返回固定 Schema 记录的测试驱动。"""
 
-    def __init__(self, *, visualization_available: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        visualization_error: Exception | None = None,
+        label_failures: int = 0,
+    ) -> None:
         self.calls: list[str] = []
-        self._visualization_available = visualization_available
+        self._visualization_error = visualization_error
+        self._label_failures = label_failures
 
     def execute_query(self, query: Any, **kwargs: Any) -> FakeResult:
         del kwargs
         query_text = str(query)
         self.calls.append(query_text)
         if "db.labels" in query_text:
+            if self._label_failures:
+                self._label_failures -= 1
+                raise ServiceUnavailable("短暂不可用")
             return FakeResult(records=[{"label": "微服务"}, {"label": "接口"}])
         if "nodeTypeProperties" in query_text:
             return FakeResult(
@@ -61,8 +71,8 @@ class FakeSchemaDriver:
         if "relTypeProperties" in query_text:
             return FakeResult(records=[])
         if "schema.visualization" in query_text:
-            if not self._visualization_available:
-                raise ServiceUnavailable("可视化过程不可用")
+            if self._visualization_error is not None:
+                raise self._visualization_error
             return FakeResult(
                 records=[
                     {
@@ -106,9 +116,35 @@ def test_schema_fetcher_normalizes_and_sorts_schema_from_builtin_procedures() ->
 
 
 def test_schema_fetcher_uses_fallback_when_visualization_procedure_fails() -> None:
-    driver = FakeSchemaDriver(visualization_available=False)
+    driver = FakeSchemaDriver(
+        visualization_error=ClientError("过程不支持"),
+    )
+    waits: list[float] = []
 
-    schema = Neo4jSchemaFetcher(driver, "neo4j", 5).fetch()
+    schema = Neo4jSchemaFetcher(
+        driver,
+        "neo4j",
+        5,
+        sleep_func=waits.append,
+    ).fetch()
 
     assert schema.patterns[0].relationship_type == "调用"
     assert any("MATCH (start_node)" in call for call in driver.calls)
+    assert waits == []
+
+
+def test_schema_fetcher_retries_transient_schema_query() -> None:
+    driver = FakeSchemaDriver(label_failures=1)
+    waits: list[float] = []
+
+    schema = Neo4jSchemaFetcher(
+        driver,
+        "neo4j",
+        5,
+        retry_policy=RetryPolicy(),
+        sleep_func=waits.append,
+    ).fetch()
+
+    assert [node.name for node in schema.nodes] == ["微服务", "接口"]
+    assert sum("db.labels" in call for call in driver.calls) == 2
+    assert waits == [0.5]

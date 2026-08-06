@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from time import sleep
 from typing import Any
 
 from neo4j import Driver, Query, RoutingControl
 from neo4j.exceptions import DriverError, Neo4jError
 
+from text2cypher.components.retry import RetryExecutor, RetryPolicy
 from text2cypher.domain.errors import SchemaFetchError
 from text2cypher.domain.models import (
     GraphSchema,
@@ -17,6 +19,7 @@ from text2cypher.domain.models import (
     RelationshipPattern,
     RelationshipSchema,
 )
+from text2cypher.infrastructure.neo4j.retry import run_with_neo4j_retry
 
 
 class Neo4jSchemaFetcher:
@@ -49,10 +52,17 @@ class Neo4jSchemaFetcher:
         driver: Driver,
         database: str,
         timeout_seconds: int,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        sleep_func: Callable[[float], None] = sleep,
     ) -> None:
         self._driver = driver
         self._database = database
         self._timeout_seconds = float(timeout_seconds)
+        self._retry_executor = RetryExecutor(
+            retry_policy or RetryPolicy(),
+            sleep=sleep_func,
+        )
 
     def fetch(self) -> GraphSchema:
         """获取一次实时 Schema；关系模式过程失败时使用安全降级查询。"""
@@ -82,10 +92,13 @@ class Neo4jSchemaFetcher:
             raise SchemaFetchError("无法从 Neo4j 获取图谱 Schema") from None
 
     def _execute(self, cypher: str) -> list[Any]:
-        result = self._driver.execute_query(
-            Query(cypher, timeout=self._timeout_seconds),
-            routing_=RoutingControl.READ,
-            database_=self._database,
+        result = run_with_neo4j_retry(
+            self._retry_executor,
+            lambda: self._driver.execute_query(
+                Query(cypher, timeout=self._timeout_seconds),
+                routing_=RoutingControl.READ,
+                database_=self._database,
+            ),
         )
         if hasattr(result, "records"):
             return list(result.records)

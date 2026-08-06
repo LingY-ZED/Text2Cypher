@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from neo4j.exceptions import ServiceUnavailable
+from neo4j.exceptions import AuthError, ServiceUnavailable
 
+from text2cypher.components.retry import RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.errors import Neo4jConnectionError
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
@@ -11,15 +12,15 @@ from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 class FakeDriver:
     """模拟可验证并关闭的 Neo4j Driver。"""
 
-    def __init__(self, *, available: bool = True) -> None:
-        self.available = available
+    def __init__(self, *, failures: list[Exception] | None = None) -> None:
+        self._failures = list(failures or [])
         self.closed = False
         self.verification_count = 0
 
     def verify_connectivity(self) -> None:
         self.verification_count += 1
-        if not self.available:
-            raise ServiceUnavailable("连接失败")
+        if self._failures:
+            raise self._failures.pop(0)
 
     def close(self) -> None:
         self.closed = True
@@ -65,13 +66,72 @@ def test_driver_provider_reuses_verified_driver_and_closes_it(
 def test_driver_provider_closes_driver_when_connectivity_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake_driver = FakeDriver(available=False)
+    fake_driver = FakeDriver(
+        failures=[
+            ServiceUnavailable("连接失败"),
+            ServiceUnavailable("连接失败"),
+            ServiceUnavailable("连接失败"),
+        ]
+    )
     monkeypatch.setattr(
         "text2cypher.infrastructure.neo4j.driver.GraphDatabase.driver",
         lambda *args, **kwargs: fake_driver,
     )
 
     with pytest.raises(Neo4jConnectionError, match="无法连接"):
-        _ = Neo4jDriverProvider(_settings()).driver
+        _ = Neo4jDriverProvider(
+            _settings(),
+            sleep_func=lambda _: None,
+        ).driver
 
     assert fake_driver.closed is True
+    assert fake_driver.verification_count == 3
+
+
+def test_driver_provider_retries_transient_connectivity_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_driver = FakeDriver(
+        failures=[ServiceUnavailable("短暂故障"), ServiceUnavailable("短暂故障")]
+    )
+    waits: list[float] = []
+    received_kwargs: dict[str, object] = {}
+
+    def create_driver(*args: object, **kwargs: object) -> FakeDriver:
+        del args
+        received_kwargs.update(kwargs)
+        return fake_driver
+
+    monkeypatch.setattr(
+        "text2cypher.infrastructure.neo4j.driver.GraphDatabase.driver",
+        create_driver,
+    )
+
+    provider = Neo4jDriverProvider(
+        _settings(),
+        retry_policy=RetryPolicy(),
+        sleep_func=waits.append,
+    )
+
+    assert provider.driver is fake_driver
+    assert fake_driver.verification_count == 3
+    assert waits == [0.5, 1.0]
+    assert received_kwargs["max_transaction_retry_time"] == 0
+
+
+def test_driver_provider_does_not_retry_authentication_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_driver = FakeDriver(failures=[AuthError("认证失败")])
+    monkeypatch.setattr(
+        "text2cypher.infrastructure.neo4j.driver.GraphDatabase.driver",
+        lambda *args, **kwargs: fake_driver,
+    )
+
+    with pytest.raises(Neo4jConnectionError, match="无法连接"):
+        _ = Neo4jDriverProvider(
+            _settings(),
+            sleep_func=lambda _: pytest.fail("认证错误不应重试"),
+        ).driver
+
+    assert fake_driver.verification_count == 1

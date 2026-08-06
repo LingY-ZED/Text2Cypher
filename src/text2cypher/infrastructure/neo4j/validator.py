@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from time import sleep
 from typing import Any
 
 from neo4j import Driver, Query, RoutingControl
 from neo4j.exceptions import DriverError, Neo4jError
 
-from text2cypher.domain.errors import CypherValidationError
+from text2cypher.components.retry import RetryExecutor, RetryPolicy
+from text2cypher.domain.errors import (
+    CypherValidationError,
+    Neo4jAccessError,
+    Neo4jConnectionError,
+)
 from text2cypher.domain.models import ValidationReport
+from text2cypher.infrastructure.neo4j.retry import (
+    is_neo4j_access_error,
+    is_transient_neo4j_error,
+    run_with_neo4j_retry,
+)
 
 
 class Neo4jCypherValidator:
@@ -37,10 +49,22 @@ class Neo4jCypherValidator:
         re.IGNORECASE,
     )
 
-    def __init__(self, driver: Driver, database: str, timeout_seconds: int) -> None:
+    def __init__(
+        self,
+        driver: Driver,
+        database: str,
+        timeout_seconds: int,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        sleep_func: Callable[[float], None] = sleep,
+    ) -> None:
         self._driver = driver
         self._database = database
         self._timeout_seconds = float(timeout_seconds)
+        self._retry_executor = RetryExecutor(
+            retry_policy or RetryPolicy(),
+            sleep=sleep_func,
+        )
 
     def validate(self, cypher: str) -> ValidationReport:
         """拒绝危险查询，并通过 EXPLAIN 确认服务端只读类型。"""
@@ -55,12 +79,19 @@ class Neo4jCypherValidator:
                 raise CypherValidationError("Cypher 包含禁止的写入或管理操作")
 
         try:
-            result = self._driver.execute_query(
-                Query(f"EXPLAIN {cypher}", timeout=self._timeout_seconds),
-                routing_=RoutingControl.READ,
-                database_=self._database,
+            result = run_with_neo4j_retry(
+                self._retry_executor,
+                lambda: self._driver.execute_query(
+                    Query(f"EXPLAIN {cypher}", timeout=self._timeout_seconds),
+                    routing_=RoutingControl.READ,
+                    database_=self._database,
+                ),
             )
-        except (DriverError, Neo4jError):
+        except (DriverError, Neo4jError) as error:
+            if is_neo4j_access_error(error):
+                raise Neo4jAccessError("Neo4j 拒绝执行 EXPLAIN 查询") from None
+            if is_transient_neo4j_error(error):
+                raise Neo4jConnectionError("Neo4j 暂时无法执行 EXPLAIN 查询") from None
             raise CypherValidationError("Cypher 未通过 Neo4j EXPLAIN 校验") from None
 
         summary = self._summary(result)

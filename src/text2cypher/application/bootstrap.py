@@ -27,7 +27,8 @@ from .pipeline import Text2CypherPipeline
 def build_pipeline(settings: Settings) -> Text2CypherPipeline:
     """在真实适配器完成后构造运行流水线。"""
 
-    driver_provider = Neo4jDriverProvider(settings)
+    retry_policy = _retry_policy(settings)
+    driver_provider = Neo4jDriverProvider(settings, retry_policy=retry_policy)
     llm_client: OpenAICompatibleLLMClient | None = None
     try:
         driver = driver_provider.driver
@@ -38,7 +39,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             timeout_seconds=settings.llm_timeout_seconds,
             max_tokens=settings.llm_max_tokens,
             disable_thinking=settings.llm_disable_thinking,
-            retry_policy=_retry_policy(settings),
+            retry_policy=retry_policy,
         )
         question_decomposer = _build_question_decomposer(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
@@ -47,6 +48,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 driver,
                 settings.neo4j_database,
                 settings.schema_timeout_seconds,
+                retry_policy=retry_policy,
             ),
             prompt_builder=DefaultPromptBuilder(),
             llm_client=llm_client,
@@ -55,12 +57,14 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 driver,
                 settings.neo4j_database,
                 settings.query_timeout_seconds,
+                retry_policy=retry_policy,
             ),
             cypher_executor=Neo4jCypherExecutor(
                 driver,
                 settings.neo4j_database,
                 settings.query_timeout_seconds,
                 settings.max_result_rows,
+                retry_policy=retry_policy,
             ),
             result_formatter=JsonResultFormatter(),
             question_decomposer=question_decomposer,

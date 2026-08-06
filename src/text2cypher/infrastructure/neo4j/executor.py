@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, time
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 from neo4j import READ_ACCESS, Driver
@@ -13,8 +13,18 @@ from neo4j.graph import Node, Path, Relationship
 from neo4j.spatial import Point
 from neo4j.time import Date, DateTime, Duration, Time
 
-from text2cypher.domain.errors import CypherExecutionError
+from text2cypher.components.retry import RetryExecutor, RetryPolicy
+from text2cypher.domain.errors import (
+    CypherExecutionError,
+    Neo4jAccessError,
+    Neo4jConnectionError,
+)
 from text2cypher.domain.models import QueryResult
+from text2cypher.infrastructure.neo4j.retry import (
+    is_neo4j_access_error,
+    is_transient_neo4j_error,
+    run_with_neo4j_retry,
+)
 
 
 class Neo4jCypherExecutor:
@@ -26,11 +36,18 @@ class Neo4jCypherExecutor:
         database: str,
         timeout_seconds: int,
         max_result_rows: int,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        sleep_func: Callable[[float], None] = sleep,
     ) -> None:
         self._driver = driver
         self._database = database
         self._timeout_seconds = float(timeout_seconds)
         self._max_result_rows = max_result_rows
+        self._retry_executor = RetryExecutor(
+            retry_policy or RetryPolicy(),
+            sleep=sleep_func,
+        )
 
     def execute(
         self,
@@ -41,19 +58,15 @@ class Neo4jCypherExecutor:
 
         started_at = perf_counter()
         try:
-            with self._driver.session(
-                database=self._database,
-                default_access_mode=READ_ACCESS,
-            ) as session:
-                with session.begin_transaction(
-                    timeout=self._timeout_seconds
-                ) as transaction:
-                    records, columns = self._read_records(
-                        transaction,
-                        cypher,
-                        dict(parameters or {}),
-                    )
-        except (DriverError, Neo4jError):
+            records, columns = run_with_neo4j_retry(
+                self._retry_executor,
+                lambda: self._execute_once(cypher, parameters),
+            )
+        except (DriverError, Neo4jError) as error:
+            if is_neo4j_access_error(error):
+                raise Neo4jAccessError("Neo4j 拒绝执行 Cypher 查询") from None
+            if is_transient_neo4j_error(error):
+                raise Neo4jConnectionError("Neo4j 暂时无法执行 Cypher 查询") from None
             raise CypherExecutionError("Neo4j 无法执行 Cypher 查询") from None
 
         truncated = len(records) > self._max_result_rows
@@ -72,6 +85,24 @@ class Neo4jCypherExecutor:
             truncated=truncated,
             duration_ms=duration_ms,
         )
+
+    def _execute_once(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None,
+    ) -> tuple[list[Any], list[str]]:
+        with self._driver.session(
+            database=self._database,
+            default_access_mode=READ_ACCESS,
+        ) as session:
+            with session.begin_transaction(
+                timeout=self._timeout_seconds
+            ) as transaction:
+                return self._read_records(
+                    transaction,
+                    cypher,
+                    dict(parameters or {}),
+                )
 
     def _read_records(
         self,

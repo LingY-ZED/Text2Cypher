@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from time import sleep
+
 from neo4j import Driver, GraphDatabase, NotificationMinimumSeverity
 from neo4j.exceptions import DriverError, Neo4jError
 
+from text2cypher.components.retry import RetryExecutor, RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.errors import Neo4jConnectionError
+from text2cypher.infrastructure.neo4j.retry import run_with_neo4j_retry
 
 
 class Neo4jDriverProvider:
     """延迟创建、验证并关闭共享的官方 Neo4j Driver。"""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        sleep_func: Callable[[float], None] = sleep,
+    ) -> None:
         self._settings = settings
+        self._retry_executor = RetryExecutor(
+            retry_policy or RetryPolicy(),
+            sleep=sleep_func,
+        )
         self._driver: Driver | None = None
 
     @property
@@ -30,9 +45,13 @@ class Neo4jDriverProvider:
                 self._settings.neo4j_password.get_secret_value(),
             ),
             warn_notification_severity=NotificationMinimumSeverity.OFF,
+            max_transaction_retry_time=0,
         )
         try:
-            driver.verify_connectivity()
+            run_with_neo4j_retry(
+                self._retry_executor,
+                driver.verify_connectivity,
+            )
         except (DriverError, Neo4jError):
             driver.close()
             raise Neo4jConnectionError("无法连接或认证 Neo4j") from None

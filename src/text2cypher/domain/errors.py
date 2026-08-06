@@ -25,6 +25,10 @@ class Neo4jConnectionError(Text2CypherError):
     """无法连接或认证 Neo4j 时抛出。"""
 
 
+class Neo4jAccessError(Text2CypherError):
+    """Neo4j 拒绝当前账号的认证或只读访问时抛出。"""
+
+
 class PromptBuildError(Text2CypherError):
     """无法构造模型提示词时抛出。"""
 
