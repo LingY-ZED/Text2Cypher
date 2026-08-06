@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
@@ -13,6 +14,15 @@ def _require_text(value: str, field_name: str) -> str:
     if not normalized:
         raise ValueError(f"{field_name}不能为空")
     return normalized
+
+
+class CypherFailureKind(StrEnum):
+    """可由一次性 Corrector 修正的 Cypher 阶段失败类型。"""
+
+    PARSE = "parse"
+    VALIDATION = "validation"
+    EXECUTION = "execution"
+    EMPTY_RESULT = "empty_result"
 
 
 @dataclass(frozen=True, slots=True)

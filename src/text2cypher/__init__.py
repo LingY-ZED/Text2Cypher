@@ -3,6 +3,7 @@
 from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureKind,
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
@@ -17,6 +18,7 @@ from text2cypher.domain.models import (
 
 __all__ = [
     "ChatPrompt",
+    "CypherFailureKind",
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphSchema",

@@ -7,6 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureKind,
     FewShotExample,
     GraphSchema,
     LLMResponse,
@@ -63,6 +64,18 @@ class LLMClient(Protocol):
     """通过通用大模型 API 生成 Cypher。"""
 
     def generate(self, prompt: ChatPrompt) -> LLMResponse: ...
+
+
+@runtime_checkable
+class CypherCorrector(Protocol):
+    """基于初始完整 Prompt 和一次失败候选生成修正版模型输出。"""
+
+    def correct(
+        self,
+        base_prompt: ChatPrompt,
+        failed_candidate: str,
+        failure_kind: CypherFailureKind,
+    ) -> LLMResponse: ...
 
 
 @runtime_checkable
