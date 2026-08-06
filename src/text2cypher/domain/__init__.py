@@ -5,8 +5,10 @@ from .models import (
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
+    QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
+    SubQueryResponse,
     Text2CypherResponse,
 )
 
@@ -14,8 +16,10 @@ __all__ = [
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphSchema",
+    "QuestionDecomposition",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SubQueryResponse",
     "Text2CypherError",
     "Text2CypherResponse",
 ]

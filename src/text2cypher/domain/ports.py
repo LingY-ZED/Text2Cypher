@@ -11,6 +11,8 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
+    QuestionDecomposition,
+    SubQueryResponse,
     ValidationReport,
 )
 
@@ -43,6 +45,17 @@ class FewShotRouter(Protocol):
         question: str,
         schema: GraphSchema,
     ) -> tuple[FewShotExample, ...]: ...
+
+
+@runtime_checkable
+class QuestionDecomposer(Protocol):
+    """把问题规划为一到三个互相独立的子问题。"""
+
+    def decompose(
+        self,
+        question: str,
+        schema: GraphSchema,
+    ) -> QuestionDecomposition: ...
 
 
 @runtime_checkable
@@ -81,4 +94,8 @@ class CypherExecutor(Protocol):
 class ResultFormatter(Protocol):
     """将查询结果格式化给用户或 CLI 使用者。"""
 
-    def format(self, question: str, cypher: str, result: QueryResult) -> str: ...
+    def format(
+        self,
+        question: str,
+        sub_queries: tuple[SubQueryResponse, ...],
+    ) -> str: ...

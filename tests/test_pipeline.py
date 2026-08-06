@@ -16,6 +16,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
+    SubQueryResponse,
     Text2CypherResponse,
     ValidationReport,
 )
@@ -133,10 +134,14 @@ class FakeFormatter:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
 
-    def format(self, question: str, cypher: str, result: QueryResult) -> str:
+    def format(
+        self,
+        question: str,
+        sub_queries: tuple[SubQueryResponse, ...],
+    ) -> str:
         assert question == "列出服务"
-        assert cypher == "MATCH (n) RETURN n"
-        assert result.rows[0]["name"] == "demo"
+        assert sub_queries[0].cypher == "MATCH (n) RETURN n"
+        assert sub_queries[0].result.rows[0]["name"] == "demo"
         self.calls.append("formatter")
         return "formatted"
 
@@ -161,8 +166,16 @@ def test_pipeline_runs_every_stage_in_order() -> None:
 
     assert response == Text2CypherResponse(
         question="列出服务",
-        cypher="MATCH (n) RETURN n",
-        result=QueryResult(columns=("name",), rows=({"name": "demo"},)),
+        sub_queries=(
+            SubQueryResponse(
+                question="列出服务",
+                cypher="MATCH (n) RETURN n",
+                result=QueryResult(
+                    columns=("name",),
+                    rows=({"name": "demo"},),
+                ),
+            ),
+        ),
         formatted="formatted",
     )
     assert calls == [

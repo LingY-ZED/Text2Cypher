@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from text2cypher.domain.errors import QuestionValidationError
-from text2cypher.domain.models import Text2CypherResponse
+from text2cypher.domain.models import SubQueryResponse, Text2CypherResponse
 from text2cypher.domain.ports import (
     CypherExecutor,
     CypherParser,
@@ -65,11 +65,20 @@ class Text2CypherPipeline:
         cypher = self._cypher_parser.parse(llm_response.content)
         self._cypher_validator.validate(cypher)
         result = self._cypher_executor.execute(cypher)
-        formatted = self._result_formatter.format(normalized_question, cypher, result)
+        sub_queries = (
+            SubQueryResponse(
+                question=normalized_question,
+                cypher=cypher,
+                result=result,
+            ),
+        )
+        formatted = self._result_formatter.format(
+            normalized_question,
+            sub_queries,
+        )
         return Text2CypherResponse(
             question=normalized_question,
-            cypher=cypher,
-            result=result,
+            sub_queries=sub_queries,
             formatted=formatted,
         )
 

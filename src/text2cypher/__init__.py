@@ -8,8 +8,10 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
+    QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
+    SubQueryResponse,
     Text2CypherResponse,
 )
 
@@ -19,9 +21,11 @@ __all__ = [
     "FewShotSchemaRequirements",
     "GraphSchema",
     "LLMResponse",
+    "QuestionDecomposition",
     "QueryResult",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SubQueryResponse",
     "Text2CypherPipeline",
     "Text2CypherResponse",
 ]

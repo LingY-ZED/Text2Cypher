@@ -250,6 +250,34 @@ class FewShotExample:
 
 
 @dataclass(frozen=True, slots=True)
+class QuestionDecomposition:
+    """原始问题及其一到三个互相独立的子问题。"""
+
+    original_question: str
+    sub_questions: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        original_question = _require_text(self.original_question, "原始问题")
+        sub_questions = tuple(
+            _require_text(question, "子问题") for question in self.sub_questions
+        )
+        if not 1 <= len(sub_questions) <= 3:
+            raise ValueError("子问题数量必须在 1 到 3 之间")
+        if len(set(sub_questions)) != len(sub_questions):
+            raise ValueError("子问题不能重复")
+        if len(sub_questions) == 1 and sub_questions[0] != original_question:
+            raise ValueError("未拆分的问题必须保留原始问题")
+        object.__setattr__(self, "original_question", original_question)
+        object.__setattr__(self, "sub_questions", sub_questions)
+
+    @property
+    def decomposed(self) -> bool:
+        """问题是否被拆成了多个独立分支。"""
+
+        return len(self.sub_questions) > 1
+
+
+@dataclass(frozen=True, slots=True)
 class ChatPrompt:
     """发送给聊天补全模型的系统消息和用户消息。"""
 
@@ -303,10 +331,40 @@ class QueryResult:
 
 
 @dataclass(frozen=True, slots=True)
-class Text2CypherResponse:
-    """一次成功 Text2Cypher 请求的公开结果。"""
+class SubQueryResponse:
+    """一个子问题及其已执行的只读 Cypher 结果。"""
 
     question: str
     cypher: str
     result: QueryResult
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "question", _require_text(self.question, "子问题"))
+        object.__setattr__(self, "cypher", _require_text(self.cypher, "Cypher"))
+
+
+@dataclass(frozen=True, slots=True)
+class Text2CypherResponse:
+    """一次成功 Text2Cypher 请求的公开结果。"""
+
+    question: str
+    sub_queries: tuple[SubQueryResponse, ...]
     formatted: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "question", _require_text(self.question, "问题"))
+        sub_queries = tuple(self.sub_queries)
+        if not 1 <= len(sub_queries) <= 3:
+            raise ValueError("子查询结果数量必须在 1 到 3 之间")
+        object.__setattr__(self, "sub_queries", sub_queries)
+        object.__setattr__(
+            self,
+            "formatted",
+            _require_text(self.formatted, "格式化结果"),
+        )
+
+    @property
+    def decomposed(self) -> bool:
+        """是否包含多个子查询结果。"""
+
+        return len(self.sub_queries) > 1

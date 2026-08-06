@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from text2cypher.domain.models import QueryResult, Text2CypherResponse
+from text2cypher.domain.models import (
+    QueryResult,
+    SubQueryResponse,
+    Text2CypherResponse,
+)
 from text2cypher.interfaces.cli import EXIT_SUCCESS, main
 
 
@@ -31,8 +35,16 @@ def test_cli_runs_and_closes_pipeline_after_valid_config(
             assert question == "列出所有微服务"
             return Text2CypherResponse(
                 question=question,
-                cypher="RETURN 1 AS value",
-                result=QueryResult(columns=("value",), rows=({"value": 1},)),
+                sub_queries=(
+                    SubQueryResponse(
+                        question=question,
+                        cypher="RETURN 1 AS value",
+                        result=QueryResult(
+                            columns=("value",),
+                            rows=({"value": 1},),
+                        ),
+                    ),
+                ),
                 formatted="{\"value\": 1}",
             )
 

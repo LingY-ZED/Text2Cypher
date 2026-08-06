@@ -75,5 +75,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(response.formatted)
     else:
-        print(f"Cypher：\n{response.cypher}\n\n结果：\n{response.formatted}")
+        print(f"结果：\n{response.formatted}")
     return EXIT_SUCCESS
