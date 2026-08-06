@@ -65,6 +65,7 @@ def test_business_semantics_are_included_only_for_available_properties() -> None
             NodeSchema(
                 name="Endpoint",
                 properties=(
+                    PropertySchema("方法名"),
                     PropertySchema("API类型"),
                     PropertySchema("目标微服务"),
                     PropertySchema("服务名称"),
@@ -90,6 +91,8 @@ def test_business_semantics_are_included_only_for_available_properties() -> None
     assert "`上游API`" in prompt.user
     assert "`下游API`" in prompt.user
     assert "`目标微服务` 表示业务调用目标" in prompt.user
+    assert "`远程调用` 表示代码方法直接访问下游 API" in prompt.user
+    assert "方法到下游 API 的关系不得使用 `跨服务调用`" in prompt.user
     assert "`跨服务调用`" in prompt.user
     assert "业务目标服务应优先使用源 API 的 `目标微服务` 属性" in prompt.user
     assert "DISTINCT 关系计数" in prompt.user

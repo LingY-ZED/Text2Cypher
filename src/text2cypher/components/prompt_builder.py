@@ -62,6 +62,17 @@ class DefaultPromptBuilder:
         ),
         _ModelingConstraint(
             text=(
+                "关系属性 `调用类型` 的值 `远程调用` 表示代码方法直接访问"
+                "下游 API；值 `跨服务调用` 只适用于两个 API 端点之间的调用。"
+                "方法到下游 API 的关系不得使用 `跨服务调用`。"
+            ),
+            required_node_properties=frozenset(
+                {"方法名", "API类型", "目标微服务"}
+            ),
+            required_relationship_properties=frozenset({"调用类型"}),
+        ),
+        _ModelingConstraint(
+            text=(
                 "REST 跨服务调用由关系属性 `调用类型` 的值 `跨服务调用` 标识；"
                 "调用方服务应从源 API 的真实归属路径获取，业务目标服务应优先"
                 "使用源 API 的 `目标微服务` 属性，不得用目标 API 的本地归属位置"
