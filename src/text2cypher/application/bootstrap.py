@@ -7,6 +7,7 @@ from text2cypher.application.question_decomposer import LLMQuestionDecomposer
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
+from text2cypher.components.retry import RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.ports import (
     FewShotRouter,
@@ -37,6 +38,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             timeout_seconds=settings.llm_timeout_seconds,
             max_tokens=settings.llm_max_tokens,
             disable_thinking=settings.llm_disable_thinking,
+            retry_policy=_retry_policy(settings),
         )
         question_decomposer = _build_question_decomposer(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
@@ -83,6 +85,17 @@ def _build_question_decomposer(
     return LLMQuestionDecomposer(
         llm_client,
         max_subquestions=settings.question_decomposition_max_subquestions,
+    )
+
+
+def _retry_policy(settings: Settings) -> RetryPolicy:
+    """从统一配置构造所有外部适配器复用的重试策略。"""
+
+    return RetryPolicy(
+        enabled=settings.retry_enabled,
+        max_attempts=settings.retry_max_attempts,
+        base_delay_seconds=settings.retry_base_delay_seconds,
+        max_delay_seconds=settings.retry_max_delay_seconds,
     )
 
 

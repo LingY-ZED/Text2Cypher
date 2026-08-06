@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from time import sleep
 from typing import Any
 
 import httpx
 
+from text2cypher.components.retry import (
+    RetryableOperationError,
+    RetryExecutor,
+    RetryPolicy,
+)
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import ChatPrompt, LLMResponse
 
@@ -22,14 +31,22 @@ class OpenAICompatibleLLMClient:
         timeout_seconds: int,
         max_tokens: int = 512,
         disable_thinking: bool = False,
+        retry_policy: RetryPolicy | None = None,
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
+        sleep_func: Callable[[float], None] = sleep,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
         self._max_tokens = max_tokens
         self._disable_thinking = disable_thinking
+        self._retry_executor = RetryExecutor(
+            retry_policy or RetryPolicy(),
+            sleep=sleep_func,
+        )
+        self._now = now or (lambda: datetime.now(UTC))
         self._client = client or httpx.Client(
             timeout=float(timeout_seconds),
             transport=transport,
@@ -51,6 +68,11 @@ class OpenAICompatibleLLMClient:
         }
         if self._disable_thinking:
             payload["thinking"] = {"type": "disabled"}
+        return self._retry_executor.run(
+            lambda: self._generate_once(payload)
+        )
+
+    def _generate_once(self, payload: dict[str, Any]) -> LLMResponse:
         try:
             response = self._client.post(
                 f"{self._base_url}/chat/completions",
@@ -59,19 +81,39 @@ class OpenAICompatibleLLMClient:
             )
             response.raise_for_status()
         except httpx.TimeoutException:
-            raise LLMGenerationError("模型请求超时") from None
+            self._raise_retryable("模型请求超时", "timeout")
         except httpx.HTTPStatusError as error:
-            raise LLMGenerationError(
-                f"模型服务返回 HTTP {error.response.status_code}"
-            ) from None
+            message = f"模型服务返回 HTTP {error.response.status_code}"
+            if error.response.status_code in {
+                408,
+                409,
+                425,
+                429,
+                500,
+                502,
+                503,
+                504,
+            }:
+                self._raise_retryable(
+                    message,
+                    f"http_{error.response.status_code}",
+                    retry_after_seconds=self._retry_after_seconds(error.response),
+                )
+            raise LLMGenerationError(message) from None
         except httpx.RequestError:
-            raise LLMGenerationError("无法连接模型服务") from None
+            self._raise_retryable("无法连接模型服务", "request_error")
 
         try:
             body = response.json()
         except ValueError:
-            raise LLMGenerationError("模型服务返回了无效 JSON") from None
-        content = self._extract_content(body)
+            self._raise_retryable("模型服务返回了无效 JSON", "invalid_json")
+        try:
+            content = self._extract_content(body)
+        except LLMGenerationError as error:
+            raise RetryableOperationError(
+                error,
+                reason="invalid_response",
+            ) from None
         model = body.get("model") if isinstance(body, dict) else None
         finish_reason = self._extract_finish_reason(body)
         return LLMResponse(
@@ -79,6 +121,34 @@ class OpenAICompatibleLLMClient:
             model=model if isinstance(model, str) else self._model,
             finish_reason=finish_reason,
         )
+
+    @staticmethod
+    def _raise_retryable(
+        message: str,
+        reason: str,
+        *,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        raise RetryableOperationError(
+            LLMGenerationError(message),
+            reason=reason,
+            retry_after_seconds=retry_after_seconds,
+        )
+
+    def _retry_after_seconds(self, response: httpx.Response) -> float | None:
+        value = response.headers.get("Retry-After")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(value)
+            except (TypeError, ValueError, IndexError):
+                return None
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return max(0.0, (parsed - self._now()).total_seconds())
 
     def close(self) -> None:
         """关闭由当前实例创建的 HTTP 客户端。"""

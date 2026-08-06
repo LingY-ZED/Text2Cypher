@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 60
     llm_max_tokens: int = 512
     llm_disable_thinking: bool = False
+    retry_enabled: bool = True
+    retry_max_attempts: int = 3
+    retry_base_delay_seconds: float = 0.5
+    retry_max_delay_seconds: float = 4.0
     question_decomposition_enabled: bool = True
     question_decomposition_max_subquestions: int = 3
     few_shot_enabled: bool = True
@@ -96,6 +100,26 @@ class Settings(BaseSettings):
         if not 2 <= value <= 3:
             raise ValueError("必须在 2 到 3 之间")
         return value
+
+    @field_validator("retry_max_attempts")
+    @classmethod
+    def valid_retry_max_attempts(cls, value: int) -> int:
+        if not 1 <= value <= 3:
+            raise ValueError("必须在 1 到 3 之间")
+        return value
+
+    @field_validator("retry_base_delay_seconds", "retry_max_delay_seconds")
+    @classmethod
+    def positive_retry_delay(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("必须为正数")
+        return value
+
+    @model_validator(mode="after")
+    def valid_retry_delay_range(self) -> Settings:
+        if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
+            raise ValueError("最大重试延迟不能小于基础重试延迟")
+        return self
 
     @field_validator("few_shot_library_path", mode="before")
     @classmethod

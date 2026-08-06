@@ -48,6 +48,39 @@ def test_settings_supports_model_output_control() -> None:
     assert settings.llm_disable_thinking is True
 
 
+def test_settings_has_default_retry_policy() -> None:
+    settings = Settings(**_settings_kwargs())
+
+    assert settings.retry_enabled is True
+    assert settings.retry_max_attempts == 3
+    assert settings.retry_base_delay_seconds == 0.5
+    assert settings.retry_max_delay_seconds == 4.0
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"retry_max_attempts": 0}, "1 到 3"),
+        ({"retry_max_attempts": 4}, "1 到 3"),
+        ({"retry_base_delay_seconds": 0}, "正数"),
+        ({"retry_max_delay_seconds": 0}, "正数"),
+        (
+            {
+                "retry_base_delay_seconds": 1,
+                "retry_max_delay_seconds": 0.5,
+            },
+            "最大重试延迟",
+        ),
+    ],
+)
+def test_settings_rejects_invalid_retry_policy(
+    overrides: dict[str, float | int],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(**(_settings_kwargs() | overrides))
+
+
 def test_settings_has_production_few_shot_defaults() -> None:
     settings = Settings(**_settings_kwargs())
 
