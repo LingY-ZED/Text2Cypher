@@ -127,6 +127,42 @@ def test_relationship_semantics_require_relationship_properties() -> None:
     assert "服务间消息依赖" not in prompt.user
 
 
+def test_partial_class_method_identifier_semantics_require_all_properties() -> None:
+    method_schema = GraphSchema(
+        nodes=(
+            NodeSchema(
+                name="CodeUnit",
+                properties=(
+                    PropertySchema("方法名"),
+                    PropertySchema("所属类名"),
+                    PropertySchema("全限定名"),
+                ),
+            ),
+        ),
+    )
+    incomplete_schema = GraphSchema(
+        nodes=(
+            NodeSchema(
+                name="CodeUnit",
+                properties=(PropertySchema("方法名"),),
+            ),
+        ),
+    )
+
+    method_prompt = DefaultPromptBuilder().build(
+        method_schema,
+        "查询 SampleClass.sampleMethod",
+    )
+    incomplete_prompt = DefaultPromptBuilder().build(
+        incomplete_schema,
+        "查询 SampleClass.sampleMethod",
+    )
+
+    assert "`Class.method`" in method_prompt.user
+    assert "不得把该短标识直接作为 `全限定名`" in method_prompt.user
+    assert "`Class.method`" not in incomplete_prompt.user
+
+
 def test_prompt_changes_automatically_with_different_graph_schemas() -> None:
     location_schema = GraphSchema(
         nodes=(NodeSchema(name="City"), NodeSchema(name="Country")),

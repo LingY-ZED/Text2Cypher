@@ -38,6 +38,16 @@ class DefaultPromptBuilder:
     modeling_constraints = (
         _ModelingConstraint(
             text=(
+                "当用户用 `Class.method` 形式提供不含包路径的方法标识时，"
+                "应分别使用 `方法名 = method` 和 `所属类名 ENDS WITH '.Class'` "
+                "定位；不得把该短标识直接作为 `全限定名` 的精确值。"
+            ),
+            required_node_properties=frozenset(
+                {"方法名", "所属类名", "全限定名"}
+            ),
+        ),
+        _ModelingConstraint(
+            text=(
                 "属性 `API类型` 的值 `上游API` 表示对外提供的 API，"
                 "值 `下游API` 表示访问下游目标的 API。"
             ),
