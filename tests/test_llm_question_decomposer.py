@@ -54,6 +54,7 @@ def test_llm_decomposer_returns_valid_independent_sub_questions() -> None:
     "response",
     [
         LLMGenerationError("secret-provider-response"),
+        LLMResponse(content=""),
         LLMResponse(content="not-json-secret"),
         LLMResponse(content='{"sub_questions":[]}'),
         LLMResponse(content='{"sub_questions":["重复","重复"]}'),
