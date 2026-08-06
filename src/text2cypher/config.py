@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     retry_max_attempts: int = 3
     retry_base_delay_seconds: float = 0.5
     retry_max_delay_seconds: float = 4.0
+    cypher_correction_enabled: bool = True
+    empty_result_correction_enabled: bool = True
     question_decomposition_enabled: bool = True
     question_decomposition_max_subquestions: int = 3
     few_shot_enabled: bool = True
@@ -120,6 +122,14 @@ class Settings(BaseSettings):
         if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
             raise ValueError("最大重试延迟不能小于基础重试延迟")
         return self
+
+    @field_validator("log_level")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("必须是有效日志级别")
+        return normalized
 
     @field_validator("few_shot_library_path", mode="before")
     @classmethod

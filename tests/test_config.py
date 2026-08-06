@@ -55,6 +55,8 @@ def test_settings_has_default_retry_policy() -> None:
     assert settings.retry_max_attempts == 3
     assert settings.retry_base_delay_seconds == 0.5
     assert settings.retry_max_delay_seconds == 4.0
+    assert settings.cypher_correction_enabled is True
+    assert settings.empty_result_correction_enabled is True
 
 
 @pytest.mark.parametrize(
@@ -79,6 +81,15 @@ def test_settings_rejects_invalid_retry_policy(
 ) -> None:
     with pytest.raises(ValidationError, match=message):
         Settings(**(_settings_kwargs() | overrides))
+
+
+def test_settings_normalizes_log_level_and_rejects_unknown_value() -> None:
+    settings = Settings(**(_settings_kwargs() | {"log_level": "debug"}))
+
+    assert settings.log_level == "DEBUG"
+
+    with pytest.raises(ValidationError, match="有效日志级别"):
+        Settings(**(_settings_kwargs() | {"log_level": "verbose"}))
 
 
 def test_settings_has_production_few_shot_defaults() -> None:

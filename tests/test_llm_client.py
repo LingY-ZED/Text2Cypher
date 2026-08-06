@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 
 import httpx
@@ -114,6 +115,42 @@ def test_llm_client_retries_transient_status_before_success() -> None:
     assert response.content == "RETURN 1"
     assert calls == 3
     assert waits == [0.5, 1.0]
+
+
+def test_llm_retry_logs_do_not_include_response_body(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, text="不应出现在日志中的响应正文")
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "RETURN 1"}}]},
+        )
+
+    caplog.set_level(logging.WARNING)
+    client = _client(httpx.MockTransport(handler))
+
+    client.generate(ChatPrompt(system="系统提示", user="敏感问题"))
+    client.close()
+
+    events = [
+        record.recovery_event
+        for record in caplog.records
+        if hasattr(record, "recovery_event")
+    ]
+    assert [event["event"] for event in events] == [
+        "retry_scheduled",
+        "retry_succeeded",
+    ]
+    assert all(event["component"] == "llm" for event in events)
+    assert all(event["stage"] == "chat_completion" for event in events)
+    assert "敏感问题" not in caplog.text
+    assert "不应出现在日志中的响应正文" not in caplog.text
 
 
 def test_llm_client_retries_blank_content_before_success() -> None:

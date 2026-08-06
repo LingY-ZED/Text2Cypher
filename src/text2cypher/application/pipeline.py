@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
+from text2cypher.components.recovery_logging import log_correction_event
 from text2cypher.domain.errors import (
     CypherExecutionError,
     CypherParseError,
@@ -34,6 +36,8 @@ from text2cypher.domain.ports import (
     ResultFormatter,
     SchemaFetcher,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Text2CypherPipeline:
@@ -169,14 +173,35 @@ class Text2CypherPipeline:
         corrector = self._cypher_corrector
         if corrector is None:
             raise AssertionError("纠错调用前必须注入 CypherCorrector")
-        corrected = corrector.correct(
-            base_prompt,
-            failed_candidate,
-            failure_kind,
+        log_correction_event(
+            _LOGGER,
+            event="cypher_correction_started",
+            reason=failure_kind.value,
+            outcome="started",
         )
-        cypher = self._cypher_parser.parse(corrected.content)
-        self._cypher_validator.validate(cypher)
-        result = self._cypher_executor.execute(cypher)
+        try:
+            corrected = corrector.correct(
+                base_prompt,
+                failed_candidate,
+                failure_kind,
+            )
+            cypher = self._cypher_parser.parse(corrected.content)
+            self._cypher_validator.validate(cypher)
+            result = self._cypher_executor.execute(cypher)
+        except Exception:
+            log_correction_event(
+                _LOGGER,
+                event="cypher_correction_exhausted",
+                reason=failure_kind.value,
+                outcome="failed",
+            )
+            raise
+        log_correction_event(
+            _LOGGER,
+            event="cypher_correction_succeeded",
+            reason=failure_kind.value,
+            outcome="corrected",
+        )
         return cypher, result
 
     def _recover_empty_result(
@@ -201,9 +226,21 @@ class Text2CypherPipeline:
             Neo4jAccessError,
             Neo4jConnectionError,
         ):
+            log_correction_event(
+                _LOGGER,
+                event="empty_result_original_kept",
+                reason=CypherFailureKind.EMPTY_RESULT.value,
+                outcome="recovery_failed",
+            )
             return original_cypher, original_result
         if corrected_result.rows:
             return corrected_cypher, corrected_result
+        log_correction_event(
+            _LOGGER,
+            event="empty_result_original_kept",
+            reason=CypherFailureKind.EMPTY_RESULT.value,
+            outcome="no_improvement",
+        )
         return original_cypher, original_result
 
     def close(self) -> None:

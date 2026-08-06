@@ -5,7 +5,7 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出，并支持 Schema 感知的问题拆分和 LLM Router 动态 Few-shot。
+结构化结果输出，并支持 Schema 感知的问题拆分、LLM Router 动态 Few-shot 和受控错误恢复。
 
 ## 流程
 
@@ -21,6 +21,7 @@ Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API�
       → CypherParser
       → CypherValidator
       → CypherExecutor
+      → 一次性 Cypher Corrector（仅在失败或空结果复核时）
   → ResultFormatter
 ```
 
@@ -84,6 +85,29 @@ TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。Router 只接收通过
 实时 Schema 兼容过滤的候选元数据。设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过
 示例文件加载并恢复 Zero-shot。
+
+## 错误恢复
+
+LLM 和 Neo4j 的超时、连接故障、服务限流及 5xx 等瞬态错误默认最多尝试三次，退避为
+`0.5s → 1.0s`；所有其他错误不会被盲目重试。LLM 返回无效 JSON、没有候选或空文本时
+也会被视为可重试响应，因此“模型响应不包含文本内容”会在最终报错前自动重试。
+
+```dotenv
+TEXT2CYPHER_RETRY_ENABLED=true
+TEXT2CYPHER_RETRY_MAX_ATTEMPTS=3
+TEXT2CYPHER_RETRY_BASE_DELAY_SECONDS=0.5
+TEXT2CYPHER_RETRY_MAX_DELAY_SECONDS=4.0
+
+TEXT2CYPHER_CYPHER_CORRECTION_ENABLED=true
+TEXT2CYPHER_EMPTY_RESULT_CORRECTION_ENABLED=true
+```
+
+对于最终 Cypher 的解析、只读校验或执行错误，系统最多调用一次共享模型进行修正，
+修正版仍必须重新通过 Parser、EXPLAIN 和只读执行。安全执行但零行的查询也可复核一次；
+只有修正版返回非空结果才会替换原结果。关闭纠错开关可恢复原有直接失败行为。
+
+恢复事件只在 stderr 输出结构化 JSON 日志，stdout 的 `--json` 查询结果不变。日志不会
+包含问题、Prompt、Cypher、数据库结果、服务响应正文或凭据。
 
 ## 运行
 

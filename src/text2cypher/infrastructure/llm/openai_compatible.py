@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -10,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from text2cypher.components.recovery_logging import log_retry_event
 from text2cypher.components.retry import (
     RetryableOperationError,
     RetryExecutor,
@@ -17,6 +19,8 @@ from text2cypher.components.retry import (
 )
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import ChatPrompt, LLMResponse
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class OpenAICompatibleLLMClient:
@@ -45,6 +49,12 @@ class OpenAICompatibleLLMClient:
         self._retry_executor = RetryExecutor(
             retry_policy or RetryPolicy(),
             sleep=sleep_func,
+            on_event=lambda event: log_retry_event(
+                _LOGGER,
+                component="llm",
+                stage="chat_completion",
+                retry_event=event,
+            ),
         )
         self._now = now or (lambda: datetime.now(UTC))
         self._client = client or httpx.Client(

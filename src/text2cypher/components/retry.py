@@ -62,6 +62,17 @@ class RetryAttempt:
     delay_seconds: float
 
 
+@dataclass(frozen=True, slots=True)
+class RetryEvent:
+    """一次重试生命周期事件，供外层输出脱敏可观测信息。"""
+
+    event: str
+    attempt: int
+    max_attempts: int
+    reason: str
+    delay_seconds: float | None
+
+
 class RetryableOperationError(Exception):
     """由外部适配器显式标记为可安全重放的故障。"""
 
@@ -87,20 +98,33 @@ class RetryExecutor:
         *,
         sleep: Callable[[float], None],
         on_retry: Callable[[RetryAttempt], None] | None = None,
+        on_event: Callable[[RetryEvent], None] | None = None,
     ) -> None:
         self._policy = policy
         self._sleep = sleep
         self._on_retry = on_retry
+        self._on_event = on_event
 
     def run(self, operation: Callable[[], _Result]) -> _Result:
         """运行操作；重试耗尽时重新抛出原始安全异常。"""
 
         max_attempts = self._policy.effective_max_attempts
+        last_reason = ""
         for attempt in range(1, max_attempts + 1):
             try:
-                return operation()
+                result = operation()
             except RetryableOperationError as error:
+                last_reason = error.reason
                 if attempt == max_attempts:
+                    self._emit(
+                        RetryEvent(
+                            event="retry_exhausted",
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            reason=error.reason,
+                            delay_seconds=None,
+                        )
+                    )
                     raise error.cause from None
                 delay_seconds = self._policy.delay_for_retry(
                     attempt,
@@ -115,5 +139,30 @@ class RetryExecutor:
                             delay_seconds=delay_seconds,
                         )
                     )
+                self._emit(
+                    RetryEvent(
+                        event="retry_scheduled",
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        reason=error.reason,
+                        delay_seconds=delay_seconds,
+                    )
+                )
                 self._sleep(delay_seconds)
+            else:
+                if attempt > 1:
+                    self._emit(
+                        RetryEvent(
+                            event="retry_succeeded",
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            reason=last_reason,
+                            delay_seconds=None,
+                        )
+                    )
+                return result
         raise AssertionError("重试循环必须在返回或抛出时结束")
+
+    def _emit(self, event: RetryEvent) -> None:
+        if self._on_event is not None:
+            self._on_event(event)

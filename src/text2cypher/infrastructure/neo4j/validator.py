@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from time import sleep
@@ -10,6 +11,7 @@ from typing import Any
 from neo4j import Driver, Query, RoutingControl
 from neo4j.exceptions import DriverError, Neo4jError
 
+from text2cypher.components.recovery_logging import log_retry_event
 from text2cypher.components.retry import RetryExecutor, RetryPolicy
 from text2cypher.domain.errors import (
     CypherValidationError,
@@ -22,6 +24,8 @@ from text2cypher.infrastructure.neo4j.retry import (
     is_transient_neo4j_error,
     run_with_neo4j_retry,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Neo4jCypherValidator:
@@ -64,6 +68,12 @@ class Neo4jCypherValidator:
         self._retry_executor = RetryExecutor(
             retry_policy or RetryPolicy(),
             sleep=sleep_func,
+            on_event=lambda event: log_retry_event(
+                _LOGGER,
+                component="neo4j",
+                stage="explain",
+                retry_event=event,
+            ),
         )
 
     def validate(self, cypher: str) -> ValidationReport:

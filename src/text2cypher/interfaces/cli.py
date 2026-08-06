@@ -13,6 +13,7 @@ from text2cypher.application.bootstrap import build_pipeline
 from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.config import Settings
 from text2cypher.domain.errors import Text2CypherError
+from text2cypher.interfaces.logging import configure_logging
 
 EXIT_SUCCESS = 0
 EXIT_INPUT_OR_CONFIGURATION_ERROR = 2
@@ -60,6 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.json,
         )
         return EXIT_INPUT_OR_CONFIGURATION_ERROR
+
+    configure_logging(settings.log_level)
 
     pipeline: Text2CypherPipeline | None = None
     try:

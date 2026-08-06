@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, time
 from time import perf_counter, sleep
@@ -13,6 +14,7 @@ from neo4j.graph import Node, Path, Relationship
 from neo4j.spatial import Point
 from neo4j.time import Date, DateTime, Duration, Time
 
+from text2cypher.components.recovery_logging import log_retry_event
 from text2cypher.components.retry import RetryExecutor, RetryPolicy
 from text2cypher.domain.errors import (
     CypherExecutionError,
@@ -25,6 +27,8 @@ from text2cypher.infrastructure.neo4j.retry import (
     is_transient_neo4j_error,
     run_with_neo4j_retry,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Neo4jCypherExecutor:
@@ -47,6 +51,12 @@ class Neo4jCypherExecutor:
         self._retry_executor = RetryExecutor(
             retry_policy or RetryPolicy(),
             sleep=sleep_func,
+            on_event=lambda event: log_retry_event(
+                _LOGGER,
+                component="neo4j",
+                stage="execute",
+                retry_event=event,
+            ),
         )
 
     def execute(

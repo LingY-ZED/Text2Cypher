@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from text2cypher.application.bootstrap import (
+    _build_cypher_corrector,
     _build_few_shot_router,
     _build_question_decomposer,
 )
@@ -13,6 +14,7 @@ from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureKind,
     GraphSchema,
     LLMResponse,
     NodeSchema,
@@ -130,3 +132,31 @@ def test_bootstrap_enabled_fails_fast_for_missing_custom_library(
             ),
             StubLLMClient(),
         )
+
+
+def test_bootstrap_enables_cypher_corrector_with_shared_client() -> None:
+    client = StubLLMClient("RETURN 1")
+    corrector = _build_cypher_corrector(_settings(), client)
+
+    assert corrector is not None
+    response = corrector.correct(
+        ChatPrompt(system="system", user="user"),
+        "bad output",
+        CypherFailureKind.PARSE,
+    )
+
+    assert response.content == "RETURN 1"
+    assert len(client.prompts) == 1
+    assert "bad output" in client.prompts[0].user
+
+
+def test_bootstrap_can_disable_cypher_corrector() -> None:
+    client = StubLLMClient("not-used")
+
+    corrector = _build_cypher_corrector(
+        _settings(cypher_correction_enabled=False),
+        client,
+    )
+
+    assert corrector is None
+    assert client.prompts == []

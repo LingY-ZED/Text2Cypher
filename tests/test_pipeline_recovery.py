@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from text2cypher.application.pipeline import Text2CypherPipeline
@@ -266,9 +268,11 @@ def test_pipeline_replaces_empty_result_only_when_correction_is_non_empty() -> N
 )
 def test_pipeline_keeps_original_empty_result_when_recovery_has_no_improvement(
     correction: LLMResponse | Exception,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     original_result = QueryResult(("value",), ())
     corrector = RecordingCorrector(correction)
+    caplog.set_level(logging.WARNING)
 
     response = _pipeline(
         parser=MappingParser(),
@@ -283,6 +287,16 @@ def test_pipeline_keeps_original_empty_result_when_recovery_has_no_improvement(
     assert response.sub_queries[0].cypher == "initial"
     assert response.sub_queries[0].result == original_result
     assert len(corrector.calls) == 1
+    events = [
+        record.recovery_event
+        for record in caplog.records
+        if hasattr(record, "recovery_event")
+    ]
+    assert events[0]["event"] == "cypher_correction_started"
+    assert events[-1]["event"] == "empty_result_original_kept"
+    assert all(event["component"] == "pipeline" for event in events)
+    assert all(event["stage"] == "cypher_correction" for event in events)
+    assert "initial" not in caplog.text
 
 
 def test_pipeline_stops_later_sub_queries_after_correction_is_exhausted() -> None:

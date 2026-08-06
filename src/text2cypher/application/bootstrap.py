@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.question_decomposer import LLMQuestionDecomposer
 from text2cypher.components.cypher_parser import DefaultCypherParser
@@ -10,6 +11,7 @@ from text2cypher.components.result_formatter import JsonResultFormatter
 from text2cypher.components.retry import RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.ports import (
+    CypherCorrector,
     FewShotRouter,
     LLMClient,
     QuestionDecomposer,
@@ -43,6 +45,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
         )
         question_decomposer = _build_question_decomposer(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
+        cypher_corrector = _build_cypher_corrector(settings, llm_client)
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(
                 driver,
@@ -69,6 +72,8 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             result_formatter=JsonResultFormatter(),
             question_decomposer=question_decomposer,
             few_shot_router=few_shot_router,
+            cypher_corrector=cypher_corrector,
+            recover_empty_results=settings.empty_result_correction_enabled,
             close_callback=lambda: _close_resources(llm_client, driver_provider),
         )
     except Exception:
@@ -119,6 +124,17 @@ def _build_few_shot_router(
         top_k=settings.few_shot_top_k,
         max_chars=settings.few_shot_max_chars,
     )
+
+
+def _build_cypher_corrector(
+    settings: Settings,
+    llm_client: LLMClient,
+) -> CypherCorrector | None:
+    """按配置构造复用主模型客户端的一次性 Cypher Corrector。"""
+
+    if not settings.cypher_correction_enabled:
+        return None
+    return LLMCypherCorrector(llm_client)
 
 
 def _close_resources(

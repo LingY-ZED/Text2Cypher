@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from time import sleep
 
 from neo4j import Driver, GraphDatabase, NotificationMinimumSeverity
 from neo4j.exceptions import DriverError, Neo4jError
 
+from text2cypher.components.recovery_logging import log_retry_event
 from text2cypher.components.retry import RetryExecutor, RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.errors import Neo4jConnectionError
 from text2cypher.infrastructure.neo4j.retry import run_with_neo4j_retry
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Neo4jDriverProvider:
@@ -28,6 +32,12 @@ class Neo4jDriverProvider:
         self._retry_executor = RetryExecutor(
             retry_policy or RetryPolicy(),
             sleep=sleep_func,
+            on_event=lambda event: log_retry_event(
+                _LOGGER,
+                component="neo4j",
+                stage="connectivity",
+                retry_event=event,
+            ),
         )
         self._driver: Driver | None = None
 

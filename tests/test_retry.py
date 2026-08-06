@@ -4,6 +4,7 @@ import pytest
 
 from text2cypher.components.retry import (
     RetryableOperationError,
+    RetryEvent,
     RetryExecutor,
     RetryPolicy,
 )
@@ -67,6 +68,42 @@ def test_retry_executor_can_be_disabled() -> None:
         ).run(operation)
 
     assert attempts == 1
+
+
+def test_retry_executor_emits_scheduled_succeeded_and_exhausted_events() -> None:
+    events: list[RetryEvent] = []
+    attempts = 0
+
+    def eventually_succeeds() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RetryableOperationError(RuntimeError("temporary"), reason="busy")
+        return "ok"
+
+    executor = RetryExecutor(
+        RetryPolicy(max_attempts=2),
+        sleep=lambda _: None,
+        on_event=events.append,
+    )
+
+    assert executor.run(eventually_succeeds) == "ok"
+    assert events == [
+        RetryEvent("retry_scheduled", 1, 2, "busy", 0.5),
+        RetryEvent("retry_succeeded", 2, 2, "busy", None),
+    ]
+
+    with pytest.raises(RuntimeError, match="temporary"):
+        executor.run(
+            lambda: (_ for _ in ()).throw(
+                RetryableOperationError(RuntimeError("temporary"), reason="busy")
+            )
+        )
+
+    assert events[-2:] == [
+        RetryEvent("retry_scheduled", 1, 2, "busy", 0.5),
+        RetryEvent("retry_exhausted", 2, 2, "busy", None),
+    ]
 
 
 @pytest.mark.parametrize(
