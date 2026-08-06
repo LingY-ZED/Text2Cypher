@@ -28,7 +28,7 @@ class Neo4jCypherValidator:
         re.compile(r"\bDENY\b", re.IGNORECASE),
         re.compile(r"\bREVOKE\b", re.IGNORECASE),
         re.compile(r"\bFOREACH\b", re.IGNORECASE),
-        re.compile(r"\bCALL\b", re.IGNORECASE),
+        re.compile(r"\bCALL\s+(?=[A-Za-z_`{])", re.IGNORECASE),
         re.compile(r"\bLOAD\s+CSV\b", re.IGNORECASE),
         re.compile(r"\bUSE\b", re.IGNORECASE),
     )

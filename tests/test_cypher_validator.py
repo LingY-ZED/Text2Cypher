@@ -82,6 +82,18 @@ def test_validator_allows_string_keyword_and_requires_read_plan() -> None:
     assert len(driver.calls) == 1
 
 
+def test_validator_allows_call_as_relationship_variable() -> None:
+    driver = FakeValidatorDriver()
+
+    report = Neo4jCypherValidator(driver, "neo4j", 5).validate(
+        "MATCH (source)-[call:调用]->(target) "
+        "WHERE call.调用类型 = '远程调用' RETURN target"
+    )
+
+    assert report.query_type == "r"
+    assert len(driver.calls) == 1
+
+
 def test_validator_rejects_non_read_query_type_after_explain() -> None:
     driver = FakeValidatorDriver(query_type="w")
 
