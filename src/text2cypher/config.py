@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 60
     llm_max_tokens: int = 512
     llm_disable_thinking: bool = False
+    question_decomposition_enabled: bool = True
+    question_decomposition_max_subquestions: int = 3
     few_shot_enabled: bool = True
     few_shot_top_k: int = 3
     few_shot_max_chars: int = 3500
@@ -86,6 +88,13 @@ class Settings(BaseSettings):
     def valid_few_shot_top_k(cls, value: int) -> int:
         if not 1 <= value <= 3:
             raise ValueError("必须在 1 到 3 之间")
+        return value
+
+    @field_validator("question_decomposition_max_subquestions")
+    @classmethod
+    def valid_decomposition_limit(cls, value: int) -> int:
+        if not 2 <= value <= 3:
+            raise ValueError("必须在 2 到 3 之间")
         return value
 
     @field_validator("few_shot_library_path", mode="before")

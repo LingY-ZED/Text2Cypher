@@ -57,12 +57,29 @@ def test_settings_has_production_few_shot_defaults() -> None:
     assert settings.few_shot_library_path is None
 
 
+def test_settings_has_production_decomposition_defaults() -> None:
+    settings = Settings(**_settings_kwargs())
+
+    assert settings.question_decomposition_enabled is True
+    assert settings.question_decomposition_max_subquestions == 3
+
+
+@pytest.mark.parametrize("maximum", [1, 4])
+def test_settings_rejects_invalid_decomposition_limit(maximum: int) -> None:
+    with pytest.raises(ValidationError, match="必须在 2 到 3 之间"):
+        Settings(
+            **_settings_kwargs(),
+            question_decomposition_max_subquestions=maximum,
+        )
+
+
 @pytest.mark.parametrize("top_k", [0, 4])
 def test_settings_rejects_few_shot_top_k_outside_supported_range(
     top_k: int,
 ) -> None:
     with pytest.raises(ValidationError, match="必须在 1 到 3 之间"):
         Settings(**_settings_kwargs(), few_shot_top_k=top_k)
+
 
 def test_settings_rejects_non_positive_few_shot_character_budget() -> None:
     with pytest.raises(ValidationError, match="必须为正数"):

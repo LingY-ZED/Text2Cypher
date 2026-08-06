@@ -5,7 +5,7 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出，并支持基于实时 Schema 过滤和 LLM Router 的动态 Few-shot。
+结构化结果输出，并支持 Schema 感知的问题拆分和 LLM Router 动态 Few-shot。
 
 ## 流程
 
@@ -13,12 +13,14 @@ Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API�
 用户自然语言问题
   → SchemaFetcher
   → SchemaGraphBuilder
-  → FewShotRouter
-  → PromptBuilder
-  → LLMClient
-  → CypherParser
-  → CypherValidator
-  → CypherExecutor
+  → QuestionDecomposer
+  → 对每个独立子问题依次执行：
+      FewShotRouter
+      → PromptBuilder
+      → LLMClient
+      → CypherParser
+      → CypherValidator
+      → CypherExecutor
   → ResultFormatter
 ```
 
@@ -57,6 +59,18 @@ DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 
+问题拆分默认启用。Decomposer 使用完整动态 Schema，将问题规划成一到三个互相独立的
+子问题；失败时回退为原问题，不影响原有单查询能力：
+
+```dotenv
+TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED=true
+TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS=3
+```
+
+Decomposer、Few-shot Router 和最终 Cypher 生成复用同一个模型客户端。简单问题在
+Few-shot 开启时最多调用模型 3 次；三个子问题最多调用 7 次。关闭拆分后仍返回统一的
+单元素 `sub_queries` 结构，但不会产生 Decomposer 模型调用。
+
 Few-shot 默认启用。系统先按实时 Schema 过滤候选，再使用与 Cypher 生成共享的模型
 选择最多 3 条相关示例；Router 不可用或返回无效内容时自动回退 Zero-shot：
 
@@ -83,7 +97,38 @@ text2cypher ask "ts-food-service 有哪些 API 端点？" --json
 python -m text2cypher ask "图谱中有哪些微服务？"
 ```
 
-输出包含生成的 Cypher、列名、JSON 友好记录、截断标记和执行耗时。
+简单和复杂问题统一返回分组结果：
+
+```json
+{
+  "question": "查询某方法的上游和下游",
+  "decomposed": true,
+  "sub_query_count": 2,
+  "sub_queries": [
+    {
+      "question": "查询该方法的上游",
+      "cypher": "MATCH ...",
+      "columns": ["上游"],
+      "rows": [],
+      "row_count": 0,
+      "truncated": false,
+      "duration_ms": 120
+    },
+    {
+      "question": "查询该方法的下游",
+      "cypher": "MATCH ...",
+      "columns": ["下游"],
+      "rows": [],
+      "row_count": 0,
+      "truncated": false,
+      "duration_ms": 98
+    }
+  ]
+}
+```
+
+每个分组都包含对应问题、Cypher、列名、JSON 友好记录、截断标记和执行耗时。系统不做
+跨子查询联结、去重或自然语言总结；任一分支失败时整体立即失败。
 
 ## 安全边界
 

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from text2cypher.application.few_shot_router import LLMFewShotRouter
+from text2cypher.application.question_decomposer import LLMQuestionDecomposer
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
 from text2cypher.config import Settings
-from text2cypher.domain.ports import FewShotRouter, LLMClient
+from text2cypher.domain.ports import (
+    FewShotRouter,
+    LLMClient,
+    QuestionDecomposer,
+)
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
@@ -33,6 +38,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             max_tokens=settings.llm_max_tokens,
             disable_thinking=settings.llm_disable_thinking,
         )
+        question_decomposer = _build_question_decomposer(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(
@@ -55,6 +61,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 settings.max_result_rows,
             ),
             result_formatter=JsonResultFormatter(),
+            question_decomposer=question_decomposer,
             few_shot_router=few_shot_router,
             close_callback=lambda: _close_resources(llm_client, driver_provider),
         )
@@ -63,6 +70,20 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             llm_client.close()
         driver_provider.close()
         raise
+
+
+def _build_question_decomposer(
+    settings: Settings,
+    llm_client: LLMClient,
+) -> QuestionDecomposer | None:
+    """按配置构造复用主模型客户端的问题拆分器。"""
+
+    if not settings.question_decomposition_enabled:
+        return None
+    return LLMQuestionDecomposer(
+        llm_client,
+        max_subquestions=settings.question_decomposition_max_subquestions,
+    )
 
 
 def _build_few_shot_router(

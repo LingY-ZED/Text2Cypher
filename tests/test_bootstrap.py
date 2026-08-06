@@ -4,7 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from text2cypher.application.bootstrap import _build_few_shot_router
+from text2cypher.application.bootstrap import (
+    _build_few_shot_router,
+    _build_question_decomposer,
+)
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
@@ -68,6 +71,29 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
     assert "参考示例：" in prompt.user
     assert "列出所有微服务名称" in prompt.user
     assert len(router_client.prompts) == 1
+
+
+def test_bootstrap_enables_decomposer_with_shared_client() -> None:
+    shared_client = StubLLMClient('{"sub_questions":["列出服务"]}')
+    decomposer = _build_question_decomposer(_settings(), shared_client)
+    assert decomposer is not None
+
+    decomposition = decomposer.decompose("列出服务", _service_schema())
+
+    assert decomposition.sub_questions == ("列出服务",)
+    assert len(shared_client.prompts) == 1
+
+
+def test_bootstrap_can_disable_decomposer_without_model_call() -> None:
+    shared_client = StubLLMClient("not-used")
+
+    decomposer = _build_question_decomposer(
+        _settings(question_decomposition_enabled=False),
+        shared_client,
+    )
+
+    assert decomposer is None
+    assert shared_client.prompts == []
 
 
 def test_bootstrap_disabled_preserves_zero_shot_and_skips_library_load(

@@ -33,3 +33,31 @@ def test_json_formatter_preserves_chinese_values() -> None:
         == "ts-food-service"
     )
     assert payload["sub_queries"][0]["truncated"] is True
+
+
+def test_json_formatter_groups_multiple_sub_query_results() -> None:
+    formatted = JsonResultFormatter().format(
+        question="分析上下游",
+        sub_queries=(
+            SubQueryResponse(
+                "查询上游",
+                "RETURN 'upstream'",
+                QueryResult(("上游",), ({"上游": "caller"},)),
+            ),
+            SubQueryResponse(
+                "查询下游",
+                "RETURN 'downstream'",
+                QueryResult(("下游",), ({"下游": "service"},)),
+            ),
+        ),
+    )
+
+    payload = json.loads(formatted)
+
+    assert payload["decomposed"] is True
+    assert payload["sub_query_count"] == 2
+    assert [item["question"] for item in payload["sub_queries"]] == [
+        "查询上游",
+        "查询下游",
+    ]
+    assert payload["sub_queries"][1]["rows"] == [{"下游": "service"}]

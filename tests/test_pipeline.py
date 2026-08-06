@@ -16,6 +16,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
+    QuestionDecomposition,
     SubQueryResponse,
     Text2CypherResponse,
     ValidationReport,
@@ -72,6 +73,21 @@ class FakeFewShotRouter:
                 schema_requirements=FewShotSchemaRequirements(),
             ),
         )
+
+
+class FakeQuestionDecomposer:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def decompose(
+        self,
+        question: str,
+        schema: GraphSchema,
+    ) -> QuestionDecomposition:
+        assert question == "列出服务"
+        assert schema == GraphSchema()
+        self.calls.append("decomposer")
+        return QuestionDecomposition(question, (question,))
 
 
 class FakeLLMClient:
@@ -155,6 +171,7 @@ def _pipeline(calls: list[str]) -> Text2CypherPipeline:
         cypher_validator=FakeValidator(calls),
         cypher_executor=FakeExecutor(calls),
         result_formatter=FakeFormatter(calls),
+        question_decomposer=FakeQuestionDecomposer(calls),
         few_shot_router=FakeFewShotRouter(calls),
     )
 
@@ -180,6 +197,7 @@ def test_pipeline_runs_every_stage_in_order() -> None:
     )
     assert calls == [
         "schema",
+        "decomposer",
         "router",
         "prompt",
         "llm",
@@ -197,6 +215,25 @@ def test_pipeline_rejects_blank_question_before_any_stage() -> None:
         _pipeline(calls).run("   ")
 
     assert calls == []
+
+
+def test_pipeline_closes_shared_resources_only_once() -> None:
+    calls: list[str] = []
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=FakePromptBuilder(calls),
+        llm_client=FakeLLMClient(calls),
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=FakeFormatter(calls),
+        close_callback=lambda: calls.append("close"),
+    )
+
+    pipeline.close()
+    pipeline.close()
+
+    assert calls == ["close"]
 
 
 def test_pipeline_skips_router_when_few_shot_is_disabled() -> None:
@@ -295,3 +332,178 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
         "parser",
         "validator",
     ]
+
+
+def test_pipeline_executes_each_sub_question_in_order_with_one_schema() -> None:
+    calls: list[str] = []
+
+    class ThreeWayDecomposer:
+        def decompose(
+            self,
+            question: str,
+            schema: GraphSchema,
+        ) -> QuestionDecomposition:
+            assert question == "综合分析"
+            assert schema == GraphSchema()
+            calls.append("decomposer")
+            return QuestionDecomposition(
+                question,
+                ("查询上游", "查询下游", "查询消息"),
+            )
+
+    class BranchRouter:
+        def route(
+            self,
+            question: str,
+            schema: GraphSchema,
+        ) -> tuple[FewShotExample, ...]:
+            assert schema == GraphSchema()
+            calls.append(f"router:{question}")
+            return ()
+
+    class BranchPromptBuilder:
+        def build(
+            self,
+            schema: GraphSchema,
+            question: str,
+            examples: tuple[FewShotExample, ...] = (),
+        ) -> ChatPrompt:
+            assert schema == GraphSchema()
+            assert examples == ()
+            calls.append(f"prompt:{question}")
+            return ChatPrompt(system="system", user=question)
+
+    class BranchLLMClient:
+        def generate(self, prompt: ChatPrompt) -> LLMResponse:
+            calls.append(f"llm:{prompt.user}")
+            return LLMResponse(content=prompt.user)
+
+    class BranchParser:
+        def parse(self, text: str) -> str:
+            calls.append(f"parser:{text}")
+            return f"RETURN '{text}' AS branch"
+
+    class BranchValidator:
+        def validate(self, cypher: str) -> ValidationReport:
+            calls.append(f"validator:{cypher}")
+            return ValidationReport(query_type="r")
+
+    class BranchExecutor:
+        def execute(self, cypher: str) -> QueryResult:
+            calls.append(f"executor:{cypher}")
+            return QueryResult(("branch",), ({"branch": cypher},))
+
+    class BranchFormatter:
+        def format(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> str:
+            assert question == "综合分析"
+            assert tuple(item.question for item in sub_queries) == (
+                "查询上游",
+                "查询下游",
+                "查询消息",
+            )
+            calls.append("formatter")
+            return "formatted"
+
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=BranchPromptBuilder(),
+        llm_client=BranchLLMClient(),
+        cypher_parser=BranchParser(),
+        cypher_validator=BranchValidator(),
+        cypher_executor=BranchExecutor(),
+        result_formatter=BranchFormatter(),
+        question_decomposer=ThreeWayDecomposer(),
+        few_shot_router=BranchRouter(),
+    )
+
+    response = pipeline.run("综合分析")
+
+    assert response.decomposed is True
+    assert calls.count("schema") == 1
+    assert calls == [
+        "schema",
+        "decomposer",
+        "router:查询上游",
+        "prompt:查询上游",
+        "llm:查询上游",
+        "parser:查询上游",
+        "validator:RETURN '查询上游' AS branch",
+        "executor:RETURN '查询上游' AS branch",
+        "router:查询下游",
+        "prompt:查询下游",
+        "llm:查询下游",
+        "parser:查询下游",
+        "validator:RETURN '查询下游' AS branch",
+        "executor:RETURN '查询下游' AS branch",
+        "router:查询消息",
+        "prompt:查询消息",
+        "llm:查询消息",
+        "parser:查询消息",
+        "validator:RETURN '查询消息' AS branch",
+        "executor:RETURN '查询消息' AS branch",
+        "formatter",
+    ]
+
+
+def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
+    calls: list[str] = []
+
+    class ThreeWayDecomposer:
+        def decompose(
+            self,
+            question: str,
+            schema: GraphSchema,
+        ) -> QuestionDecomposition:
+            return QuestionDecomposition(question, ("一", "二", "三"))
+
+    class RecordingPromptBuilder:
+        def build(
+            self,
+            schema: GraphSchema,
+            question: str,
+            examples: tuple[FewShotExample, ...] = (),
+        ) -> ChatPrompt:
+            calls.append(f"prompt:{question}")
+            return ChatPrompt(system="system", user=question)
+
+    class RecordingLLM:
+        def generate(self, prompt: ChatPrompt) -> LLMResponse:
+            return LLMResponse(content=prompt.user)
+
+    class RecordingParser:
+        def parse(self, text: str) -> str:
+            return f"RETURN '{text}'"
+
+    class RejectSecondValidator:
+        def validate(self, cypher: str) -> ValidationReport:
+            calls.append(f"validator:{cypher}")
+            if "二" in cypher:
+                raise CypherValidationError("第二个子查询不安全")
+            return ValidationReport(query_type="r")
+
+    class RecordingExecutor:
+        def execute(self, cypher: str) -> QueryResult:
+            calls.append(f"executor:{cypher}")
+            return QueryResult((), ())
+
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=RecordingPromptBuilder(),
+        llm_client=RecordingLLM(),
+        cypher_parser=RecordingParser(),
+        cypher_validator=RejectSecondValidator(),
+        cypher_executor=RecordingExecutor(),
+        result_formatter=FakeFormatter(calls),
+        question_decomposer=ThreeWayDecomposer(),
+    )
+
+    with pytest.raises(CypherValidationError, match="第二个"):
+        pipeline.run("复杂问题")
+
+    assert "prompt:三" not in calls
+    assert "executor:RETURN '二'" not in calls
+    assert "formatter" not in calls
