@@ -62,6 +62,7 @@ def test_correction_prompt_describes_dependency_parameter_failure() -> None:
     )
 
     assert "失败类型：dependency_parameter" in prompt.user
+    assert "仅 UNWIND 参数而不读取其键无效" in prompt.user
     assert "UNWIND $参数名 AS row" in prompt.user
 
 

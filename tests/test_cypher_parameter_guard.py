@@ -17,7 +17,7 @@ def _specification() -> DependencyParameter:
 
 def test_parameter_guard_allows_exactly_the_declared_parameter() -> None:
     CypherParameterGuard().validate(
-        "UNWIND $dep_q1_rows AS input RETURN input.entity_id",
+        "UNWIND $dep_q1_rows AS input RETURN input.entity_id, input.entity_type",
         {"dep_q1_rows": [{"entity_id": "a", "entity_type": "method"}]},
         (_specification(),),
     )
@@ -58,6 +58,29 @@ def test_parameter_guard_requires_unwind_for_each_declared_parameter() -> None:
             {"dep_q1_rows": []},
             (_specification(),),
         )
+
+
+def test_parameter_guard_requires_every_declared_column_to_be_read() -> None:
+    with pytest.raises(DependencyParameterValidationError, match="未读取"):
+        CypherParameterGuard().validate(
+            "UNWIND $dep_q1_rows AS input RETURN input.entity_id",
+            {"dep_q1_rows": [{"entity_id": "a", "entity_type": "method"}]},
+            (_specification(),),
+        )
+
+
+def test_parameter_guard_accepts_backtick_escaped_declared_columns() -> None:
+    specification = DependencyParameter(
+        name="dep_q1_rows",
+        source_id="q1",
+        columns=("entity-id",),
+    )
+
+    CypherParameterGuard().validate(
+        "UNWIND $dep_q1_rows AS input RETURN input.`entity-id`",
+        {"dep_q1_rows": [{"entity-id": "a"}]},
+        (specification,),
+    )
 
 
 def test_parameter_guard_rejects_mismatched_parameter_values() -> None:

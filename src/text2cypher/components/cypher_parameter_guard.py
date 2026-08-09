@@ -11,7 +11,7 @@ from text2cypher.domain.models import DependencyParameter
 
 _PARAMETER_PATTERN = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 _UNWIND_PARAMETER_PATTERN = re.compile(
-    r"\bUNWIND\s+\$([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+[A-Za-z_]\w*",
+    r"\bUNWIND\s+\$([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+([A-Za-z_]\w*)",
     re.IGNORECASE,
 )
 
@@ -42,13 +42,57 @@ class CypherParameterGuard:
         if missing_names:
             raise DependencyParameterValidationError("Cypher 未使用全部依赖参数")
 
-        unwound_names = set(_UNWIND_PARAMETER_PATTERN.findall(
-            self._without_literals(cypher)
-        ))
+        unwound_aliases = self._unwound_aliases(cypher)
+        unwound_names = set(unwound_aliases)
         if set(expected_names) - unwound_names:
             raise DependencyParameterValidationError(
                 "Cypher 未使用 UNWIND 展开全部依赖参数"
             )
+        self._validate_column_reads(specifications, unwound_aliases, cypher)
+
+    @staticmethod
+    def _unwound_aliases(cypher: str) -> dict[str, tuple[str, ...]]:
+        aliases: dict[str, list[str]] = {}
+        for parameter_name, alias in _UNWIND_PARAMETER_PATTERN.findall(
+            CypherParameterGuard._without_literals(cypher)
+        ):
+            aliases.setdefault(parameter_name, []).append(alias)
+        return {
+            parameter_name: tuple(parameter_aliases)
+            for parameter_name, parameter_aliases in aliases.items()
+        }
+
+    @staticmethod
+    def _validate_column_reads(
+        specifications: tuple[DependencyParameter, ...],
+        unwound_aliases: Mapping[str, tuple[str, ...]],
+        cypher: str,
+    ) -> None:
+        searchable_cypher = CypherParameterGuard._without_string_literals(cypher)
+        for specification in specifications:
+            aliases = unwound_aliases[specification.name]
+            for column in specification.columns:
+                if any(
+                    CypherParameterGuard._reads_column(
+                        searchable_cypher,
+                        alias,
+                        column,
+                    )
+                    for alias in aliases
+                ):
+                    continue
+                raise DependencyParameterValidationError(
+                    "Cypher 未读取全部依赖参数列"
+                )
+
+    @staticmethod
+    def _reads_column(cypher: str, alias: str, column: str) -> bool:
+        escaped_alias = re.escape(alias)
+        escaped_column = re.escape(column)
+        pattern = re.compile(
+            rf"\b{escaped_alias}\.(?:`{escaped_column}`|{escaped_column})(?!\w)"
+        )
+        return pattern.search(cypher) is not None
 
     @staticmethod
     def _without_literals(cypher: str) -> str:
@@ -84,6 +128,33 @@ class CypherParameterGuard:
                 continue
             if current == chr(96):
                 in_identifier = True
+                output.append(" ")
+                index += 1
+                continue
+            output.append(current)
+            index += 1
+        return "".join(output)
+
+    @staticmethod
+    def _without_string_literals(cypher: str) -> str:
+        output: list[str] = []
+        quote: str | None = None
+        index = 0
+        while index < len(cypher):
+            current = cypher[index]
+            next_character = cypher[index + 1] if index + 1 < len(cypher) else ""
+            if quote is not None:
+                output.append(" ")
+                if current == "\\" and next_character:
+                    output.append(" ")
+                    index += 2
+                    continue
+                if current == quote:
+                    quote = None
+                index += 1
+                continue
+            if current in ("'", '"'):
+                quote = current
                 output.append(" ")
                 index += 1
                 continue

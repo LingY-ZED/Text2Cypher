@@ -37,6 +37,8 @@ class CypherCorrectionPromptBuilder:
         CypherFailureKind.DEPENDENCY_PARAMETER: (
             "上一轮候选没有按依赖参数契约使用全部参数；必须以 Prompt 中指定的 "
             "UNWIND $参数名 AS row 形式展开每个参数，再读取允许的 row.键名。"
+            "每个声明的键都必须通过对应 row 别名实际参与 MATCH、WHERE、WITH 或 RETURN，"
+            "仅 UNWIND 参数而不读取其键无效。"
         ),
     }
 
