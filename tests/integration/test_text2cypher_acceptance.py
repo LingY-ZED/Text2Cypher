@@ -274,7 +274,10 @@ def test_decomposer_preserves_qualified_names_paths_and_service_names(
             schema,
         )
         _skip_after_decomposer_transport_failure(caplog)
-        combined = "\n".join(decomposition.sub_questions)
+        combined = "\n".join(
+            sub_question.question
+            for sub_question in decomposition.sub_questions
+        )
         assert decomposition.decomposed is True
         assert len(decomposition.sub_questions) == 3
         assert "FoodServiceImpl.getAllFood" in combined

@@ -9,11 +9,13 @@ from text2cypher.components.question_decomposition import (
     QuestionDecompositionResponseParser,
 )
 from text2cypher.domain.models import (
+    DependencyInput,
     GraphSchema,
     NodeSchema,
     PropertySchema,
     RelationshipPattern,
     RelationshipSchema,
+    SubQuestionPlan,
 )
 
 
@@ -57,10 +59,23 @@ def test_decomposition_implementation_has_no_current_schema_names() -> None:
 @pytest.mark.parametrize(
     "content",
     [
-        '{"sub_questions":["查询上游","查询下游"]}',
-        '```json\n{"sub_questions":["查询上游","查询下游"]}\n```',
         (
-            '{"sub_questions":["查询上游","查询下游"],'
+            '{"sub_questions":['
+            '{"id":"q1","question":"查询上游","inputs":[]},'
+            '{"id":"q2","question":"查询下游","inputs":[]}'
+            ']}'
+        ),
+        (
+            '```json\n{"sub_questions":['
+            '{"id":"q1","question":"查询上游","inputs":[]},'
+            '{"id":"q2","question":"查询下游","inputs":[]}'
+            ']}\n```'
+        ),
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"查询上游","inputs":[]},'
+            '{"id":"q2","question":"查询下游","inputs":[]}'
+            '],'
             '"ignored":"metadata"}'
         ),
     ],
@@ -72,18 +87,41 @@ def test_response_parser_accepts_supported_json_shapes(content: str) -> None:
         3,
     )
 
-    assert decomposition.sub_questions == ("查询上游", "查询下游")
+    assert decomposition.sub_questions == (
+        SubQuestionPlan("q1", "查询上游"),
+        SubQuestionPlan("q2", "查询下游"),
+    )
     assert decomposition.decomposed is True
 
 
 def test_response_parser_restores_original_for_single_rewritten_question() -> None:
     decomposition = QuestionDecompositionResponseParser().parse(
-        '{"sub_questions":["模型擅自改写"]}',
+        '{"sub_questions":[{"id":"q1","question":"模型擅自改写","inputs":[]}]}',
         "  原始问题  ",
         3,
     )
 
-    assert decomposition.sub_questions == ("原始问题",)
+    assert decomposition.sub_questions == (SubQuestionPlan("q1", "原始问题"),)
+
+
+def test_response_parser_supports_a_dependent_sub_question() -> None:
+    decomposition = QuestionDecompositionResponseParser().parse(
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"查询实体","inputs":[]},'
+            '{"id":"q2","question":"查询实体归属","inputs":['
+            '{"source_id":"q1","columns":["实体标识"]}]}'
+            ']}'
+        ),
+        "查询实体及归属",
+        3,
+    )
+
+    assert decomposition.sub_questions[1] == SubQuestionPlan(
+        "q2",
+        "查询实体归属",
+        (DependencyInput("q1", ("实体标识",)),),
+    )
 
 
 @pytest.mark.parametrize(
@@ -95,9 +133,24 @@ def test_response_parser_restores_original_for_single_rewritten_question() -> No
         '```python\n{"sub_questions":["问题"]}\n```',
         '{"sub_questions":[]}',
         '{"sub_questions":[1]}',
-        '{"sub_questions":["   "]}',
-        '{"sub_questions":["重复","重复"]}',
-        '{"sub_questions":["一","二","三","四"]}',
+        '{"sub_questions":[{"id":"q1","question":"   ","inputs":[]}]}',
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"一","inputs":[]},'
+            '{"id":"q1","question":"二","inputs":[]}]}'
+        ),
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"一","inputs":[]},'
+            '{"id":"q2","question":"二","inputs":['
+            '{"source_id":"q2","columns":["值"]}]}]}'
+        ),
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"一","inputs":[]},'
+            '{"id":"q2","question":"二","inputs":['
+            '{"source_id":"q1","columns":["值","值"]}]}]}'
+        ),
     ],
 )
 def test_response_parser_rejects_invalid_documents(content: str) -> None:

@@ -19,6 +19,7 @@ from text2cypher.domain.models import (
     LLMResponse,
     NodeSchema,
     PropertySchema,
+    SubQuestionPlan,
 )
 
 
@@ -76,13 +77,15 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
 
 
 def test_bootstrap_enables_decomposer_with_shared_client() -> None:
-    shared_client = StubLLMClient('{"sub_questions":["列出服务"]}')
+    shared_client = StubLLMClient(
+        '{"sub_questions":[{"id":"q1","question":"列出服务","inputs":[]}]}'
+    )
     decomposer = _build_question_decomposer(_settings(), shared_client)
     assert decomposer is not None
 
     decomposition = decomposer.decompose("列出服务", _service_schema())
 
-    assert decomposition.sub_questions == ("列出服务",)
+    assert decomposition.sub_questions == (SubQuestionPlan("q1", "列出服务"),)
     assert len(shared_client.prompts) == 1
 
 

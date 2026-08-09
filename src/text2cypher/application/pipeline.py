@@ -82,13 +82,10 @@ class Text2CypherPipeline:
         decomposition = (
             self._question_decomposer.decompose(normalized_question, schema)
             if self._question_decomposer is not None
-            else QuestionDecomposition(
-                original_question=normalized_question,
-                sub_questions=(normalized_question,),
-            )
+            else QuestionDecomposition.original(normalized_question)
         )
         sub_queries = tuple(
-            self._run_sub_query(schema, sub_question)
+            self._run_sub_query(schema, sub_question.question)
             for sub_question in decomposition.sub_questions
         )
         formatted = self._result_formatter.format(

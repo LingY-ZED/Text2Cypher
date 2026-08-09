@@ -4,6 +4,7 @@ from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.domain.models import (
     ChatPrompt,
     CypherFailureKind,
+    DependencyInput,
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
@@ -12,6 +13,7 @@ from text2cypher.domain.models import (
     QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
+    SubQuestionPlan,
     SubQueryResponse,
     Text2CypherResponse,
 )
@@ -19,6 +21,7 @@ from text2cypher.domain.models import (
 __all__ = [
     "ChatPrompt",
     "CypherFailureKind",
+    "DependencyInput",
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphSchema",
@@ -27,6 +30,7 @@ __all__ = [
     "QueryResult",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SubQuestionPlan",
     "SubQueryResponse",
     "Text2CypherPipeline",
     "Text2CypherResponse",

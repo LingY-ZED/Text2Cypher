@@ -260,31 +260,113 @@ class FewShotExample:
 
 
 @dataclass(frozen=True, slots=True)
+class DependencyInput:
+    """一个子问题从已完成父节点读取的结果列。"""
+
+    source_id: str
+    columns: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        source_id = _require_text(self.source_id, "依赖来源 ID")
+        columns = tuple(
+            _require_text(column, "依赖结果列") for column in self.columns
+        )
+        if not columns:
+            raise ValueError("依赖结果列不能为空")
+        if len(set(columns)) != len(columns):
+            raise ValueError("依赖结果列不能重复")
+        object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "columns", columns)
+
+
+@dataclass(frozen=True, slots=True)
+class SubQuestionPlan:
+    """一个可独立执行或依赖父结果执行的子问题计划节点。"""
+
+    id: str
+    question: str
+    inputs: tuple[DependencyInput, ...] = ()
+
+    def __post_init__(self) -> None:
+        identifier = _require_text(self.id, "子问题 ID")
+        question = _require_text(self.question, "子问题")
+        inputs = tuple(self.inputs)
+        source_ids = tuple(item.source_id for item in inputs)
+        if len(set(source_ids)) != len(source_ids):
+            raise ValueError("子问题不能重复引用同一依赖来源")
+        object.__setattr__(self, "id", identifier)
+        object.__setattr__(self, "question", question)
+        object.__setattr__(self, "inputs", inputs)
+
+    @property
+    def depends_on(self) -> tuple[str, ...]:
+        """按声明顺序返回当前节点的父节点 ID。"""
+
+        return tuple(item.source_id for item in self.inputs)
+
+
+@dataclass(frozen=True, slots=True)
 class QuestionDecomposition:
-    """原始问题及其一到三个互相独立的子问题。"""
+    """原始问题及其一到三个、按稳定拓扑顺序排列的计划节点。"""
 
     original_question: str
-    sub_questions: tuple[str, ...]
+    sub_questions: tuple[SubQuestionPlan, ...]
 
     def __post_init__(self) -> None:
         original_question = _require_text(self.original_question, "原始问题")
-        sub_questions = tuple(
-            _require_text(question, "子问题") for question in self.sub_questions
-        )
+        sub_questions = tuple(self.sub_questions)
         if not 1 <= len(sub_questions) <= 3:
             raise ValueError("子问题数量必须在 1 到 3 之间")
-        if len(set(sub_questions)) != len(sub_questions):
+
+        expected_ids = tuple(f"q{index}" for index in range(1, len(sub_questions) + 1))
+        actual_ids = tuple(item.id for item in sub_questions)
+        if actual_ids != expected_ids:
+            raise ValueError("子问题 ID 必须按 q1、q2、q3 顺序编号")
+        questions = tuple(item.question for item in sub_questions)
+        if len(set(questions)) != len(questions):
             raise ValueError("子问题不能重复")
-        if len(sub_questions) == 1 and sub_questions[0] != original_question:
-            raise ValueError("未拆分的问题必须保留原始问题")
+
+        seen_ids: set[str] = set()
+        for item in sub_questions:
+            if any(source_id not in seen_ids for source_id in item.depends_on):
+                raise ValueError("依赖只能引用更早的子问题")
+            seen_ids.add(item.id)
+
+        if len(sub_questions) == 1:
+            only_question = sub_questions[0]
+            if only_question.question != original_question or only_question.inputs:
+                raise ValueError("未拆分的问题必须保留原始问题且不得包含依赖")
         object.__setattr__(self, "original_question", original_question)
         object.__setattr__(self, "sub_questions", sub_questions)
 
     @property
     def decomposed(self) -> bool:
-        """问题是否被拆成了多个独立分支。"""
+        """问题是否被拆成了多个计划节点。"""
 
         return len(self.sub_questions) > 1
+
+    @classmethod
+    def original(cls, question: str) -> QuestionDecomposition:
+        """构造保留原始问题的单节点无依赖计划。"""
+
+        normalized = _require_text(question, "原始问题")
+        return cls(normalized, (SubQuestionPlan("q1", normalized),))
+
+    @classmethod
+    def independent(
+        cls,
+        original_question: str,
+        questions: tuple[str, ...],
+    ) -> QuestionDecomposition:
+        """为测试或禁用依赖时构造一组互不依赖的计划节点。"""
+
+        return cls(
+            original_question,
+            tuple(
+                SubQuestionPlan(f"q{index}", question)
+                for index, question in enumerate(questions, start=1)
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)

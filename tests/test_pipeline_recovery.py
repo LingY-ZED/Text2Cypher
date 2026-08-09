@@ -312,7 +312,10 @@ def test_pipeline_stops_later_sub_queries_after_correction_is_exhausted() -> Non
             assert question == "复杂查询"
             assert schema == GraphSchema()
             calls.append("decomposer")
-            return QuestionDecomposition(question, ("第一分支", "第二分支"))
+            return QuestionDecomposition.independent(
+                question,
+                ("第一分支", "第二分支"),
+            )
 
     class AnyPromptBuilder:
         def build(

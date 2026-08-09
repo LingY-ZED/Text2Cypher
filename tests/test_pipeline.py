@@ -87,7 +87,7 @@ class FakeQuestionDecomposer:
         assert question == "列出服务"
         assert schema == GraphSchema()
         self.calls.append("decomposer")
-        return QuestionDecomposition(question, (question,))
+        return QuestionDecomposition.original(question)
 
 
 class FakeLLMClient:
@@ -346,7 +346,7 @@ def test_pipeline_executes_each_sub_question_in_order_with_one_schema() -> None:
             assert question == "综合分析"
             assert schema == GraphSchema()
             calls.append("decomposer")
-            return QuestionDecomposition(
+            return QuestionDecomposition.independent(
                 question,
                 ("查询上游", "查询下游", "查询消息"),
             )
@@ -458,7 +458,7 @@ def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
             question: str,
             schema: GraphSchema,
         ) -> QuestionDecomposition:
-            return QuestionDecomposition(question, ("一", "二", "三"))
+            return QuestionDecomposition.independent(question, ("一", "二", "三"))
 
     class RecordingPromptBuilder:
         def build(

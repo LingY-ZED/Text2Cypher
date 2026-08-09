@@ -50,7 +50,7 @@ class FewShotRouter(Protocol):
 
 @runtime_checkable
 class QuestionDecomposer(Protocol):
-    """把问题规划为一到三个互相独立的子问题。"""
+    """把问题规划为一到三个可包含显式结果依赖的子问题。"""
 
     def decompose(
         self,

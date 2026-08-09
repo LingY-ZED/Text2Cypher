@@ -9,6 +9,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     NodeSchema,
+    SubQuestionPlan,
 )
 
 
@@ -27,11 +28,11 @@ class StubLLMClient:
 def test_llm_decomposer_returns_valid_independent_sub_questions() -> None:
     client = StubLLMClient(
         LLMResponse(
-            content=(
-                '{"sub_questions":['
-                '"查询 Alice 的任职公司",'
-                '"查询 Alice 的同事"]}'
-            )
+                content=(
+                    '{"sub_questions":['
+                    '{"id":"q1","question":"查询 Alice 的任职公司","inputs":[]},'
+                    '{"id":"q2","question":"查询 Alice 的同事","inputs":[]}]}'
+                )
         )
     )
     decomposer = LLMQuestionDecomposer(client)
@@ -42,8 +43,8 @@ def test_llm_decomposer_returns_valid_independent_sub_questions() -> None:
     )
 
     assert decomposition.sub_questions == (
-        "查询 Alice 的任职公司",
-        "查询 Alice 的同事",
+        SubQuestionPlan("q1", "查询 Alice 的任职公司"),
+        SubQuestionPlan("q2", "查询 Alice 的同事"),
     )
     assert len(client.prompts) == 1
     assert "Person" in client.prompts[0].user
@@ -57,7 +58,13 @@ def test_llm_decomposer_returns_valid_independent_sub_questions() -> None:
         LLMResponse(content=""),
         LLMResponse(content="not-json-secret"),
         LLMResponse(content='{"sub_questions":[]}'),
-        LLMResponse(content='{"sub_questions":["重复","重复"]}'),
+        LLMResponse(
+            content=(
+                '{"sub_questions":['
+                '{"id":"q1","question":"重复","inputs":[]},'
+                '{"id":"q2","question":"重复","inputs":[]}]}'
+            )
+        ),
     ],
 )
 def test_llm_decomposer_falls_back_without_logging_sensitive_content(
@@ -69,7 +76,9 @@ def test_llm_decomposer_falls_back_without_logging_sensitive_content(
 
     decomposition = decomposer.decompose("原始敏感问题", GraphSchema())
 
-    assert decomposition.sub_questions == ("原始敏感问题",)
+    assert decomposition.sub_questions == (
+        SubQuestionPlan("q1", "原始敏感问题"),
+    )
     assert "QuestionDecomposer 失败" in caplog.text
     assert "原始敏感问题" not in caplog.text
     assert "secret-provider-response" not in caplog.text

@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class LLMQuestionDecomposer:
-    """把一个问题安全规划为一到三个独立子问题。"""
+    """把一个问题安全规划为一到三个带显式依赖的子问题。"""
 
     def __init__(
         self,
@@ -43,10 +43,7 @@ class LLMQuestionDecomposer:
         schema: GraphSchema,
     ) -> QuestionDecomposition:
         normalized_question = question.strip()
-        fallback = QuestionDecomposition(
-            original_question=normalized_question,
-            sub_questions=(normalized_question,),
-        )
+        fallback = QuestionDecomposition.original(normalized_question)
         try:
             prompt = self._prompt_builder.build(
                 schema,
