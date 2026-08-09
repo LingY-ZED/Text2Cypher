@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     empty_result_correction_enabled: bool = True
     question_decomposition_enabled: bool = True
     question_decomposition_max_subquestions: int = 3
+    subquery_max_workers: int = 3
     few_shot_enabled: bool = True
     few_shot_top_k: int = 3
     few_shot_max_chars: int = 3500
@@ -101,6 +102,13 @@ class Settings(BaseSettings):
     def valid_decomposition_limit(cls, value: int) -> int:
         if not 2 <= value <= 3:
             raise ValueError("必须在 2 到 3 之间")
+        return value
+
+    @field_validator("subquery_max_workers")
+    @classmethod
+    def valid_subquery_max_workers(cls, value: int) -> int:
+        if not 1 <= value <= 3:
+            raise ValueError("必须在 1 到 3 之间")
         return value
 
     @field_validator("retry_max_attempts")

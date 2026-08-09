@@ -14,7 +14,8 @@ Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API�
   → SchemaFetcher
   → SchemaGraphBuilder
   → QuestionDecomposer
-  → 对每个独立子问题依次执行：
+  → 按依赖 DAG 的拓扑层执行：
+      同层独立子问题并行；后继子问题以受控 Neo4j 参数消费父结果
       FewShotRouter
       → PromptBuilder
       → LLMClient
@@ -60,12 +61,15 @@ DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 
-问题拆分默认启用。Decomposer 使用完整动态 Schema，将问题规划成一到三个互相独立的
-子问题；失败时回退为原问题，不影响原有单查询能力：
+问题拆分默认启用。Decomposer 使用完整动态 Schema，将问题规划成一到三个可带依赖关系的
+子问题。依赖节点只消费系统提供的 `LIST<MAP>` Neo4j 参数，真实数据库值不会进入模型
+Prompt；同一拓扑层的独立节点最多并行执行三个完整分支。拆分失败时回退为原问题，不影响
+原有单查询能力：
 
 ```dotenv
 TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED=true
 TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS=3
+TEXT2CYPHER_SUBQUERY_MAX_WORKERS=3
 ```
 
 Decomposer、Few-shot Router 和最终 Cypher 生成复用同一个模型客户端。简单问题在
@@ -126,10 +130,18 @@ python -m text2cypher ask "图谱中有哪些微服务？"
 ```json
 {
   "question": "查询某方法的上游和下游",
+  "status": "partial",
   "decomposed": true,
   "sub_query_count": 2,
+  "successful_count": 1,
+  "failed_count": 0,
+  "blocked_count": 1,
   "sub_queries": [
     {
+      "id": "q1",
+      "depends_on": [],
+      "parameter_sources": {},
+      "status": "success",
       "question": "查询该方法的上游",
       "cypher": "MATCH ...",
       "columns": ["上游"],
@@ -139,20 +151,29 @@ python -m text2cypher ask "图谱中有哪些微服务？"
       "duration_ms": 120
     },
     {
+      "id": "q2",
+      "depends_on": ["q1"],
+      "parameter_sources": {
+        "dep_q1_rows": {"source_id": "q1", "columns": ["上游"]}
+      },
+      "status": "blocked",
       "question": "查询该方法的下游",
-      "cypher": "MATCH ...",
-      "columns": ["下游"],
-      "rows": [],
-      "row_count": 0,
-      "truncated": false,
-      "duration_ms": 98
+      "cypher": null,
+      "columns": null,
+      "rows": null,
+      "row_count": null,
+      "truncated": null,
+      "duration_ms": null,
+      "error": {"kind": "dependency_failed", "message": "依赖子查询未成功完成"}
     }
   ]
 }
 ```
 
-每个分组都包含对应问题、Cypher、列名、JSON 友好记录、截断标记和执行耗时。系统不做
-跨子查询联结、去重或自然语言总结；任一分支失败时整体立即失败。
+每个分组包含节点 ID、依赖来源、状态、对应问题、Cypher、列名、JSON 友好记录、截断标记
+和执行耗时。一个独立分支失败不会影响其他独立分支；其后继会标记为 `blocked`。至少一个
+分支成功时仍输出 `partial` 响应，CLI 返回退出码 5；全部失败仍使用运行错误退出码 4。系统
+不做跨子查询结果联结、去重或自然语言总结。
 
 ## 安全边界
 

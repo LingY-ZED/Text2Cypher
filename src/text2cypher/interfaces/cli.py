@@ -13,11 +13,13 @@ from text2cypher.application.bootstrap import build_pipeline
 from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.config import Settings
 from text2cypher.domain.errors import Text2CypherError
+from text2cypher.domain.models import Text2CypherStatus
 from text2cypher.interfaces.logging import configure_logging
 
 EXIT_SUCCESS = 0
 EXIT_INPUT_OR_CONFIGURATION_ERROR = 2
 EXIT_RUNTIME_ERROR = 4
+EXIT_PARTIAL_SUCCESS = 5
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -79,4 +81,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(response.formatted)
     else:
         print(f"结果：\n{response.formatted}")
+    if response.status is Text2CypherStatus.PARTIAL:
+        if not args.json:
+            print("部分子查询未完成；已输出可用结果。", file=sys.stderr)
+        return EXIT_PARTIAL_SUCCESS
     return EXIT_SUCCESS

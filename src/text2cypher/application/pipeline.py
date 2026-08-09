@@ -5,10 +5,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from time import perf_counter
 from typing import Any
 
 from text2cypher.components.cypher_parameter_guard import CypherParameterGuard
-from text2cypher.components.recovery_logging import log_correction_event
+from text2cypher.components.recovery_logging import (
+    log_correction_event,
+    log_subquery_event,
+)
 from text2cypher.domain.errors import (
     CypherExecutionError,
     CypherOutputContractError,
@@ -142,6 +146,11 @@ class Text2CypherPipeline:
             ]
             for plan in blocked:
                 outcomes[plan.id] = self._blocked_response(plan)
+                self._log_subquery_event(
+                    plan,
+                    event="subquery_blocked",
+                    outcome="blocked",
+                )
             pending = [plan for plan in pending if plan not in blocked]
             if not pending:
                 break
@@ -155,6 +164,7 @@ class Text2CypherPipeline:
                 raise AssertionError("已校验的子问题依赖图必须存在 ready 节点")
 
             futures: dict[Future[SubQueryResponse], SubQuestionPlan] = {}
+            started_at: dict[Future[SubQueryResponse], float] = {}
             fatal_access_error: Neo4jAccessError | None = None
             with ThreadPoolExecutor(
                 max_workers=self._max_subquery_workers,
@@ -171,7 +181,17 @@ class Text2CypherPipeline:
                             self._specifications_for_plan(plan, outcomes),
                             error,
                         )
+                        self._log_subquery_event(
+                            plan,
+                            event="subquery_failed",
+                            outcome="failed",
+                        )
                         continue
+                    self._log_subquery_event(
+                        plan,
+                        event="subquery_scheduled",
+                        outcome="scheduled",
+                    )
                     future = executor.submit(
                         self._run_sub_query,
                         schema,
@@ -182,18 +202,37 @@ class Text2CypherPipeline:
                         suppress_empty_correction,
                     )
                     futures[future] = plan
+                    started_at[future] = perf_counter()
 
                 for future in as_completed(futures):
                     plan = futures[future]
                     try:
                         outcomes[plan.id] = future.result()
+                        self._log_subquery_event(
+                            plan,
+                            event="subquery_succeeded",
+                            outcome="success",
+                            duration_ms=self._elapsed_ms(started_at[future]),
+                        )
                     except Neo4jAccessError as error:
                         fatal_access_error = error
+                        self._log_subquery_event(
+                            plan,
+                            event="subquery_failed",
+                            outcome="failed",
+                            duration_ms=self._elapsed_ms(started_at[future]),
+                        )
                     except Text2CypherError as error:
                         outcomes[plan.id] = self._failed_response(
                             plan,
                             self._specifications_for_plan(plan, outcomes),
                             error,
+                        )
+                        self._log_subquery_event(
+                            plan,
+                            event="subquery_failed",
+                            outcome="failed",
+                            duration_ms=self._elapsed_ms(started_at[future]),
                         )
 
             if fatal_access_error is not None:
@@ -296,6 +335,12 @@ class Text2CypherPipeline:
     ) -> SubQueryResponse:
         """运行一个已具备全部父参数的子查询分支。"""
 
+        self._log_subquery_event(
+            plan,
+            event="subquery_started",
+            outcome="running",
+        )
+
         examples = (
             self._few_shot_router.route(plan.question, schema)
             if self._few_shot_router is not None
@@ -388,6 +433,27 @@ class Text2CypherPipeline:
                 specification.name: specification
                 for specification in specifications
             },
+        )
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> int:
+        return round((perf_counter() - started_at) * 1000)
+
+    @staticmethod
+    def _log_subquery_event(
+        plan: SubQuestionPlan,
+        *,
+        event: str,
+        outcome: str,
+        duration_ms: int | None = None,
+    ) -> None:
+        log_subquery_event(
+            _LOGGER,
+            event=event,
+            subquery_id=plan.id,
+            dependency_count=len(plan.depends_on),
+            outcome=outcome,
+            duration_ms=duration_ms,
         )
 
     def _build_prompt(

@@ -5,7 +5,10 @@ import logging
 
 import pytest
 
-from text2cypher.components.recovery_logging import log_retry_event
+from text2cypher.components.recovery_logging import (
+    log_retry_event,
+    log_subquery_event,
+)
 from text2cypher.components.retry import RetryEvent
 from text2cypher.interfaces.logging import JsonLogFormatter
 
@@ -72,3 +75,33 @@ def test_retry_event_has_only_safe_structured_fields(
         "delay_ms": 500,
         "outcome": "retrying",
     }
+
+
+def test_subquery_event_is_structured_and_omits_sensitive_query_data(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("text2cypher.test.subquery")
+    caplog.set_level(logging.INFO, logger=logger.name)
+
+    log_subquery_event(
+        logger,
+        event="subquery_succeeded",
+        subquery_id="q2",
+        dependency_count=1,
+        outcome="success",
+        duration_ms=17,
+    )
+
+    event = caplog.records[-1].subquery_event
+    assert event == {
+        "event": "subquery_succeeded",
+        "component": "pipeline",
+        "stage": "subquery_scheduler",
+        "subquery_id": "q2",
+        "dependency_count": 1,
+        "duration_ms": 17,
+        "outcome": "success",
+    }
+    payload = json.loads(JsonLogFormatter().format(caplog.records[-1]))
+    assert payload["subquery_id"] == "q2"
+    assert "Cypher" not in payload

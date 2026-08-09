@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from threading import Barrier, Lock, get_ident
 from typing import Any
@@ -158,7 +159,9 @@ def _pipeline(
     )
 
 
-def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows() -> None:
+def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     decomposition = QuestionDecomposition(
         "综合查询",
         (
@@ -187,19 +190,27 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows() -> None:
             if cypher == "source-cypher":
                 return QueryResult(("entity_id",), ({"entity_id": "id-1"},))
             return QueryResult(("value",), ({"value": 1},))
-        assert cypher == "dependent-cypher"
+        assert (
+            cypher
+            == "UNWIND $dep_q1_rows AS dep_q1 "
+            "RETURN dep_q1.entity_id AS result"
+        )
         assert root_finished == 2
         assert parameters == {"dep_q1_rows": [{"entity_id": "id-1"}]}
         return QueryResult(("result",), ({"result": "done"},))
 
     prompt_builder = RecordingPromptBuilder()
+    caplog.set_level(logging.INFO, logger="text2cypher.application.pipeline")
     response = _pipeline(
         decomposition,
         MappingParser(
             {
                 "source": "source-cypher",
                 "independent": "independent-cypher",
-                "dependent": "dependent-cypher",
+                "dependent": (
+                    "UNWIND $dep_q1_rows AS dep_q1 "
+                    "RETURN dep_q1.entity_id AS result"
+                ),
             }
         ),
         RecordingValidator(),
@@ -225,6 +236,20 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows() -> None:
     assert prompt_calls["dependent"][0] == (
         DependencyParameter("dep_q1_rows", "q1", ("entity_id",)),
     )
+    events = [
+        record.subquery_event
+        for record in caplog.records
+        if hasattr(record, "subquery_event")
+    ]
+    assert {event["event"] for event in events} == {
+        "subquery_scheduled",
+        "subquery_started",
+        "subquery_succeeded",
+    }
+    assert {event["subquery_id"] for event in events} == {"q1", "q2", "q3"}
+    assert all(event["component"] == "pipeline" for event in events)
+    assert "综合查询" not in caplog.text
+    assert "id-1" not in caplog.text
 
 
 def test_output_contract_is_corrected_once_before_dependency_binding() -> None:
@@ -271,7 +296,9 @@ def test_output_contract_is_corrected_once_before_dependency_binding() -> None:
     assert response.sub_queries[2 - 1].status.value == "success"
 
 
-def test_pipeline_returns_partial_and_blocks_only_the_failed_dependency_chain() -> None:
+def test_pipeline_returns_partial_and_blocks_only_the_failed_dependency_chain(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     decomposition = QuestionDecomposition(
         "部分结果",
         (
@@ -285,6 +312,7 @@ def test_pipeline_returns_partial_and_blocks_only_the_failed_dependency_chain() 
         ),
     )
     prompt_builder = RecordingPromptBuilder()
+    caplog.set_level(logging.INFO, logger="text2cypher.application.pipeline")
 
     def execute(cypher: str, parameters: Mapping[str, Any] | None) -> QueryResult:
         del parameters
@@ -314,6 +342,19 @@ def test_pipeline_returns_partial_and_blocks_only_the_failed_dependency_chain() 
     assert response.sub_queries[1].error is not None
     assert response.sub_queries[1].error.kind == "dependency_failed"
     assert "blocked-dependent" not in [call[0] for call in prompt_builder.calls]
+    events = [
+        record.subquery_event
+        for record in caplog.records
+        if hasattr(record, "subquery_event")
+    ]
+    assert {event["event"] for event in events} >= {
+        "subquery_scheduled",
+        "subquery_started",
+        "subquery_succeeded",
+        "subquery_failed",
+        "subquery_blocked",
+    }
+    assert "部分结果" not in caplog.text
 
 
 def test_truncated_parent_only_fails_its_dependency_chain() -> None:

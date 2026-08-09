@@ -106,6 +106,7 @@ def test_settings_has_production_decomposition_defaults() -> None:
 
     assert settings.question_decomposition_enabled is True
     assert settings.question_decomposition_max_subquestions == 3
+    assert settings.subquery_max_workers == 3
 
 
 @pytest.mark.parametrize("maximum", [1, 4])
@@ -115,6 +116,12 @@ def test_settings_rejects_invalid_decomposition_limit(maximum: int) -> None:
             **_settings_kwargs(),
             question_decomposition_max_subquestions=maximum,
         )
+
+
+@pytest.mark.parametrize("workers", [0, 4])
+def test_settings_rejects_invalid_subquery_worker_limit(workers: int) -> None:
+    with pytest.raises(ValidationError, match="必须在 1 到 3 之间"):
+        Settings(**_settings_kwargs(), subquery_max_workers=workers)
 
 
 @pytest.mark.parametrize("top_k", [0, 4])

@@ -74,6 +74,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             few_shot_router=few_shot_router,
             cypher_corrector=cypher_corrector,
             recover_empty_results=settings.empty_result_correction_enabled,
+            max_subquery_workers=settings.subquery_max_workers,
             close_callback=lambda: _close_resources(llm_client, driver_provider),
         )
     except Exception:

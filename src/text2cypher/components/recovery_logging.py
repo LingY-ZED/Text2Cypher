@@ -60,6 +60,33 @@ def log_correction_event(
     )
 
 
+def log_subquery_event(
+    logger: logging.Logger,
+    *,
+    event: str,
+    subquery_id: str,
+    dependency_count: int,
+    outcome: str,
+    duration_ms: int | None = None,
+) -> None:
+    """记录不含查询内容的子问题调度事件。"""
+
+    logger.info(
+        "subquery_event",
+        extra={
+            "subquery_event": {
+                "event": event,
+                "component": "pipeline",
+                "stage": "subquery_scheduler",
+                "subquery_id": subquery_id,
+                "dependency_count": dependency_count,
+                "duration_ms": duration_ms,
+                "outcome": outcome,
+            }
+        },
+    )
+
+
 def _emit(
     logger: logging.Logger,
     *,

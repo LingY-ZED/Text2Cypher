@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
+import text2cypher.application.bootstrap as bootstrap
 from text2cypher.application.bootstrap import (
     _build_cypher_corrector,
     _build_few_shot_router,
     _build_question_decomposer,
+    build_pipeline,
 )
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.config import Settings
@@ -163,3 +165,44 @@ def test_bootstrap_can_disable_cypher_corrector() -> None:
 
     assert corrector is None
     assert client.prompts == []
+
+
+def test_bootstrap_passes_configured_subquery_worker_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeDriverProvider:
+        def __init__(self, settings: Settings, *, retry_policy: object) -> None:
+            del settings, retry_policy
+            self.driver = object()
+
+        def close(self) -> None:
+            pass
+
+    class FakeLLMClient:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def close(self) -> None:
+            pass
+
+    class CapturingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(bootstrap, "Neo4jDriverProvider", FakeDriverProvider)
+    monkeypatch.setattr(bootstrap, "OpenAICompatibleLLMClient", FakeLLMClient)
+    monkeypatch.setattr(bootstrap, "Text2CypherPipeline", CapturingPipeline)
+
+    pipeline = build_pipeline(
+        _settings(
+            question_decomposition_enabled=False,
+            few_shot_enabled=False,
+            cypher_correction_enabled=False,
+            subquery_max_workers=1,
+        )
+    )
+
+    assert isinstance(pipeline, CapturingPipeline)
+    assert captured["max_subquery_workers"] == 1

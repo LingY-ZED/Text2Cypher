@@ -19,6 +19,9 @@ class JsonLogFormatter(logging.Formatter):
         recovery_event = getattr(record, "recovery_event", None)
         if isinstance(recovery_event, dict):
             payload.update(recovery_event)
+        subquery_event = getattr(record, "subquery_event", None)
+        if isinstance(subquery_event, dict):
+            payload.update(subquery_event)
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
