@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -23,6 +24,7 @@ class CypherFailureKind(StrEnum):
     VALIDATION = "validation"
     EXECUTION = "execution"
     EMPTY_RESULT = "empty_result"
+    OUTPUT_CONTRACT = "output_contract"
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +277,31 @@ class DependencyInput:
             raise ValueError("依赖结果列不能为空")
         if len(set(columns)) != len(columns):
             raise ValueError("依赖结果列不能重复")
+        object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "columns", columns)
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyParameter:
+    """向依赖子问题公开、但不包含实际值的 Neo4j 参数规格。"""
+
+    name: str
+    source_id: str
+    columns: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        name = _require_text(self.name, "依赖参数名")
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is None:
+            raise ValueError("依赖参数名必须是 ASCII 标识符")
+        source_id = _require_text(self.source_id, "依赖来源 ID")
+        columns = tuple(
+            _require_text(column, "依赖参数列") for column in self.columns
+        )
+        if not columns:
+            raise ValueError("依赖参数列不能为空")
+        if len(set(columns)) != len(columns):
+            raise ValueError("依赖参数列不能重复")
+        object.__setattr__(self, "name", name)
         object.__setattr__(self, "source_id", source_id)
         object.__setattr__(self, "columns", columns)
 

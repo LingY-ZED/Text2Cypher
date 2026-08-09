@@ -42,6 +42,17 @@ def test_correction_prompt_rejects_blank_candidate() -> None:
         )
 
 
+def test_correction_prompt_describes_output_contract_failure() -> None:
+    prompt = CypherCorrectionPromptBuilder().build(
+        ChatPrompt(system="system", user="required outputs: identifier"),
+        "RETURN entity",
+        CypherFailureKind.OUTPUT_CONTRACT,
+    )
+
+    assert "失败类型：output_contract" in prompt.user
+    assert "使用指定的 AS 别名" in prompt.user
+
+
 def test_correction_prompt_has_no_current_database_identifiers() -> None:
     source = inspect.getsource(CypherCorrectionPromptBuilder)
 

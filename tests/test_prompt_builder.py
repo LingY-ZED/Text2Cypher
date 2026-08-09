@@ -5,6 +5,7 @@ import pytest
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.errors import PromptBuildError
 from text2cypher.domain.models import (
+    DependencyParameter,
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
@@ -294,3 +295,35 @@ def test_explicit_empty_examples_preserve_exact_zero_shot_prompt() -> None:
     assert fallback == zero_shot
     assert "参考示例" not in fallback.user
     assert "参考示例" not in fallback.system
+
+
+def test_prompt_renders_dependency_contract_without_parameter_values() -> None:
+    prompt = DefaultPromptBuilder().build(
+        GraphSchema(nodes=(NodeSchema("Entity"),)),
+        "使用上游实体查询归属",
+        dependency_parameters=(
+            DependencyParameter(
+                "dep_q1_rows",
+                "q1",
+                ("实体标识", "实体类型"),
+            ),
+        ),
+        required_output_columns=("下游实体标识",),
+    )
+
+    assert "可用依赖参数：" in prompt.user
+    assert "$dep_q1_rows: LIST<MAP>，来自 q1" in prompt.user
+    assert "`实体标识`、`实体类型`" in prompt.user
+    assert "父结果输出契约：" in prompt.user
+    assert "`下游实体标识`" in prompt.user
+    assert prompt.user.index("可用依赖参数：") < prompt.user.index("用户问题：")
+    assert "不得猜测、拼接或硬编码参数实际值" in prompt.system
+
+
+def test_prompt_rejects_invalid_required_output_columns() -> None:
+    with pytest.raises(PromptBuildError, match="不能重复"):
+        DefaultPromptBuilder().build(
+            GraphSchema(),
+            "问题",
+            required_output_columns=("标识", "标识"),
+        )

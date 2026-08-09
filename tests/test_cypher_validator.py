@@ -100,6 +100,19 @@ def test_validator_allows_call_as_relationship_variable() -> None:
     assert len(driver.calls) == 1
 
 
+def test_validator_passes_parameters_to_explain() -> None:
+    driver = FakeValidatorDriver()
+
+    Neo4jCypherValidator(driver, "neo4j", 5).validate(
+        "UNWIND $dep_q1_rows AS input RETURN input",
+        {"dep_q1_rows": [{"id": "safe-value"}]},
+    )
+
+    assert driver.calls[0][1]["parameters_"] == {
+        "dep_q1_rows": [{"id": "safe-value"}]
+    }
+
+
 def test_validator_rejects_non_read_query_type_after_explain() -> None:
     driver = FakeValidatorDriver(query_type="w")
 

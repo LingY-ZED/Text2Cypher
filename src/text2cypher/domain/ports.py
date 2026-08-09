@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 from text2cypher.domain.models import (
     ChatPrompt,
     CypherFailureKind,
+    DependencyParameter,
     FewShotExample,
     GraphSchema,
     LLMResponse,
@@ -34,6 +35,9 @@ class PromptBuilder(Protocol):
         schema: GraphSchema,
         question: str,
         examples: tuple[FewShotExample, ...] = (),
+        *,
+        dependency_parameters: tuple[DependencyParameter, ...] = (),
+        required_output_columns: tuple[str, ...] = (),
     ) -> ChatPrompt: ...
 
 
@@ -89,7 +93,11 @@ class CypherParser(Protocol):
 class CypherValidator(Protocol):
     """在执行前校验 Cypher 是否安全且只读。"""
 
-    def validate(self, cypher: str) -> ValidationReport: ...
+    def validate(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ValidationReport: ...
 
 
 @runtime_checkable

@@ -4,14 +4,15 @@ from .errors import Text2CypherError
 from .models import (
     CypherFailureKind,
     DependencyInput,
+    DependencyParameter,
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
     QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
-    SubQuestionPlan,
     SubQueryResponse,
+    SubQuestionPlan,
     Text2CypherResponse,
 )
 
@@ -21,6 +22,7 @@ __all__ = [
     "GraphSchema",
     "CypherFailureKind",
     "DependencyInput",
+    "DependencyParameter",
     "QuestionDecomposition",
     "SchemaGraph",
     "SchemaGraphEdge",

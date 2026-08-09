@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from time import sleep
 from typing import Any
 
@@ -76,7 +76,11 @@ class Neo4jCypherValidator:
             ),
         )
 
-    def validate(self, cypher: str) -> ValidationReport:
+    def validate(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ValidationReport:
         """拒绝危险查询，并通过 EXPLAIN 确认服务端只读类型。"""
 
         sanitized = self._sanitize(cypher)
@@ -95,6 +99,7 @@ class Neo4jCypherValidator:
                     Query(f"EXPLAIN {cypher}", timeout=self._timeout_seconds),
                     routing_=RoutingControl.READ,
                     database_=self._database,
+                    parameters_=dict(parameters or {}),
                 ),
             )
         except (DriverError, Neo4jError) as error:

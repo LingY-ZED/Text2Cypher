@@ -28,6 +28,10 @@ class CypherCorrectionPromptBuilder:
             "上一轮候选安全执行但返回零行；不得擅自删除或模糊化"
             "实体值、过滤条件或业务条件。"
         ),
+        CypherFailureKind.OUTPUT_CONTRACT: (
+            "上一轮候选未返回后续依赖所需的列名；必须保留原有返回语义，"
+            "并在 RETURN 中使用指定的 AS 别名。"
+        ),
     }
 
     def build(
