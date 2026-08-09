@@ -41,18 +41,20 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
         3,
     )
 
-    assert "节点属性：" in prompt.user
-    assert "- (:Person) {name: STRING}" in prompt.user
-    assert "- [:`WORKS-AT`] {since: INTEGER}" in prompt.user
-    assert "- (:Person)-[:`WORKS-AT`]->(:Company)" in prompt.user
+    assert "节点标签与属性：" in prompt.user
+    assert "- (:Person) {属性：name}" in prompt.user
+    assert "- [:`WORKS-AT`] {属性：since}" in prompt.user
+    assert "关系模式" not in prompt.user
+    assert "STRING" not in prompt.user
     assert "查询 Alice 的任职公司和同事" in prompt.user
     assert "最多拆成 3 个子问题" in prompt.user
     assert '"source_id":"q1"' in prompt.system
     assert '"columns":["实体名称"]' in prompt.user
-    assert "不得把图遍历的中间步骤拆成子问题" in prompt.system
-    assert "不得把多个独立意图合并为一个父节点" in prompt.system
+    assert "优先返回原始问题作为唯一 q1" in prompt.system
+    assert "多跳仍为单查询" in prompt.system
+    assert "双父汇合" in prompt.system
     assert "不得单独查询 nodeId、内部 ID" in prompt.system
-    assert "技术标识只能作为补充" in prompt.system
+    assert "不得为了传递原问题已提供的实体值或技术标识" in prompt.system
 
 
 def test_decomposition_implementation_has_no_current_schema_names() -> None:
