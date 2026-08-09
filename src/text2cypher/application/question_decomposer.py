@@ -24,6 +24,13 @@ _NONSCALAR_SIGNAL = re.compile(
     r"列表|集合|数组|Map|map|collect|list<",
     re.IGNORECASE,
 )
+_PARALLEL_ROOT_SIGNAL = re.compile(r"分别|各自|respectively|each", re.IGNORECASE)
+_PRESERVE_DATA_FLOW_REASONS = frozenset(
+    {
+        "dependency_signal_without_plan",
+        "parallel_roots_with_dependency",
+    }
+)
 
 
 class LLMQuestionDecomposer:
@@ -102,6 +109,7 @@ class LLMQuestionDecomposer:
             response.content,
             review_reason,
             fallback,
+            candidate_decomposition=decomposition,
         )
 
     def _review_or_fallback(
@@ -111,9 +119,11 @@ class LLMQuestionDecomposer:
         candidate_plan: str,
         reason: str,
         fallback: QuestionDecomposition,
+        *,
+        candidate_decomposition: QuestionDecomposition | None = None,
     ) -> QuestionDecomposition:
         try:
-            return self._reviewer.review(
+            reviewed = self._reviewer.review(
                 question,
                 schema,
                 candidate_plan,
@@ -125,6 +135,17 @@ class LLMQuestionDecomposer:
                 type(error).__name__,
             )
             return fallback
+        if (
+            reason in _PRESERVE_DATA_FLOW_REASONS
+            and not reviewed.decomposed
+            and candidate_decomposition is not None
+            and candidate_decomposition.decomposed
+        ):
+            _LOGGER.warning(
+                "QuestionDecomposer 审查移除了明确结果数据流，保留候选计划"
+            )
+            return candidate_decomposition
+        return reviewed
 
     @staticmethod
     def _review_reason(
@@ -132,6 +153,11 @@ class LLMQuestionDecomposer:
         decomposition: QuestionDecomposition,
     ) -> str | None:
         if decomposition.decomposed:
+            if (
+                _DEPENDENCY_SIGNAL.search(question)
+                and _PARALLEL_ROOT_SIGNAL.search(question)
+            ):
+                return "parallel_roots_with_dependency"
             return "multi_node_plan"
         if _DEPENDENCY_SIGNAL.search(question):
             return "dependency_signal_without_plan"

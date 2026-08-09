@@ -328,6 +328,24 @@ def test_prompt_renders_dependency_contract_without_parameter_values() -> None:
     assert "不得使用 collect()、列表推导、Map、节点或关系" in prompt.system
 
 
+def test_prompt_renders_multi_parent_parameter_constraints() -> None:
+    prompt = DefaultPromptBuilder().build(
+        GraphSchema(nodes=(NodeSchema("Entity"),)),
+        "查询两个父结果的关联",
+        dependency_parameters=(
+            DependencyParameter("dep_q1_rows", "q1", ("first_id",)),
+            DependencyParameter("dep_q2_rows", "q2", ("second_id",)),
+        ),
+    )
+
+    assert "多父参数约束" in prompt.user
+    assert "APOC、collect()、参数列表推导" in prompt.user
+    assert "APOC、collect()、参数列表推导" in prompt.system
+    assert "必须以 OR 保留任一来源匹配的结果" in prompt.system
+    assert "UNWIND $dep_q1_rows AS row_q1" in prompt.user
+    assert "UNWIND $dep_q2_rows AS row_q2" in prompt.user
+
+
 def test_prompt_keeps_original_question_as_semantic_context_for_subtask() -> None:
     prompt = DefaultPromptBuilder().build(
         GraphSchema(nodes=(NodeSchema("Entity"),)),

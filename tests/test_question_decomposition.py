@@ -52,6 +52,11 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert '"source_id":"q1"' in prompt.system
     assert '"columns":["实体名称"]' in prompt.user
     assert "优先返回原始问题作为唯一 q1" in prompt.system
+    assert "这是必须保留的真实数据流" in prompt.system
+    assert "必须建立依赖 DAG" in prompt.system
+    assert "每个前置结果必须是独立根节点" in prompt.system
+    assert "不得把多个前置结果合并进同一子问题" in prompt.system
+    assert "独立根节点后再依赖" in prompt.system
     assert "多跳仍为单查询" in prompt.system
     assert "双父汇合" in prompt.system
     assert "不得单独查询 nodeId、内部 ID" in prompt.system
@@ -80,6 +85,34 @@ def test_plan_review_prompt_uses_summary_and_candidate_without_patterns() -> Non
     assert "multi_node_plan" in prompt.user
     assert "候选计划" in prompt.user
     assert "只返回修正后的执行计划 JSON" in prompt.system
+
+
+def test_plan_review_prompt_requires_explicit_result_dependency_to_remain_a_dag(
+) -> None:
+    prompt = QuestionPlanReviewPromptBuilder().build(
+        _external_schema(),
+        "先查询实体名称，再查询这些实体所属组织",
+        '{"sub_questions":[{"id":"q1","question":"原始问题","inputs":[]}]}',
+        "dependency_signal_without_plan",
+        3,
+    )
+
+    assert "必须建立带标量 inputs 的依赖边" in prompt.user
+    assert "规则优先于单查询优先" in prompt.system
+    assert "不得把该场景收缩为单个 q1" in prompt.system
+
+
+def test_plan_review_prompt_preserves_explicit_parallel_roots() -> None:
+    prompt = QuestionPlanReviewPromptBuilder().build(
+        _external_schema(),
+        "分别查询两个结果，再查询这些结果的属性",
+        '{"sub_questions":[{"id":"q1","question":"原始问题","inputs":[]}]}',
+        "parallel_roots_with_dependency",
+        3,
+    )
+
+    assert "必须保留独立根节点和依赖边" in prompt.user
+    assert "独立根节点示例" in prompt.system
 
 
 @pytest.mark.parametrize(

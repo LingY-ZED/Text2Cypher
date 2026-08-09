@@ -173,7 +173,10 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows(
             SubQuestionPlan(
                 "q3",
                 "dependent",
-                (DependencyInput("q1", ("entity_id",)),),
+                (
+                    DependencyInput("q1", ("entity_id",)),
+                    DependencyInput("q2", ("other_id",)),
+                ),
             ),
         ),
     )
@@ -192,14 +195,18 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows(
                 root_finished += 1
             if cypher == "source-cypher":
                 return QueryResult(("entity_id",), ({"entity_id": "id-1"},))
-            return QueryResult(("value",), ({"value": 1},))
+            return QueryResult(("other_id",), ({"other_id": "id-2"},))
         assert (
             cypher
             == "UNWIND $dep_q1_rows AS dep_q1 "
-            "RETURN dep_q1.entity_id AS result"
+            "UNWIND $dep_q2_rows AS dep_q2 "
+            "RETURN dep_q1.entity_id + dep_q2.other_id AS result"
         )
         assert root_finished == 2
-        assert parameters == {"dep_q1_rows": [{"entity_id": "id-1"}]}
+        assert parameters == {
+            "dep_q1_rows": [{"entity_id": "id-1"}],
+            "dep_q2_rows": [{"other_id": "id-2"}],
+        }
         return QueryResult(("result",), ({"result": "done"},))
 
     prompt_builder = RecordingPromptBuilder()
@@ -212,7 +219,8 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows(
                 "independent": "independent-cypher",
                 "dependent": (
                     "UNWIND $dep_q1_rows AS dep_q1 "
-                    "RETURN dep_q1.entity_id AS result"
+                    "UNWIND $dep_q2_rows AS dep_q2 "
+                    "RETURN dep_q1.entity_id + dep_q2.other_id AS result"
                 ),
             }
         ),
@@ -223,21 +231,28 @@ def test_pipeline_runs_roots_in_parallel_then_binds_dependency_rows(
 
     assert len(root_threads) == 2
     assert [item.id for item in response.sub_queries] == ["q1", "q2", "q3"]
-    assert response.sub_queries[2].depends_on == ("q1",)
+    assert response.sub_queries[2].depends_on == ("q1", "q2")
     assert response.sub_queries[2].parameter_sources == {
         "dep_q1_rows": DependencyParameter(
             "dep_q1_rows",
             "q1",
             ("entity_id",),
-        )
+        ),
+        "dep_q2_rows": DependencyParameter(
+            "dep_q2_rows",
+            "q2",
+            ("other_id",),
+        ),
     }
     prompt_calls = {
         question: (parameters, outputs)
         for question, parameters, outputs in prompt_builder.calls
     }
     assert prompt_calls["source"][1] == ("entity_id",)
+    assert prompt_calls["independent"][1] == ("other_id",)
     assert prompt_calls["dependent"][0] == (
         DependencyParameter("dep_q1_rows", "q1", ("entity_id",)),
+        DependencyParameter("dep_q2_rows", "q2", ("other_id",)),
     )
     events = [
         record.subquery_event

@@ -49,6 +49,13 @@ class DefaultPromptBuilder:
         "再通过 `row.键名` 读取允许的键；不得使用 `$参数名[].键名` 语法。\n"
         "依赖参数与当前图谱 Schema 一样优先于参考示例。"
     )
+    multi_dependency_system_instruction = (
+        "当存在多个依赖参数时，必须分别使用 `UNWIND $参数名 AS row_来源` 展开每个"
+        "参数，并在同一只读查询的布尔条件中使用各 `row_来源.键名`。不得通过 "
+        "APOC、collect()、参数列表推导或 `$参数名[].键名` 合并、读取或转换参数。"
+        " 若多个父参数是同一查询范围的独立来源，且原始问题未明确要求交集，必须以 "
+        "OR 保留任一来源匹配的结果，不得要求不同父参数的值彼此相等。"
+    )
     original_question_system_instruction = (
         "原始用户问题决定实体、限定条件、返回语义和业务含义；当前子任务只限定"
         "本次应返回的结果。当前子任务中的新增解释不得覆盖原始问题或图谱 Schema。"
@@ -213,6 +220,8 @@ class DefaultPromptBuilder:
             instructions.append(cls.few_shot_system_instruction)
         if dependency_parameters:
             instructions.append(cls.dependency_system_instruction)
+        if len(dependency_parameters) > 1:
+            instructions.append(cls.multi_dependency_system_instruction)
         if has_original_context:
             instructions.append(cls.original_question_system_instruction)
         if requires_scalar_output:
@@ -261,6 +270,16 @@ class DefaultPromptBuilder:
             )
             for parameter in dependency_parameters
         )
+        if len(dependency_parameters) > 1:
+            blocks.extend(
+                (
+                    "多父参数约束：",
+                    "必须分别 UNWIND 每个参数，并在同一查询的布尔条件中直接使用各"
+                    " `row_来源.键名`。禁止使用 APOC、collect()、参数列表推导或"
+                    " `$参数名[].键名` 合并或读取参数。若原始问题未明确要求交集，"
+                    "独立父范围必须以 OR 保留任一来源的匹配结果。",
+                )
+            )
         return "\n".join(blocks)
 
     @staticmethod

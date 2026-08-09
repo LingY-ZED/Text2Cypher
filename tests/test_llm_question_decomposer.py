@@ -119,6 +119,35 @@ def test_llm_decomposer_reviews_dependency_signal_in_single_plan() -> None:
     assert "dependency_signal_without_plan" in client.prompts[1].user
 
 
+def test_llm_decomposer_preserves_candidate_for_explicit_parallel_data_flow() -> None:
+    client = StubLLMClient(
+        [
+            LLMResponse(
+                content=(
+                    '{"sub_questions":['
+                    '{"id":"q1","question":"查询第一个结果","inputs":[]},'
+                    '{"id":"q2","question":"查询第二个结果","inputs":[]},'
+                    '{"id":"q3","question":"查询这些第二个结果的属性","inputs":['
+                    '{"source_id":"q2","columns":["实体名称"]}]}]}'
+                )
+            ),
+            LLMResponse(
+                content='{"sub_questions":[{"id":"q1","question":"收缩","inputs":[]}]}'
+            ),
+        ]
+    )
+    decomposer = LLMQuestionDecomposer(client)
+
+    decomposition = decomposer.decompose(
+        "分别查询第一个结果和第二个结果，再查询这些第二个结果的属性",
+        GraphSchema(nodes=(NodeSchema("Person"),)),
+    )
+
+    assert len(decomposition.sub_questions) == 3
+    assert decomposition.sub_questions[2].depends_on == ("q2",)
+    assert "parallel_roots_with_dependency" in client.prompts[1].user
+
+
 def test_llm_decomposer_falls_back_when_review_fails() -> None:
     client = StubLLMClient(
         [
