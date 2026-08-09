@@ -49,6 +49,7 @@ class CypherParameterGuard:
                 "Cypher 未使用 UNWIND 展开全部依赖参数"
             )
         self._validate_column_reads(specifications, unwound_aliases, cypher)
+        self._validate_alias_order(specifications, cypher)
 
     @staticmethod
     def _unwound_aliases(cypher: str) -> dict[str, tuple[str, ...]]:
@@ -93,6 +94,28 @@ class CypherParameterGuard:
             rf"\b{escaped_alias}\.(?:`{escaped_column}`|{escaped_column})(?!\w)"
         )
         return pattern.search(cypher) is not None
+
+    @staticmethod
+    def _validate_alias_order(
+        specifications: tuple[DependencyParameter, ...],
+        cypher: str,
+    ) -> None:
+        searchable_cypher = CypherParameterGuard._without_string_literals(cypher)
+        for specification in specifications:
+            unwind_match = re.search(
+                rf"\bUNWIND\s+\${re.escape(specification.name)}\s+AS\s+"
+                rf"([A-Za-z_]\w*)",
+                searchable_cypher,
+                re.IGNORECASE,
+            )
+            if unwind_match is None:
+                continue
+            alias = unwind_match.group(1)
+            first_read = re.search(rf"\b{re.escape(alias)}\.", searchable_cypher)
+            if first_read is not None and first_read.start() < unwind_match.end():
+                raise DependencyParameterValidationError(
+                    "Cypher 在 UNWIND 前读取依赖参数别名"
+                )
 
     @staticmethod
     def _without_literals(cypher: str) -> str:

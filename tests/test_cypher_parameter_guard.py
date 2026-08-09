@@ -83,6 +83,17 @@ def test_parameter_guard_accepts_backtick_escaped_declared_columns() -> None:
     )
 
 
+def test_parameter_guard_rejects_reading_an_alias_before_its_unwind() -> None:
+    with pytest.raises(DependencyParameterValidationError, match="UNWIND 前"):
+        CypherParameterGuard().validate(
+            "WITH input.entity_id AS entity_id "
+            "UNWIND $dep_q1_rows AS input "
+            "RETURN input.entity_id, input.entity_type",
+            {"dep_q1_rows": [{"entity_id": "a", "entity_type": "method"}]},
+            (_specification(),),
+        )
+
+
 def test_parameter_guard_rejects_mismatched_parameter_values() -> None:
     with pytest.raises(ValueError, match="不一致"):
         CypherParameterGuard().validate(
