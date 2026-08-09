@@ -196,6 +196,7 @@ class Text2CypherPipeline:
                     future = executor.submit(
                         self._run_sub_query,
                         schema,
+                        decomposition.original_question,
                         plan,
                         specifications,
                         parameters,
@@ -328,6 +329,7 @@ class Text2CypherPipeline:
     def _run_sub_query(
         self,
         schema: GraphSchema,
+        original_question: str,
         plan: SubQuestionPlan,
         specifications: tuple[DependencyParameter, ...],
         parameters: Mapping[str, Any],
@@ -349,6 +351,7 @@ class Text2CypherPipeline:
         )
         prompt = self._build_prompt(
             schema,
+            original_question,
             plan.question,
             examples,
             specifications,
@@ -471,13 +474,31 @@ class Text2CypherPipeline:
     def _build_prompt(
         self,
         schema: GraphSchema,
+        original_question: str,
         question: str,
         examples: tuple[Any, ...],
         specifications: tuple[DependencyParameter, ...],
         required_output_columns: tuple[str, ...],
     ) -> ChatPrompt:
+        has_original_context = original_question != question
         if not specifications and not required_output_columns:
+            if has_original_context:
+                return self._prompt_builder.build(
+                    schema,
+                    question,
+                    examples,
+                    original_question=original_question,
+                )
             return self._prompt_builder.build(schema, question, examples)
+        if has_original_context:
+            return self._prompt_builder.build(
+                schema,
+                question,
+                examples,
+                dependency_parameters=specifications,
+                required_output_columns=required_output_columns,
+                original_question=original_question,
+            )
         return self._prompt_builder.build(
             schema,
             question,

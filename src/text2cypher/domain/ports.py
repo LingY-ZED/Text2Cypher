@@ -38,6 +38,7 @@ class PromptBuilder(Protocol):
         *,
         dependency_parameters: tuple[DependencyParameter, ...] = (),
         required_output_columns: tuple[str, ...] = (),
+        original_question: str | None = None,
     ) -> ChatPrompt: ...
 
 

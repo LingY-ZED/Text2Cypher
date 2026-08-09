@@ -324,9 +324,12 @@ def test_pipeline_stops_later_sub_queries_after_correction_is_exhausted() -> Non
             schema: GraphSchema,
             question: str,
             examples: tuple[object, ...] = (),
+            *,
+            original_question: str | None = None,
         ) -> ChatPrompt:
             assert schema == GraphSchema()
             assert examples == ()
+            assert original_question == "复杂查询"
             calls.append(f"prompt:{question}")
             return ChatPrompt(system="system", user=question)
 

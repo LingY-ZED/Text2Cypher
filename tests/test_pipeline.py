@@ -368,9 +368,12 @@ def test_pipeline_executes_independent_sub_questions_with_one_schema() -> None:
             schema: GraphSchema,
             question: str,
             examples: tuple[FewShotExample, ...] = (),
+            *,
+            original_question: str | None = None,
         ) -> ChatPrompt:
             assert schema == GraphSchema()
             assert examples == ()
+            assert original_question == "综合分析"
             calls.append(f"prompt:{question}")
             return ChatPrompt(system="system", user=question)
 
@@ -453,7 +456,10 @@ def test_pipeline_returns_partial_when_an_independent_sub_query_fails() -> None:
             schema: GraphSchema,
             question: str,
             examples: tuple[FewShotExample, ...] = (),
+            *,
+            original_question: str | None = None,
         ) -> ChatPrompt:
+            assert original_question == "复杂问题"
             calls.append(f"prompt:{question}")
             return ChatPrompt(system="system", user=question)
 

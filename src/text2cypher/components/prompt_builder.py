@@ -49,6 +49,14 @@ class DefaultPromptBuilder:
         "再通过 `row.键名` 读取允许的键；不得使用 `$参数名[].键名` 语法。\n"
         "依赖参数与当前图谱 Schema 一样优先于参考示例。"
     )
+    original_question_system_instruction = (
+        "原始用户问题决定实体、限定条件、返回语义和业务含义；当前子任务只限定"
+        "本次应返回的结果。当前子任务中的新增解释不得覆盖原始问题或图谱 Schema。"
+    )
+    output_contract_system_instruction = (
+        "被后继子问题引用的父结果列必须逐行返回 JSON 标量；不得使用 collect()、"
+        "列表推导、Map、节点或关系作为这些列的值。"
+    )
     modeling_constraints = (
         _ModelingConstraint(
             text=(
@@ -132,10 +140,17 @@ class DefaultPromptBuilder:
         *,
         dependency_parameters: tuple[DependencyParameter, ...] = (),
         required_output_columns: tuple[str, ...] = (),
+        original_question: str | None = None,
     ) -> ChatPrompt:
         normalized_question = question.strip()
         if not normalized_question:
             raise PromptBuildError("问题不能为空")
+        normalized_original = (
+            original_question.strip() if original_question is not None else None
+        )
+        if original_question is not None and not normalized_original:
+            raise PromptBuildError("原始问题不能为空")
+        has_original_context = normalized_original not in {None, normalized_question}
 
         schema_graph = self._schema_graph_builder.build(schema)
         serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
@@ -161,16 +176,27 @@ class DefaultPromptBuilder:
             user_sections.append(
                 self._render_required_output_columns(required_output_columns)
             )
-        user_sections.extend(
-            [
-                "用户问题：",
-                normalized_question,
-                "只输出 Cypher：",
-            ]
-        )
+        if has_original_context:
+            assert normalized_original is not None
+            user_sections.extend(
+                [
+                    "原始用户问题：",
+                    normalized_original,
+                    "当前子任务：",
+                    normalized_question,
+                ]
+            )
+        else:
+            user_sections.extend(["用户问题：", normalized_question])
+        user_sections.append("只输出 Cypher：")
 
         return ChatPrompt(
-            system=self._system_instruction(examples, dependency_parameters),
+            system=self._system_instruction(
+                examples,
+                dependency_parameters,
+                has_original_context,
+                bool(required_output_columns),
+            ),
             user="\n\n".join(user_sections),
         )
 
@@ -179,12 +205,18 @@ class DefaultPromptBuilder:
         cls,
         examples: tuple[FewShotExample, ...],
         dependency_parameters: tuple[DependencyParameter, ...],
+        has_original_context: bool,
+        requires_scalar_output: bool,
     ) -> str:
         instructions = [cls.system_instruction]
         if examples:
             instructions.append(cls.few_shot_system_instruction)
         if dependency_parameters:
             instructions.append(cls.dependency_system_instruction)
+        if has_original_context:
+            instructions.append(cls.original_question_system_instruction)
+        if requires_scalar_output:
+            instructions.append(cls.output_contract_system_instruction)
         return "\n".join(instructions)
 
     @staticmethod
@@ -242,7 +274,9 @@ class DefaultPromptBuilder:
             raise PromptBuildError("必需输出列不能重复")
         return (
             "父结果输出契约：\n"
-            "必须在 RETURN 中使用 AS 返回以下列名，以供后续子问题参数化使用：\n- "
+            "必须在 RETURN 中使用 AS 返回以下列名，以供后续子问题参数化使用。"
+            "每个列必须逐行返回 JSON 标量；禁止使用 collect()、列表推导、Map、"
+            "节点或关系作为这些列的值：\n- "
             + "\n- ".join(f"`{column}`" for column in normalized)
         )
 

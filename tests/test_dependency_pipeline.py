@@ -56,10 +56,13 @@ class RecordingPromptBuilder:
         *,
         dependency_parameters: tuple[DependencyParameter, ...] = (),
         required_output_columns: tuple[str, ...] = (),
+        original_question: str | None = None,
     ) -> ChatPrompt:
         assert schema == GraphSchema()
         assert examples == ()
         self.calls.append((question, dependency_parameters, required_output_columns))
+        if original_question is not None:
+            assert original_question
         return ChatPrompt(system="system", user=question)
 
 

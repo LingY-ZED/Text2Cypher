@@ -323,6 +323,32 @@ def test_prompt_renders_dependency_contract_without_parameter_values() -> None:
     assert "UNWIND $参数名 AS row" in prompt.user
     assert "UNWIND $dep_q1_rows AS row_q1" in prompt.user
     assert "row_q1.`实体标识`" in prompt.user
+    assert "每个列必须逐行返回 JSON 标量" in prompt.user
+    assert "禁止使用 collect()、列表推导、Map、节点或关系" in prompt.user
+    assert "不得使用 collect()、列表推导、Map、节点或关系" in prompt.system
+
+
+def test_prompt_keeps_original_question_as_semantic_context_for_subtask() -> None:
+    prompt = DefaultPromptBuilder().build(
+        GraphSchema(nodes=(NodeSchema("Entity"),)),
+        "统计这些实体的属性",
+        original_question="先找出符合条件的实体，再统计这些实体的属性",
+    )
+
+    assert prompt.user.index("原始用户问题：") < prompt.user.index("当前子任务：")
+    assert prompt.user.index("当前子任务：") < prompt.user.index("只输出 Cypher：")
+    assert "先找出符合条件的实体，再统计这些实体的属性" in prompt.user
+    assert "统计这些实体的属性" in prompt.user
+    assert "原始用户问题决定实体、限定条件、返回语义和业务含义" in prompt.system
+
+
+def test_prompt_rejects_blank_explicit_original_question() -> None:
+    with pytest.raises(PromptBuildError, match="原始问题不能为空"):
+        DefaultPromptBuilder().build(
+            GraphSchema(),
+            "当前子任务",
+            original_question="   ",
+        )
 
 
 def test_prompt_rejects_invalid_required_output_columns() -> None:
