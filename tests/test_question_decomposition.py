@@ -7,6 +7,7 @@ import pytest
 from text2cypher.components.question_decomposition import (
     QuestionDecompositionPromptBuilder,
     QuestionDecompositionResponseParser,
+    QuestionPlanReviewPromptBuilder,
 )
 from text2cypher.domain.models import (
     DependencyInput,
@@ -62,6 +63,23 @@ def test_decomposition_implementation_has_no_current_schema_names() -> None:
 
     for database_name in ("方法", "类", "微服务", "API端点", "归属于", "调用"):
         assert database_name not in source
+
+
+def test_plan_review_prompt_uses_summary_and_candidate_without_patterns() -> None:
+    prompt = QuestionPlanReviewPromptBuilder().build(
+        _external_schema(),
+        "查询 Alice 的任职公司",
+        '{"sub_questions":[{"id":"q1","question":"改写","inputs":[]}]}',
+        "multi_node_plan",
+        3,
+    )
+
+    assert "节点标签与属性：" in prompt.user
+    assert "关系模式" not in prompt.user
+    assert "WORKS-AT" in prompt.user
+    assert "multi_node_plan" in prompt.user
+    assert "候选计划" in prompt.user
+    assert "只返回修正后的执行计划 JSON" in prompt.system
 
 
 @pytest.mark.parametrize(

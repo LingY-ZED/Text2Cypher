@@ -2,5 +2,10 @@
 
 from .pipeline import Text2CypherPipeline
 from .question_decomposer import LLMQuestionDecomposer
+from .question_plan_reviewer import LLMQuestionPlanReviewer
 
-__all__ = ["LLMQuestionDecomposer", "Text2CypherPipeline"]
+__all__ = [
+    "LLMQuestionDecomposer",
+    "LLMQuestionPlanReviewer",
+    "Text2CypherPipeline",
+]
