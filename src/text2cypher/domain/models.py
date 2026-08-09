@@ -25,6 +25,7 @@ class CypherFailureKind(StrEnum):
     EXECUTION = "execution"
     EMPTY_RESULT = "empty_result"
     OUTPUT_CONTRACT = "output_contract"
+    DEPENDENCY_PARAMETER = "dependency_parameter"
 
 
 class SubQueryStatus(StrEnum):

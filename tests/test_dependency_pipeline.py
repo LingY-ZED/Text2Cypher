@@ -296,6 +296,53 @@ def test_output_contract_is_corrected_once_before_dependency_binding() -> None:
     assert response.sub_queries[2 - 1].status.value == "success"
 
 
+def test_dependency_parameter_contract_uses_specialized_single_correction() -> None:
+    decomposition = QuestionDecomposition(
+        "参数纠错",
+        (
+            SubQuestionPlan("q1", "source"),
+            SubQuestionPlan(
+                "q2",
+                "dependent",
+                (DependencyInput("q1", ("entity_id",)),),
+            ),
+        ),
+    )
+    corrector = RecordingCorrector("corrected-dependent")
+
+    def execute(cypher: str, parameters: Mapping[str, Any] | None) -> QueryResult:
+        if cypher == "source-cypher":
+            return QueryResult(("entity_id",), ({"entity_id": "id-1"},))
+        assert cypher == (
+            "UNWIND $dep_q1_rows AS row_q1 "
+            "RETURN row_q1.entity_id AS result"
+        )
+        assert parameters == {"dep_q1_rows": [{"entity_id": "id-1"}]}
+        return QueryResult(("result",), ({"result": "done"},))
+
+    response = _pipeline(
+        decomposition,
+        MappingParser(
+            {
+                "source": "source-cypher",
+                "dependent": (
+                    "RETURN [row IN $dep_q1_rows | row.entity_id] AS result"
+                ),
+                "corrected-dependent": (
+                    "UNWIND $dep_q1_rows AS row_q1 "
+                    "RETURN row_q1.entity_id AS result"
+                ),
+            }
+        ),
+        RecordingValidator(),
+        CallbackExecutor(execute),
+        corrector=corrector,
+    ).run("参数纠错")
+
+    assert corrector.kinds == ["dependency_parameter"]
+    assert response.sub_queries[1].status.value == "success"
+
+
 def test_pipeline_returns_partial_and_blocks_only_the_failed_dependency_chain(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

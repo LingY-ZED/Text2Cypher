@@ -45,6 +45,10 @@ class CypherValidationError(Text2CypherError):
     """Cypher 不安全或不是只读查询时抛出。"""
 
 
+class DependencyParameterValidationError(CypherValidationError):
+    """Cypher 未按受控依赖参数契约使用输入时抛出。"""
+
+
 class CypherOutputContractError(CypherValidationError):
     """Cypher 未返回依赖后继明确要求的列时抛出。"""
 

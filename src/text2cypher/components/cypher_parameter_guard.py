@@ -6,10 +6,14 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from text2cypher.domain.errors import CypherValidationError
+from text2cypher.domain.errors import DependencyParameterValidationError
 from text2cypher.domain.models import DependencyParameter
 
 _PARAMETER_PATTERN = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+_UNWIND_PARAMETER_PATTERN = re.compile(
+    r"\bUNWIND\s+\$([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+[A-Za-z_]\w*",
+    re.IGNORECASE,
+)
 
 
 class CypherParameterGuard:
@@ -34,9 +38,17 @@ class CypherParameterGuard:
         missing_names = set(expected_names) - actual_names
         unknown_names = actual_names - set(expected_names)
         if unknown_names:
-            raise CypherValidationError("Cypher 使用了未绑定参数")
+            raise DependencyParameterValidationError("Cypher 使用了未绑定参数")
         if missing_names:
-            raise CypherValidationError("Cypher 未使用全部依赖参数")
+            raise DependencyParameterValidationError("Cypher 未使用全部依赖参数")
+
+        unwound_names = set(_UNWIND_PARAMETER_PATTERN.findall(
+            self._without_literals(cypher)
+        ))
+        if set(expected_names) - unwound_names:
+            raise DependencyParameterValidationError(
+                "Cypher 未使用 UNWIND 展开全部依赖参数"
+            )
 
     @staticmethod
     def _without_literals(cypher: str) -> str:

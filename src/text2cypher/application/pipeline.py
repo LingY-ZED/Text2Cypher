@@ -19,6 +19,7 @@ from text2cypher.domain.errors import (
     CypherParseError,
     CypherValidationError,
     DependencyBindingError,
+    DependencyParameterValidationError,
     LLMGenerationError,
     Neo4jAccessError,
     Neo4jConnectionError,
@@ -386,6 +387,17 @@ class Text2CypherPipeline:
                     specifications,
                     required_output_columns,
                 )
+            except DependencyParameterValidationError:
+                if self._cypher_corrector is None:
+                    raise
+                cypher, result = self._correct_and_execute(
+                    prompt,
+                    cypher,
+                    CypherFailureKind.DEPENDENCY_PARAMETER,
+                    parameters,
+                    specifications,
+                    required_output_columns,
+                )
             except CypherValidationError:
                 if self._cypher_corrector is None:
                     raise
@@ -653,6 +665,8 @@ class Text2CypherPipeline:
             return "parse_failed"
         if isinstance(error, CypherOutputContractError):
             return "output_contract_failed"
+        if isinstance(error, DependencyParameterValidationError):
+            return "dependency_parameter_failed"
         if isinstance(error, CypherValidationError):
             return "validation_failed"
         if isinstance(error, CypherExecutionError):

@@ -318,6 +318,11 @@ def test_prompt_renders_dependency_contract_without_parameter_values() -> None:
     assert "`下游实体标识`" in prompt.user
     assert prompt.user.index("可用依赖参数：") < prompt.user.index("用户问题：")
     assert "不得猜测、拼接或硬编码参数实际值" in prompt.system
+    assert "UNWIND $参数名 AS row" in prompt.system
+    assert "$参数名[].键名" in prompt.system
+    assert "UNWIND $参数名 AS row" in prompt.user
+    assert "UNWIND $dep_q1_rows AS row_q1" in prompt.user
+    assert "row_q1.`实体标识`" in prompt.user
 
 
 def test_prompt_rejects_invalid_required_output_columns() -> None:

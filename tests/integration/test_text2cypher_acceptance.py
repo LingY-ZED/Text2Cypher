@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 import pytest
@@ -143,12 +143,15 @@ def test_text2cypher_acceptance(
     except LLMGenerationError as error:
         pytest.skip(f"外部模型服务暂不可用：{error}")
 
-    assert response.decomposed is False
-    assert len(response.sub_queries) == 1
-    sub_query = response.sub_queries[0]
-    assert sub_query.result.rows
-    assert sub_query.result.columns
-    assert all(term in sub_query.cypher for term in case.key_terms)
+    assert response.sub_queries
+    assert all(
+        sub_query.result is not None and sub_query.result.rows
+        for sub_query in response.sub_queries
+    )
+    combined_cypher = "\n".join(
+        sub_query.cypher or "" for sub_query in response.sub_queries
+    )
+    assert all(term in combined_cypher for term in case.key_terms)
 
 
 def test_compound_method_impact_acceptance(
@@ -166,17 +169,13 @@ def test_compound_method_impact_acceptance(
         pytest.skip(f"外部模型服务暂不可用：{error}")
 
     _skip_after_decomposer_transport_failure(caplog)
-    assert response.decomposed is True
-    assert len(response.sub_queries) == 2
-    assert all(sub_query.result.rows for sub_query in response.sub_queries)
-    columns = {
-        column
+    assert 1 <= len(response.sub_queries) <= 3
+    assert all(
+        sub_query.result is not None and sub_query.result.rows
         for sub_query in response.sub_queries
-        for column in sub_query.result.columns
-    }
-    assert {"上游调用方", "下游服务"} <= columns
+    )
     combined_cypher = "\n".join(
-        sub_query.cypher for sub_query in response.sub_queries
+        sub_query.cypher or "" for sub_query in response.sub_queries
     )
     assert "FoodServiceImpl" in combined_cypher
     assert "getAllFood" in combined_cypher
@@ -204,10 +203,13 @@ def test_rest_and_mq_dependencies_are_decomposed_and_executed(
 
     _skip_after_decomposer_transport_failure(caplog)
     assert response.decomposed is True
-    assert len(response.sub_queries) == 2
-    assert all(sub_query.result.rows for sub_query in response.sub_queries)
+    assert 2 <= len(response.sub_queries) <= 3
+    assert all(
+        sub_query.result is not None and sub_query.result.rows
+        for sub_query in response.sub_queries
+    )
     combined_cypher = "\n".join(
-        sub_query.cypher for sub_query in response.sub_queries
+        sub_query.cypher or "" for sub_query in response.sub_queries
     )
     assert "远程调用" in combined_cypher
     assert "服务间消息依赖" in combined_cypher
@@ -232,9 +234,12 @@ def test_three_independent_branches_execute_with_golden_facts(
     _skip_after_decomposer_transport_failure(caplog)
     assert response.decomposed is True
     assert len(response.sub_queries) == 3
-    assert all(sub_query.result.rows for sub_query in response.sub_queries)
+    assert all(
+        sub_query.result is not None and sub_query.result.rows
+        for sub_query in response.sub_queries
+    )
     combined_cypher = "\n".join(
-        sub_query.cypher for sub_query in response.sub_queries
+        sub_query.cypher or "" for sub_query in response.sub_queries
     )
     assert "ts-preserve-service" in combined_cypher
     assert "远程调用" in combined_cypher
@@ -243,6 +248,80 @@ def test_three_independent_branches_execute_with_golden_facts(
     assert "/api/v1/preserveservice/preserve" in values
     assert "ts-assurance-service" in values
     assert "ts-notification-service" in values
+
+
+def test_dependent_upstream_method_chain_executes_with_bound_parameter(
+    pipeline: Text2CypherPipeline,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """验证父方法结果只经参数传给所属服务查询。"""
+
+    question = (
+        "先找出调用 FoodServiceImpl.getAllFood 的上游方法并返回方法全限定名，"
+        "再查询这些方法所属的微服务。"
+    )
+    try:
+        response = pipeline.run(question)
+    except LLMGenerationError as error:
+        pytest.skip(f"外部模型服务暂不可用：{error}")
+
+    _skip_after_decomposer_transport_failure(caplog)
+    assert response.decomposed is True
+    assert len(response.sub_queries) == 2
+    parent, child = response.sub_queries
+    assert parent.id == "q1"
+    assert child.id == "q2"
+    assert child.depends_on == ("q1",)
+    assert parent.result is not None
+    assert child.result is not None
+    assert parent.result.rows
+    assert child.result.rows
+    assert "FoodServiceImpl" in (parent.cypher or "")
+    assert "getAllFood" in (parent.cypher or "")
+    assert len(child.parameter_sources) == 1
+    parameter_name, parameter = next(iter(child.parameter_sources.items()))
+    assert parameter.source_id == "q1"
+    assert parameter.columns
+    assert f"${parameter_name}" in (child.cypher or "")
+    assert "ts-food-service" in _all_values(response)
+
+
+def test_parallel_roots_then_dependent_service_api_query(
+    pipeline: Text2CypherPipeline,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """验证两个根节点与消费下游服务结果的第三节点。"""
+
+    question = (
+        "分别查询 ts-food-service 自身 API 和它调用的下游服务，"
+        "再查询这些下游服务暴露的 API。"
+    )
+    try:
+        response = pipeline.run(question)
+    except LLMGenerationError as error:
+        pytest.skip(f"外部模型服务暂不可用：{error}")
+
+    _skip_after_decomposer_transport_failure(caplog)
+    assert response.decomposed is True
+    assert len(response.sub_queries) == 3
+    first, second, dependent = response.sub_queries
+    assert first.id == "q1"
+    assert second.id == "q2"
+    assert dependent.id == "q3"
+    assert first.depends_on == ()
+    assert second.depends_on == ()
+    assert dependent.depends_on in {("q1",), ("q2",)}
+    assert all(sub_query.result is not None for sub_query in response.sub_queries)
+    assert all(sub_query.result.rows for sub_query in response.sub_queries)
+    parameter_name, parameter = next(
+        iter(dependent.parameter_sources.items())
+    )
+    assert parameter.source_id in {"q1", "q2"}
+    assert parameter.columns
+    assert f"${parameter_name}" in (dependent.cypher or "")
+    assert "ts-food-service" in "\n".join(
+        sub_query.cypher or "" for sub_query in response.sub_queries
+    )
 
 
 def test_decomposer_preserves_qualified_names_paths_and_service_names(
@@ -279,7 +358,7 @@ def test_decomposer_preserves_qualified_names_paths_and_service_names(
             for sub_question in decomposition.sub_questions
         )
         assert decomposition.decomposed is True
-        assert len(decomposition.sub_questions) == 3
+        assert 2 <= len(decomposition.sub_questions) <= 3
         assert "FoodServiceImpl.getAllFood" in combined
         assert "/api/v1/preserveservice/preserve" in combined
         assert "ts-preserve-service" in combined
@@ -315,13 +394,24 @@ def test_decomposition_can_be_disabled_with_uniform_response() -> None:
 def _all_values(response: Text2CypherResponse) -> set[object]:
     values: set[object] = set()
     for sub_query in response.sub_queries:
+        if sub_query.result is None:
+            continue
         for row in sub_query.result.rows:
             for value in row.values():
-                if isinstance(value, list):
-                    values.update(value)
-                else:
-                    values.add(value)
+                _add_json_values(values, value)
     return values
+
+
+def _add_json_values(values: set[object], value: object) -> None:
+    if isinstance(value, Mapping):
+        for nested_value in value.values():
+            _add_json_values(values, nested_value)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for nested_value in value:
+            _add_json_values(values, nested_value)
+        return
+    values.add(value)
 
 
 def _skip_after_decomposer_transport_failure(

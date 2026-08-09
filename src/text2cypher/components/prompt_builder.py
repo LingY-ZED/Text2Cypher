@@ -43,6 +43,10 @@ class DefaultPromptBuilder:
     dependency_system_instruction = (
         "依赖参数规格是受控查询输入，必须使用给出的参数名，"
         "不得猜测、拼接或硬编码参数实际值。\n"
+        "只要提供了依赖参数，候选 Cypher 就必须使用全部参数；"
+        "不使用任一参数的候选都是无效的。\n"
+        "读取 LIST<MAP> 参数时，必须使用 `UNWIND $参数名 AS row`，"
+        "再通过 `row.键名` 读取允许的键；不得使用 `$参数名[].键名` 语法。\n"
         "依赖参数与当前图谱 Schema 一样优先于参考示例。"
     )
     modeling_constraints = (
@@ -205,13 +209,24 @@ class DefaultPromptBuilder:
         blocks = [
             "可用依赖参数：",
             "每个参数都是 LIST<MAP>；只能使用列出的参数名和键，"
-            "不得在 Cypher 中写入或猜测实际参数值。",
+            "不得在 Cypher 中写入或猜测实际参数值。必须使用全部参数。读取参数时使用 "
+            "UNWIND $参数名 AS row，再读取 row.键名。",
         ]
         blocks.extend(
             "- "
             f"${parameter.name}: LIST<MAP>，来自 {parameter.source_id}，"
             "键："
             + "、".join(f"`{column}`" for column in parameter.columns)
+            for parameter in dependency_parameters
+        )
+        blocks.extend(
+            "- 必须使用："
+            f"UNWIND ${parameter.name} AS row_{parameter.source_id}；"
+            "随后读取 "
+            + "、".join(
+                f"row_{parameter.source_id}.`{column}`"
+                for column in parameter.columns
+            )
             for parameter in dependency_parameters
         )
         return "\n".join(blocks)

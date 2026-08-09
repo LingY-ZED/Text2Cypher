@@ -47,6 +47,12 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "- (:Person)-[:`WORKS-AT`]->(:Company)" in prompt.user
     assert "查询 Alice 的任职公司和同事" in prompt.user
     assert "最多拆成 3 个子问题" in prompt.user
+    assert '"source_id":"q1"' in prompt.system
+    assert '"columns":["实体名称"]' in prompt.user
+    assert "不得把图遍历的中间步骤拆成子问题" in prompt.system
+    assert "不得把多个独立意图合并为一个父节点" in prompt.system
+    assert "不得单独查询 nodeId、内部 ID" in prompt.system
+    assert "技术标识只能作为补充" in prompt.system
 
 
 def test_decomposition_implementation_has_no_current_schema_names() -> None:
@@ -110,7 +116,7 @@ def test_response_parser_supports_a_dependent_sub_question() -> None:
             '{"sub_questions":['
             '{"id":"q1","question":"查询实体","inputs":[]},'
             '{"id":"q2","question":"查询实体归属","inputs":['
-            '{"source_id":"q1","columns":["实体标识"]}]}'
+            '{"source_id":"q1","columns":["实体名称"]}]}'
             ']}'
         ),
         "查询实体及归属",
@@ -120,8 +126,22 @@ def test_response_parser_supports_a_dependent_sub_question() -> None:
     assert decomposition.sub_questions[1] == SubQuestionPlan(
         "q2",
         "查询实体归属",
-        (DependencyInput("q1", ("实体标识",)),),
+        (DependencyInput("q1", ("实体名称",)),),
     )
+
+
+def test_response_parser_rejects_implicit_technical_identifier_step() -> None:
+    with pytest.raises(ValueError, match="技术标识"):
+        QuestionDecompositionResponseParser().parse(
+            (
+                '{"sub_questions":['
+                '{"id":"q1","question":"查找实体并返回业务字段","inputs":[]},'
+                '{"id":"q2","question":"根据实体查询归属","inputs":['
+                '{"source_id":"q1","columns":["实体标识"]}]}]}'
+            ),
+            "查询实体归属",
+            3,
+        )
 
 
 @pytest.mark.parametrize(
@@ -150,6 +170,12 @@ def test_response_parser_supports_a_dependent_sub_question() -> None:
             '{"id":"q1","question":"一","inputs":[]},'
             '{"id":"q2","question":"二","inputs":['
             '{"source_id":"q1","columns":["值","值"]}]}]}'
+        ),
+        (
+            '{"sub_questions":['
+            '{"id":"q1","question":"一","inputs":[]},'
+            '{"id":"q2","question":"二","inputs":['
+            '{"id":"q1","outputs":["值"]}]}]}'
         ),
     ],
 )

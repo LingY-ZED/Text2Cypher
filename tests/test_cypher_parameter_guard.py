@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from text2cypher.components.cypher_parameter_guard import CypherParameterGuard
-from text2cypher.domain.errors import CypherValidationError
+from text2cypher.domain.errors import DependencyParameterValidationError
 from text2cypher.domain.models import DependencyParameter
 
 
@@ -24,7 +24,7 @@ def test_parameter_guard_allows_exactly_the_declared_parameter() -> None:
 
 
 def test_parameter_guard_does_not_treat_a_string_literal_as_parameter_use() -> None:
-    with pytest.raises(CypherValidationError, match="未使用"):
+    with pytest.raises(DependencyParameterValidationError, match="未使用"):
         CypherParameterGuard().validate(
             "RETURN '$dep_q1_rows' AS text",
             {"dep_q1_rows": []},
@@ -43,9 +43,18 @@ def test_parameter_guard_rejects_missing_or_unknown_parameters(
     cypher: str,
     message: str,
 ) -> None:
-    with pytest.raises(CypherValidationError, match=message):
+    with pytest.raises(DependencyParameterValidationError, match=message):
         CypherParameterGuard().validate(
             cypher,
+            {"dep_q1_rows": []},
+            (_specification(),),
+        )
+
+
+def test_parameter_guard_requires_unwind_for_each_declared_parameter() -> None:
+    with pytest.raises(DependencyParameterValidationError, match="UNWIND"):
+        CypherParameterGuard().validate(
+            "RETURN [row IN $dep_q1_rows | row.entity_id] AS ids",
             {"dep_q1_rows": []},
             (_specification(),),
         )
