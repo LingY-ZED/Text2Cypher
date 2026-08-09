@@ -14,9 +14,12 @@ from text2cypher.domain.models import (
     QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
+    SubQueryError,
     SubQueryResponse,
+    SubQueryStatus,
     SubQuestionPlan,
     Text2CypherResponse,
+    Text2CypherStatus,
 )
 
 __all__ = [
@@ -32,8 +35,11 @@ __all__ = [
     "QueryResult",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SubQueryError",
     "SubQuestionPlan",
     "SubQueryResponse",
+    "SubQueryStatus",
     "Text2CypherPipeline",
     "Text2CypherResponse",
+    "Text2CypherStatus",
 ]

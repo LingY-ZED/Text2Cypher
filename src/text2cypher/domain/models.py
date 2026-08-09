@@ -27,6 +27,21 @@ class CypherFailureKind(StrEnum):
     OUTPUT_CONTRACT = "output_contract"
 
 
+class SubQueryStatus(StrEnum):
+    """一个计划节点在本次 DAG 调度中的最终状态。"""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+
+
+class Text2CypherStatus(StrEnum):
+    """一次请求是否包含可返回的部分执行结果。"""
+
+    SUCCESS = "success"
+    PARTIAL = "partial"
+
+
 @dataclass(frozen=True, slots=True)
 class PropertySchema:
     """节点标签或关系类型可用的属性。"""
@@ -450,31 +465,95 @@ class QueryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SubQueryError:
+    """可以安全公开的子查询失败或阻塞原因。"""
+
+    kind: str
+    message: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kind", _require_text(self.kind, "子查询错误类别"))
+        object.__setattr__(
+            self,
+            "message",
+            _require_text(self.message, "子查询错误信息"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SubQueryResponse:
-    """一个子问题及其已执行的只读 Cypher 结果。"""
+    """一个计划节点的成功、失败或依赖阻塞执行结果。"""
 
     question: str
-    cypher: str
-    result: QueryResult
+    cypher: str | None
+    result: QueryResult | None
+    id: str = "q1"
+    depends_on: tuple[str, ...] = ()
+    parameter_sources: Mapping[str, DependencyParameter] = field(
+        default_factory=dict
+    )
+    status: SubQueryStatus = SubQueryStatus.SUCCESS
+    error: SubQueryError | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "question", _require_text(self.question, "子问题"))
-        object.__setattr__(self, "cypher", _require_text(self.cypher, "Cypher"))
+        object.__setattr__(self, "id", _require_text(self.id, "子问题 ID"))
+        depends_on = tuple(
+            _require_text(source_id, "依赖来源 ID")
+            for source_id in self.depends_on
+        )
+        if len(set(depends_on)) != len(depends_on):
+            raise ValueError("依赖来源不能重复")
+        parameter_sources = MappingProxyType(
+            {
+                _require_text(name, "依赖参数名"): specification
+                for name, specification in self.parameter_sources.items()
+            }
+        )
+        if set(parameter_sources) != {
+            specification.name for specification in parameter_sources.values()
+        }:
+            raise ValueError("依赖参数来源键必须匹配参数名")
+        if tuple(
+            specification.source_id for specification in parameter_sources.values()
+        ) != depends_on:
+            raise ValueError("依赖参数来源必须与 depends_on 顺序一致")
+
+        if self.status is SubQueryStatus.SUCCESS:
+            if self.cypher is None or self.result is None or self.error is not None:
+                raise ValueError("成功子查询必须包含 Cypher 和结果且不得包含错误")
+            object.__setattr__(self, "cypher", _require_text(self.cypher, "Cypher"))
+        else:
+            if self.cypher is not None or self.result is not None or self.error is None:
+                raise ValueError("失败或阻塞子查询只能包含安全错误")
+        object.__setattr__(self, "depends_on", depends_on)
+        object.__setattr__(self, "parameter_sources", parameter_sources)
 
 
 @dataclass(frozen=True, slots=True)
 class Text2CypherResponse:
-    """一次成功 Text2Cypher 请求的公开结果。"""
+    """一次成功或部分成功 Text2Cypher 请求的公开结果。"""
 
     question: str
     sub_queries: tuple[SubQueryResponse, ...]
     formatted: str
+    status: Text2CypherStatus = Text2CypherStatus.SUCCESS
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "question", _require_text(self.question, "问题"))
         sub_queries = tuple(self.sub_queries)
         if not 1 <= len(sub_queries) <= 3:
             raise ValueError("子查询结果数量必须在 1 到 3 之间")
+        successful_count = sum(
+            item.status is SubQueryStatus.SUCCESS for item in sub_queries
+        )
+        has_incomplete = successful_count != len(sub_queries)
+        if self.status is Text2CypherStatus.SUCCESS and has_incomplete:
+            raise ValueError("不完整子查询结果必须使用 partial 状态")
+        if self.status is Text2CypherStatus.PARTIAL and not (
+            successful_count and has_incomplete
+        ):
+            raise ValueError("partial 响应必须同时包含成功与未完成子查询")
         object.__setattr__(self, "sub_queries", sub_queries)
         object.__setattr__(
             self,
@@ -487,3 +566,21 @@ class Text2CypherResponse:
         """是否包含多个子查询结果。"""
 
         return len(self.sub_queries) > 1
+
+    @property
+    def successful_count(self) -> int:
+        return sum(
+            item.status is SubQueryStatus.SUCCESS for item in self.sub_queries
+        )
+
+    @property
+    def failed_count(self) -> int:
+        return sum(
+            item.status is SubQueryStatus.FAILED for item in self.sub_queries
+        )
+
+    @property
+    def blocked_count(self) -> int:
+        return sum(
+            item.status is SubQueryStatus.BLOCKED for item in self.sub_queries
+        )

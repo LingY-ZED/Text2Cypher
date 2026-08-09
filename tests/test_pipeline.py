@@ -8,6 +8,7 @@ from text2cypher.domain.errors import (
     CypherValidationError,
     LLMGenerationError,
     QuestionValidationError,
+    SubQueryExecutionError,
 )
 from text2cypher.domain.models import (
     ChatPrompt,
@@ -321,7 +322,7 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
         few_shot_router=FakeFewShotRouter(calls),
     )
 
-    with pytest.raises(CypherValidationError, match="不安全"):
+    with pytest.raises(SubQueryExecutionError, match="均未成功"):
         pipeline.run("列出服务")
 
     assert calls == [
@@ -334,7 +335,7 @@ def test_pipeline_stops_before_execution_when_validation_fails() -> None:
     ]
 
 
-def test_pipeline_executes_each_sub_question_in_order_with_one_schema() -> None:
+def test_pipeline_executes_independent_sub_questions_with_one_schema() -> None:
     calls: list[str] = []
 
     class ThreeWayDecomposer:
@@ -424,32 +425,18 @@ def test_pipeline_executes_each_sub_question_in_order_with_one_schema() -> None:
 
     assert response.decomposed is True
     assert calls.count("schema") == 1
-    assert calls == [
-        "schema",
-        "decomposer",
-        "router:查询上游",
-        "prompt:查询上游",
-        "llm:查询上游",
-        "parser:查询上游",
-        "validator:RETURN '查询上游' AS branch",
-        "executor:RETURN '查询上游' AS branch",
-        "router:查询下游",
-        "prompt:查询下游",
-        "llm:查询下游",
-        "parser:查询下游",
-        "validator:RETURN '查询下游' AS branch",
-        "executor:RETURN '查询下游' AS branch",
-        "router:查询消息",
-        "prompt:查询消息",
-        "llm:查询消息",
-        "parser:查询消息",
-        "validator:RETURN '查询消息' AS branch",
-        "executor:RETURN '查询消息' AS branch",
-        "formatter",
-    ]
+    assert calls[:2] == ["schema", "decomposer"]
+    assert calls[-1] == "formatter"
+    for question in ("查询上游", "查询下游", "查询消息"):
+        assert f"router:{question}" in calls
+        assert f"prompt:{question}" in calls
+        assert f"llm:{question}" in calls
+        assert f"parser:{question}" in calls
+        assert f"validator:RETURN '{question}' AS branch" in calls
+        assert f"executor:RETURN '{question}' AS branch" in calls
 
 
-def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
+def test_pipeline_returns_partial_when_an_independent_sub_query_fails() -> None:
     calls: list[str] = []
 
     class ThreeWayDecomposer:
@@ -490,6 +477,17 @@ def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
             calls.append(f"executor:{cypher}")
             return QueryResult((), ())
 
+    class PartialFormatter:
+        def format(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> str:
+            assert question == "复杂问题"
+            assert len(sub_queries) == 3
+            calls.append("formatter")
+            return "formatted"
+
     pipeline = Text2CypherPipeline(
         schema_fetcher=FakeSchemaFetcher(calls),
         prompt_builder=RecordingPromptBuilder(),
@@ -497,13 +495,17 @@ def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
         cypher_parser=RecordingParser(),
         cypher_validator=RejectSecondValidator(),
         cypher_executor=RecordingExecutor(),
-        result_formatter=FakeFormatter(calls),
+        result_formatter=PartialFormatter(),
         question_decomposer=ThreeWayDecomposer(),
     )
 
-    with pytest.raises(CypherValidationError, match="第二个"):
-        pipeline.run("复杂问题")
+    response = pipeline.run("复杂问题")
 
-    assert "prompt:三" not in calls
+    assert response.status.value == "partial"
+    assert [item.status.value for item in response.sub_queries] == [
+        "success",
+        "failed",
+        "success",
+    ]
+    assert "prompt:三" in calls
     assert "executor:RETURN '二'" not in calls
-    assert "formatter" not in calls

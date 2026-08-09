@@ -11,6 +11,7 @@ from text2cypher.domain.errors import (
     CypherValidationError,
     LLMGenerationError,
     Neo4jConnectionError,
+    SubQueryExecutionError,
 )
 from text2cypher.domain.models import (
     ChatPrompt,
@@ -205,7 +206,7 @@ def test_pipeline_does_not_correct_connection_error() -> None:
             del cypher
             raise Neo4jConnectionError("暂时不可用")
 
-    with pytest.raises(Neo4jConnectionError, match="暂时"):
+    with pytest.raises(SubQueryExecutionError, match="均未成功"):
         _pipeline(
             parser=MappingParser(),
             validator=ConnectionValidator(),
@@ -219,7 +220,7 @@ def test_pipeline_does_not_correct_connection_error() -> None:
 def test_pipeline_stops_after_one_unsuccessful_correction() -> None:
     corrector = RecordingCorrector(LLMResponse(content="still-unparseable"))
 
-    with pytest.raises(CypherParseError, match="无法解析"):
+    with pytest.raises(SubQueryExecutionError, match="均未成功"):
         _pipeline(
             parser=MappingParser({"initial", "still-unparseable"}),
             validator=MappingValidator(),
@@ -341,7 +342,7 @@ def test_pipeline_stops_later_sub_queries_after_correction_is_exhausted() -> Non
             sub_queries: tuple[SubQueryResponse, ...],
         ) -> str:
             del question, sub_queries
-            pytest.fail("恢复耗尽后不得格式化部分结果")
+            pytest.fail("全部子查询失败后不得格式化结果")
 
     pipeline = Text2CypherPipeline(
         schema_fetcher=StubSchemaFetcher(),
@@ -355,11 +356,13 @@ def test_pipeline_stops_later_sub_queries_after_correction_is_exhausted() -> Non
         cypher_corrector=corrector,
     )
 
-    with pytest.raises(CypherParseError, match="无法解析"):
+    with pytest.raises(SubQueryExecutionError, match="均未成功"):
         pipeline.run("复杂查询")
 
-    assert calls == ["decomposer", "prompt:第一分支", "llm:第一分支"]
-    assert len(corrector.calls) == 1
+    assert calls[0] == "decomposer"
+    assert {"prompt:第一分支", "prompt:第二分支"} <= set(calls)
+    assert {"llm:第一分支", "llm:第二分支"} <= set(calls)
+    assert len(corrector.calls) == 2
 
 
 def test_pipeline_can_disable_empty_result_recovery_independently() -> None:

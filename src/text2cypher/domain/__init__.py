@@ -11,9 +11,12 @@ from .models import (
     QuestionDecomposition,
     SchemaGraph,
     SchemaGraphEdge,
+    SubQueryError,
     SubQueryResponse,
+    SubQueryStatus,
     SubQuestionPlan,
     Text2CypherResponse,
+    Text2CypherStatus,
 )
 
 __all__ = [
@@ -26,8 +29,11 @@ __all__ = [
     "QuestionDecomposition",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SubQueryError",
     "SubQuestionPlan",
     "SubQueryResponse",
+    "SubQueryStatus",
     "Text2CypherError",
     "Text2CypherResponse",
+    "Text2CypherStatus",
 ]

@@ -45,8 +45,24 @@ class CypherValidationError(Text2CypherError):
     """Cypher 不安全或不是只读查询时抛出。"""
 
 
+class CypherOutputContractError(CypherValidationError):
+    """Cypher 未返回依赖后继明确要求的列时抛出。"""
+
+
 class CypherExecutionError(Text2CypherError):
     """Neo4j 无法执行已批准查询时抛出。"""
+
+
+class DependencyBindingError(Text2CypherError):
+    """父结果无法安全转换为后继 Neo4j 参数时抛出。"""
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(kind)
+        self.kind = kind
+
+
+class SubQueryExecutionError(Text2CypherError):
+    """所有计划节点均未成功时抛出。"""
 
 
 class BootstrapNotReadyError(Text2CypherError):
