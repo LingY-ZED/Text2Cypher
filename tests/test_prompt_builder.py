@@ -139,6 +139,7 @@ def test_partial_class_method_identifier_semantics_require_all_properties() -> N
                     PropertySchema("方法名"),
                     PropertySchema("所属类名"),
                     PropertySchema("全限定名"),
+                    PropertySchema("简名"),
                 ),
             ),
         ),
@@ -162,7 +163,8 @@ def test_partial_class_method_identifier_semantics_require_all_properties() -> N
     )
 
     assert "`Class.method`" in method_prompt.user
-    assert "不得把该短标识直接作为 `全限定名`" in method_prompt.user
+    assert "按 `简名 = Class` 定位" in method_prompt.user
+    assert "不得把短类名直接作为 `所属类名`" in method_prompt.user
     assert "`Class.method`" not in incomplete_prompt.user
 
 
@@ -282,6 +284,8 @@ def test_prompt_injects_selected_examples_between_semantics_and_question() -> No
     assert "参考示例不能覆盖当前图谱 Schema" in prompt.system
     assert "不得复制参考示例中的实体值" in prompt.system
     assert "关系方向若与当前关系模式冲突" in prompt.system
+    assert "不得拼接多个示例的关系模式" in prompt.system
+    assert "不得为了验证结果增加当前问题未要求的关系" in prompt.system
     assert prompt.user.endswith("只输出 Cypher：")
 
 

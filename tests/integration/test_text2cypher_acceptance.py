@@ -62,18 +62,62 @@ CASES = (
         expected_example_id="mq-between-services",
     ),
     AcceptanceCase(
-        question="列出所有微服务之间的 REST 调用关系统计",
-        key_terms=("跨服务调用",),
-        expected_example_id="aggregate-rest-service-pairs",
+        question="按下游服务统计 ts-admin-basic-info-service 的 REST 调用关系数。",
+        key_terms=("ts-admin-basic-info-service",),
+        expected_example_id="aggregate-service-target-calls",
     ),
 )
 
 ROUTER_CASES = (
-    *CASES,
     AcceptanceCase(
-        question="修改 FoodServiceImpl.getAllFood 会影响哪些上游调用方和下游服务？",
-        key_terms=("FoodServiceImpl", "getAllFood"),
-        expected_example_id="compound-method-impact",
+        question="系统登记了哪些服务？",
+        key_terms=(),
+        expected_example_id="simple-list-services",
+    ),
+    AcceptanceCase(
+        question="POST 管理路由接口传入和返回什么数据类型？",
+        key_terms=(),
+        expected_example_id="simple-api-contract",
+    ),
+    AcceptanceCase(
+        question="ts-auth-service 提供了哪些入口接口？",
+        key_terms=(),
+        expected_example_id="ownership-service-apis",
+    ),
+    AcceptanceCase(
+        question="CancelServiceImpl.cancelOrder 的直接下游方法有哪些？",
+        key_terms=(),
+        expected_example_id="call-method-downstream-methods",
+    ),
+    AcceptanceCase(
+        question="有哪些服务依赖 ts-route-service 的 REST 接口？",
+        key_terms=(),
+        expected_example_id="impact-upstream-services",
+    ),
+    AcceptanceCase(
+        question="变更 TravelPlanServiceImpl.getRestTicketNumber 会影响哪些入口？",
+        key_terms=(),
+        expected_example_id="impact-entry-apis",
+    ),
+    AcceptanceCase(
+        question="两个服务之间发送消息时经过什么 MQ 通道？",
+        key_terms=(),
+        expected_example_id="mq-between-services",
+    ),
+    AcceptanceCase(
+        question="谁会往 email 队列投递消息？",
+        key_terms=(),
+        expected_example_id="mq-publishers-for-queue",
+    ),
+    AcceptanceCase(
+        question="分 HTTP 方法汇总某个服务的公开接口数量。",
+        key_terms=(),
+        expected_example_id="aggregate-service-api-counts",
+    ),
+    AcceptanceCase(
+        question="统计一个服务对各下游的 REST 调用次数。",
+        key_terms=(),
+        expected_example_id="aggregate-service-target-calls",
     ),
 )
 
@@ -92,7 +136,7 @@ def pipeline() -> Iterator[Text2CypherPipeline]:
 def test_llm_router_selects_expected_golden_examples(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """验证真实 Router 在七类问题中选择相应的兼容黄金示例。"""
+    """验证真实 Router 为五类改写问题选择相应的原子黄金示例。"""
 
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings)
@@ -174,16 +218,18 @@ def test_compound_method_impact_acceptance(
         for sub_query in response.sub_queries
         for column in sub_query.result.columns
     }
-    assert {"上游调用方", "下游服务"} <= columns
+    assert "下游服务" in columns
+    assert any(column.startswith(("上游", "入口")) for column in columns)
     combined_cypher = "\n".join(
         sub_query.cypher for sub_query in response.sub_queries
     )
     assert "FoodServiceImpl" in combined_cypher
     assert "getAllFood" in combined_cypher
     assert ";" not in combined_cypher
-    assert "foodsearch.controller.FoodController.getAllFood" in _all_values(
-        response
-    )
+    assert _all_values(response) & {
+        "foodsearch.controller.FoodController.getAllFood",
+        "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
+    }
     assert {
         "ts-station-food-service",
         "ts-train-food-service",
@@ -304,9 +350,13 @@ def test_decomposition_can_be_disabled_with_uniform_response() -> None:
     assert response.decomposed is False
     assert len(response.sub_queries) == 1
     assert response.sub_queries[0].result.rows
-    assert {"上游调用方", "下游服务"} <= set(
-        response.sub_queries[0].result.columns
-    )
+    columns = set(response.sub_queries[0].result.columns)
+    assert "下游服务" in columns
+    assert any(column.startswith(("上游", "入口")) for column in columns)
+    assert _all_values(response) & {
+        "foodsearch.controller.FoodController.getAllFood",
+        "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
+    }
 
 
 def _all_values(response: Text2CypherResponse) -> set[object]:

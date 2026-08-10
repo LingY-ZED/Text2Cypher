@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "matplotlib>=3.10,<4.0",
     "mypy>=1.14,<2.0",
     "pytest>=8.0,<9.0",
     "ruff>=0.9,<1.0",
@@ -44,4 +45,4 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "evaluation"]

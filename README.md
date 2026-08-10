@@ -170,6 +170,27 @@ ruff check .
 mypy
 ```
 
+完整评测使用 30 道独立黄金问题（简单 10、中等 12、困难 8），默认在
+`error-recovery` 分支的 detached worktree 中真实运行三轮：
+
+```powershell
+.\scripts\run-evaluation.ps1
+```
+
+可指定版本、轮数和报告目录：
+
+```powershell
+.\scripts\run-evaluation.ps1 `
+  -Revision error-recovery `
+  -Runs 3 `
+  -OutputDir tmp\evaluation\manual-run
+```
+
+脚本会先校验 Neo4j Schema、42 个只读 Oracle 和冻结快照；发现数据漂移时不会调用
+模型。运行结果、指标、Markdown 报告和 PNG 图表保存在 `tmp/evaluation/`，不会进入
+版本控制。评测报告包含生成率、语法正确率、可执行率、查询正确率、延迟、自然错误
+恢复和四类确定性恢复探针。
+
 默认测试不会访问真实数据库。需要执行只读集成测试时：
 
 ```powershell

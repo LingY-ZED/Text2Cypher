@@ -39,63 +39,43 @@ pytestmark = pytest.mark.skipif(
 GOLDEN_ROW_COUNTS = {
     "simple-list-services": 41,
     "simple-filter-upstream-apis": 203,
-    "simple-locate-method": 1,
-    "ownership-service-apis": 12,
-    "ownership-api-service": 1,
-    "call-method-downstream-methods": 1,
+    "simple-api-contract": 1,
+    "ownership-service-apis": 6,
+    "path-class-methods": 4,
+    "path-interface-implementation": 1,
+    "path-queue-owner": 5,
+    "call-method-downstream-methods": 4,
     "call-method-downstream-services": 3,
-    "call-service-outgoing-rest": 3,
-    "impact-upstream-services": 1,
-    "impact-upstream-methods": 1,
+    "call-service-outgoing-rest": 12,
+    "impact-upstream-services": 6,
     "impact-entry-apis": 1,
     "mq-between-services": 1,
     "mq-publishers-for-queue": 4,
-    "mq-full-message-chain": 4,
-    "aggregate-rest-service-pairs": 49,
-    "aggregate-method-downstream-calls": 3,
-    "compound-method-impact": 1,
-    "compound-rest-mq-dependencies": 1,
+    "mq-full-message-chain": 2,
+    "aggregate-service-api-counts": 3,
+    "aggregate-service-target-calls": 5,
+    "aggregate-interface-implementations": 38,
 }
 
 GOLDEN_COLUMNS = {
     "simple-list-services": ("服务名称",),
     "simple-filter-upstream-apis": ("接口路径", "请求方式"),
-    "simple-locate-method": ("全限定名", "方法签名"),
-    "ownership-service-apis": ("接口路径", "请求方式", "API类型"),
-    "ownership-api-service": ("服务名称",),
-    "call-method-downstream-methods": ("被调用方法", "调用类型"),
+    "simple-api-contract": ("请求体类型", "响应类型"),
+    "ownership-service-apis": ("接口路径", "请求方式"),
+    "path-class-methods": ("方法名", "方法签名"),
+    "path-interface-implementation": ("接口全限定名",),
+    "path-queue-owner": ("队列名称", "服务名称"),
+    "call-method-downstream-methods": ("被调用方法",),
     "call-method-downstream-services": ("下游服务", "接口路径"),
-    "call-service-outgoing-rest": ("调用方法", "下游服务", "接口路径"),
+    "call-service-outgoing-rest": ("调用方法", "下游服务"),
     "impact-upstream-services": ("上游服务",),
-    "impact-upstream-methods": ("上游方法", "上游服务"),
-    "impact-entry-apis": ("入口接口", "请求方式"),
+    "impact-entry-apis": ("上游方法", "入口接口", "请求方式"),
     "mq-between-services": ("交换机名称", "队列名称", "路由键"),
-    "mq-publishers-for-queue": ("发布方法", "交换机名称", "队列名称"),
-    "mq-full-message-chain": (
-        "发布方法",
-        "交换机名称",
-        "队列名称",
-        "消费方法",
-    ),
-    "aggregate-rest-service-pairs": (
-        "调用方服务",
-        "被调用服务",
-        "调用关系数",
-    ),
-    "aggregate-method-downstream-calls": ("下游服务", "调用关系数"),
-    "compound-method-impact": ("上游调用方", "下游服务"),
-    "compound-rest-mq-dependencies": ("REST下游服务", "MQ下游服务"),
-}
-
-FOOD_METHOD = "foodsearch.service.FoodServiceImpl.getAllFood"
-FOOD_CONTROLLER_METHOD = "foodsearch.controller.FoodController.getAllFood"
-FOOD_ENTRY_PATH = (
-    "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}"
-)
-FOOD_DOWNSTREAM_SERVICES = {
-    "ts-station-food-service",
-    "ts-train-food-service",
-    "ts-travel-service",
+    "mq-publishers-for-queue": ("发布方法", "交换机名称"),
+    "mq-full-message-chain": ("交换机名称", "队列名称", "消费方法"),
+    "aggregate-service-api-counts": ("请求方式", "API数量"),
+    "aggregate-service-target-calls": ("下游服务", "调用关系数"),
+    "aggregate-interface-implementations": ("服务名称", "接口实现类数"),
 }
 
 
@@ -277,54 +257,103 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
 def _assert_golden_result_semantics(
     results: Mapping[str, QueryResult],
 ) -> None:
-    assert _values(results["simple-locate-method"], "全限定名") == {
-        FOOD_METHOD
+    assert results["simple-api-contract"].rows == (
+        {
+            "请求体类型": "edu.fudan.common.entity.RouteInfo",
+            "响应类型": "org.springframework.http.HttpEntity",
+        },
+    )
+    assert _values(results["path-class-methods"], "方法名") == {
+        "createAndModifyPrice",
+        "getPriceByWeightAndRegion",
+        "getPriceConfig",
+        "queryPriceInformation",
     }
-    assert _values(results["ownership-api-service"], "服务名称") == {
-        "ts-food-service"
+    assert _values(
+        results["path-interface-implementation"],
+        "接口全限定名",
+    ) == {"auth.service.TokenService"}
+    assert {
+        (row["队列名称"], row["服务名称"])
+        for row in results["path-queue-owner"].rows
+    } >= {
+        ("email", "ts-notification-service"),
+        ("food_delivery", "ts-delivery-service"),
     }
     assert _values(results["call-method-downstream-methods"], "被调用方法") == {
-        FOOD_METHOD
+        "rebook.service.RebookServiceImpl.drawBackMoney",
+        "rebook.service.RebookServiceImpl.getOrderByRebookInfo",
+        "rebook.service.RebookServiceImpl.getTripAllDetailInformation",
+        "rebook.service.RebookServiceImpl.updateOrder",
     }
-
-    for example_id in (
-        "call-method-downstream-services",
-        "call-service-outgoing-rest",
-        "aggregate-method-downstream-calls",
-    ):
-        assert _values(results[example_id], "下游服务") == FOOD_DOWNSTREAM_SERVICES
-
+    assert _values(
+        results["call-method-downstream-services"],
+        "下游服务",
+    ) == {
+        "ts-order-other-service",
+        "ts-order-service",
+        "ts-payment-service",
+    }
+    assert _values(results["call-service-outgoing-rest"], "下游服务") == {
+        "ts-inside-payment-service",
+        "ts-order-other-service",
+        "ts-order-service",
+        "ts-route-service",
+        "ts-seat-service",
+        "ts-train-service",
+        "ts-travel-service",
+        "ts-travel2-service",
+    }
     assert _values(results["impact-upstream-services"], "上游服务") == {
-        "ts-food-service"
-    }
-    assert _values(results["impact-upstream-methods"], "上游方法") == {
-        FOOD_METHOD
-    }
-    assert _values(results["impact-upstream-methods"], "上游服务") == {
-        "ts-food-service"
+        "ts-admin-order-service",
+        "ts-cancel-service",
+        "ts-execute-service",
+        "ts-inside-payment-service",
+        "ts-rebook-service",
+        "ts-security-service",
     }
     assert _values(results["impact-entry-apis"], "入口接口") == {
-        FOOD_ENTRY_PATH
+        "/api/v1/consignservice/consigns"
     }
-
+    assert _values(results["impact-entry-apis"], "上游方法") == {
+        "consign.controller.ConsignController.updateConsign"
+    }
     assert _values(results["mq-between-services"], "队列名称") == {
-        "food_delivery"
+        "email"
     }
     assert _values(results["mq-between-services"], "交换机名称") == {""}
-    for example_id in ("mq-publishers-for-queue", "mq-full-message-chain"):
-        assert _values(results[example_id], "队列名称") == {"food_delivery"}
-        assert _values(results[example_id], "交换机名称") == {"(default)"}
-
-    rest_pairs = results["aggregate-rest-service-pairs"].rows
-    assert all(row["调用方服务"] != row["被调用服务"] for row in rest_pairs)
-
-    compound_row = results["compound-method-impact"].rows[0]
-    assert set(compound_row["上游调用方"]) == {FOOD_CONTROLLER_METHOD}
-    assert set(compound_row["下游服务"]) == FOOD_DOWNSTREAM_SERVICES
-
-    dependency_row = results["compound-rest-mq-dependencies"].rows[0]
-    assert set(dependency_row["REST下游服务"]) == FOOD_DOWNSTREAM_SERVICES
-    assert set(dependency_row["MQ下游服务"]) == {"ts-delivery-service"}
+    assert _values(results["mq-between-services"], "路由键") == {"email"}
+    assert _values(results["mq-publishers-for-queue"], "交换机名称") == {
+        "(default)"
+    }
+    assert _values(results["mq-full-message-chain"], "交换机名称") == {
+        "(default)"
+    }
+    assert _values(results["mq-full-message-chain"], "队列名称") == {
+        "email",
+        "food_delivery",
+    }
+    assert {
+        (row["请求方式"], row["API数量"])
+        for row in results["aggregate-service-api-counts"].rows
+    } == {("DELETE", 1), ("GET", 2), ("POST", 1)}
+    assert {
+        (row["下游服务"], row["调用关系数"])
+        for row in results["aggregate-service-target-calls"].rows
+    } == {
+        ("ts-config-service", 4),
+        ("ts-contacts-service", 4),
+        ("ts-price-service", 4),
+        ("ts-station-service", 4),
+        ("ts-train-service", 4),
+    }
+    implementation_counts = results["aggregate-interface-implementations"]
+    assert next(
+        row["接口实现类数"]
+        for row in implementation_counts.rows
+        if row["服务名称"] == "ts-auth-service"
+    ) == 2
+    assert max(row["接口实现类数"] for row in implementation_counts.rows) == 2
 
 
 def _values(result: QueryResult, column: str) -> set[Any]:

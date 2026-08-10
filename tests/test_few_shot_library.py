@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 import pytest
@@ -29,6 +30,8 @@ def code_knowledge_schema() -> GraphSchema:
                     PropertySchema("接口路径"),
                     PropertySchema("请求方式"),
                     PropertySchema("目标微服务"),
+                    PropertySchema("请求体类型"),
+                    PropertySchema("响应类型"),
                 ),
             ),
             NodeSchema("微服务", (PropertySchema("服务名称"),)),
@@ -41,12 +44,16 @@ def code_knowledge_schema() -> GraphSchema:
                     PropertySchema("方法签名"),
                 ),
             ),
-            NodeSchema("类"),
+            NodeSchema(
+                "类",
+                (PropertySchema("全限定名"), PropertySchema("简名")),
+            ),
             NodeSchema("消息交换机", (PropertySchema("交换机名称"),)),
             NodeSchema("消息队列", (PropertySchema("队列名称"),)),
         ),
         relationships=(
             RelationshipSchema("归属于"),
+            RelationshipSchema("接口实现"),
             RelationshipSchema("调用", (PropertySchema("调用类型"),)),
             RelationshipSchema(
                 "消息流",
@@ -67,8 +74,10 @@ def code_knowledge_schema() -> GraphSchema:
             RelationshipPattern(("方法",), "调用", ("API端点",)),
             RelationshipPattern(("方法",), "调用", ("方法",)),
             RelationshipPattern(("消息交换机",), "消息流", ("消息队列",)),
+            RelationshipPattern(("消息队列",), "归属于", ("微服务",)),
             RelationshipPattern(("消息队列",), "消息流", ("方法",)),
             RelationshipPattern(("类",), "归属于", ("微服务",)),
+            RelationshipPattern(("类",), "接口实现", ("类",)),
         ),
     )
 
@@ -78,15 +87,34 @@ def test_default_library_contains_expected_18_example_catalog() -> None:
 
     assert len(examples) == 18
     assert Counter(example.category for example in examples) == {
-        "simple_filter": 3,
-        "ownership_api": 2,
-        "call_downstream": 3,
-        "reverse_impact": 3,
-        "mq": 3,
-        "aggregate": 2,
-        "compound": 2,
+        "simple_query": 3,
+        "path_query": 7,
+        "impact_analysis": 2,
+        "mq_query": 3,
+        "aggregate_statistics": 3,
     }
-    assert all(example.aliases for example in examples)
+    assert {example.id for example in examples} == {
+        "simple-list-services",
+        "simple-filter-upstream-apis",
+        "simple-api-contract",
+        "ownership-service-apis",
+        "path-class-methods",
+        "path-interface-implementation",
+        "path-queue-owner",
+        "call-method-downstream-methods",
+        "call-method-downstream-services",
+        "call-service-outgoing-rest",
+        "impact-upstream-services",
+        "impact-entry-apis",
+        "mq-between-services",
+        "mq-publishers-for-queue",
+        "mq-full-message-chain",
+        "aggregate-service-api-counts",
+        "aggregate-service-target-calls",
+        "aggregate-interface-implementations",
+    }
+    assert all(len(example.aliases) == 2 for example in examples)
+    assert all(3 <= len(example.tags) <= 5 for example in examples)
 
 
 def test_all_default_examples_match_frozen_code_knowledge_schema(
@@ -109,20 +137,33 @@ def test_all_default_examples_match_frozen_code_knowledge_schema(
     assert incompatible == []
 
 
-def test_default_library_does_not_contain_known_invalid_cypher() -> None:
+def test_default_library_contains_only_short_atomic_cypher() -> None:
     examples = JsonFewShotExampleLoader().load()
     catalog = "\n".join(
         f"{example.question}\n{example.cypher}" for example in examples
     )
+    cypher_catalog = "\n".join(example.cypher for example in examples)
+    lengths = [len(example.cypher) for example in examples]
 
     assert "'/api/v1/foods'" not in catalog
     assert "food.queue" not in catalog
     assert "food-exchange" not in catalog
     assert "[call_rel:调用*1..5]" not in catalog
     assert "call_rel.调用类型 AS 调用类型" not in catalog
-    assert (
-        "'/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}'"
-        in catalog
-    )
+    assert "compound-method-impact" not in catalog
+    assert "compound-rest-mq-dependencies" not in catalog
+    assert "WHERE" not in cypher_catalog.upper()
+    assert "OPTIONAL MATCH" not in cypher_catalog.upper()
+    assert "UNION" not in cypher_catalog.upper()
+    assert re.search(r"\bCALL\b", cypher_catalog, re.IGNORECASE) is None
+    assert "COLLECT(" not in cypher_catalog.upper()
+    assert ";" not in cypher_catalog
+    assert "//" not in cypher_catalog
+    assert "/*" not in cypher_catalog
+    assert max(lengths) <= 280
+    assert sum(lengths) / len(lengths) <= 180
+    assert sum("[:调用*0..5]" in example.cypher for example in examples) == 1
+    assert "inside_payment.service.InsidePaymentServiceImpl" in catalog
+    assert "{简名: 'ConsignServiceImpl'}" in catalog
     assert "food_delivery" in catalog
-    assert "'(default)'" in catalog
+    assert "preserve.mq.RabbitSend.send" in catalog

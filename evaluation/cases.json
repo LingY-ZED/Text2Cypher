@@ -1,0 +1,1851 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "queue-owner-services",
+      "difficulty": "simple",
+      "category": "ownership",
+      "question": "消息队列分别归属于哪些微服务？返回队列名称和服务名称。",
+      "intents": [
+        {
+          "id": "queue_owners",
+          "label": "队列归属",
+          "oracle_cypher": "MATCH (queue:消息队列)-[:归属于]->(service:微服务) RETURN queue.队列名称 AS 队列名称, service.服务名称 AS 服务名称 ORDER BY 队列名称, 服务名称",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "队列名称",
+            "服务名称"
+          ],
+          "accepted_aliases": {
+            "队列名称": [
+              "队列名称",
+              "消息队列",
+              "队列"
+            ],
+            "服务名称": [
+              "服务名称",
+              "微服务",
+              "所属服务",
+              "目标服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "队列名称": "email",
+              "服务名称": "ts-notification-service"
+            },
+            {
+              "队列名称": "email",
+              "服务名称": "ts-preserve-other-service"
+            },
+            {
+              "队列名称": "email",
+              "服务名称": "ts-preserve-service"
+            },
+            {
+              "队列名称": "food_delivery",
+              "服务名称": "ts-delivery-service"
+            },
+            {
+              "队列名称": "food_delivery",
+              "服务名称": "ts-food-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "token-service-interface",
+      "difficulty": "simple",
+      "category": "code_structure",
+      "question": "auth.service.impl.TokenServiceImpl 实现的接口全限定名是什么？",
+      "intents": [
+        {
+          "id": "implemented_interface",
+          "label": "实现接口",
+          "oracle_cypher": "MATCH (implementation:类)-[:接口实现]->(interface:类) WHERE implementation.全限定名 = 'auth.service.impl.TokenServiceImpl' RETURN interface.全限定名 AS 接口全限定名",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "接口全限定名"
+          ],
+          "accepted_aliases": {
+            "接口全限定名": [
+              "接口全限定名",
+              "全限定名",
+              "接口名称",
+              "实现接口",
+              "接口"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "接口全限定名": "auth.service.TokenService"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rebook-method-return-type",
+      "difficulty": "simple",
+      "category": "code_structure",
+      "question": "RebookServiceImpl.rebook 的完整方法名和返回类型是什么？",
+      "intents": [
+        {
+          "id": "method_identity",
+          "label": "方法属性",
+          "oracle_cypher": "MATCH (method:方法) WHERE method.所属类名 ENDS WITH '.RebookServiceImpl' AND method.方法名 = 'rebook' RETURN method.全限定名 AS 方法全限定名, method.返回类型 AS 返回类型",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "方法全限定名",
+            "返回类型"
+          ],
+          "accepted_aliases": {
+            "方法全限定名": [
+              "方法全限定名",
+              "全限定名",
+              "完整方法名",
+              "方法"
+            ],
+            "返回类型": [
+              "返回类型",
+              "响应类型",
+              "方法返回类型"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "方法全限定名": "rebook.service.RebookServiceImpl.rebook",
+              "返回类型": "edu.fudan.common.util.Response"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "config-service-public-apis",
+      "difficulty": "simple",
+      "category": "api_schema",
+      "question": "列出 ts-config-service 暴露的上游 API 路径和 HTTP 动词。",
+      "intents": [
+        {
+          "id": "public_apis",
+          "label": "服务 API",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-config-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "接口路径",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "接口路径": [
+              "接口路径",
+              "API路径",
+              "API端点",
+              "入口接口",
+              "公开资源"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "接口路径": "api/v1/configservice/configs",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "api/v1/configservice/configs",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "api/v1/configservice/configs",
+              "请求方式": "PUT"
+            },
+            {
+              "接口路径": "api/v1/configservice/configs/{configName}",
+              "请求方式": "DELETE"
+            },
+            {
+              "接口路径": "api/v1/configservice/configs/{configName}",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "api/v1/configservice/welcome",
+              "请求方式": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "config-api-owner",
+      "difficulty": "simple",
+      "category": "api_schema",
+      "question": "GET api/v1/configservice/configs/{configName} 这个上游端点属于哪个微服务？",
+      "intents": [
+        {
+          "id": "owner",
+          "label": "API 所属服务",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE api.API类型 = '上游API' AND api.接口路径 = 'api/v1/configservice/configs/{configName}' AND api.请求方式 = 'GET' RETURN DISTINCT service.服务名称 AS 服务名称",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "服务名称"
+          ],
+          "accepted_aliases": {
+            "服务名称": [
+              "服务名称",
+              "微服务",
+              "所属服务",
+              "目标服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "服务名称": "ts-config-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-route-post-contract",
+      "difficulty": "simple",
+      "category": "api_schema",
+      "question": "POST /api/v1/adminrouteservice/adminroute 的请求体类型和响应类型是什么？",
+      "intents": [
+        {
+          "id": "contract",
+          "label": "接口契约",
+          "oracle_cypher": "MATCH (api:API端点) WHERE api.API类型 = '上游API' AND api.接口路径 = '/api/v1/adminrouteservice/adminroute' AND api.请求方式 = 'POST' RETURN api.请求体类型 AS 请求体类型, api.响应类型 AS 响应类型",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "请求体类型",
+            "响应类型"
+          ],
+          "accepted_aliases": {
+            "请求体类型": [
+              "请求体类型",
+              "请求体"
+            ],
+            "响应类型": [
+              "响应类型",
+              "返回类型"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "请求体类型": "edu.fudan.common.entity.RouteInfo",
+              "响应类型": "org.springframework.http.HttpEntity"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "consign-price-service-classes",
+      "difficulty": "simple",
+      "category": "ownership",
+      "question": "ts-consign-price-service 中定义了哪些类？返回类全限定名。",
+      "intents": [
+        {
+          "id": "classes",
+          "label": "服务中的类",
+          "oracle_cypher": "MATCH (class:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-consign-price-service' RETURN DISTINCT class.全限定名 AS 类全限定名 ORDER BY 类全限定名",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "类全限定名"
+          ],
+          "accepted_aliases": {
+            "类全限定名": [
+              "类全限定名",
+              "全限定名",
+              "类名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "类全限定名": "consignprice.controller.ConsignPriceController"
+            },
+            {
+              "类全限定名": "consignprice.service.ConsignPriceService"
+            },
+            {
+              "类全限定名": "consignprice.service.ConsignPriceServiceImpl"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "consign-price-class-methods",
+      "difficulty": "simple",
+      "category": "code_structure",
+      "question": "ConsignPriceServiceImpl 声明了哪些方法？返回方法名和方法签名。",
+      "intents": [
+        {
+          "id": "methods",
+          "label": "类中的方法",
+          "oracle_cypher": "MATCH (method:方法)-[:归属于]->(class:类) WHERE class.全限定名 = 'consignprice.service.ConsignPriceServiceImpl' RETURN method.方法名 AS 方法名, method.方法签名 AS 方法签名 ORDER BY 方法名, 方法签名",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "方法名",
+            "方法签名"
+          ],
+          "accepted_aliases": {
+            "方法名": [
+              "方法名",
+              "函数名"
+            ],
+            "方法签名": [
+              "方法签名",
+              "签名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "方法名": "createAndModifyPrice",
+              "方法签名": "edu.fudan.common.util.Response createAndModifyPrice(consignprice.entity.ConsignPrice,org.springframework.http.HttpHeaders)"
+            },
+            {
+              "方法名": "getPriceByWeightAndRegion",
+              "方法签名": "edu.fudan.common.util.Response getPriceByWeightAndRegion(double,boolean,org.springframework.http.HttpHeaders)"
+            },
+            {
+              "方法名": "getPriceConfig",
+              "方法签名": "edu.fudan.common.util.Response getPriceConfig(org.springframework.http.HttpHeaders)"
+            },
+            {
+              "方法名": "queryPriceInformation",
+              "方法签名": "edu.fudan.common.util.Response queryPriceInformation(org.springframework.http.HttpHeaders)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "email-queue-owner-nodes",
+      "difficulty": "simple",
+      "category": "ownership",
+      "question": "图中名为 email 的消息队列节点一共有多少个？",
+      "intents": [
+        {
+          "id": "queue_count",
+          "label": "email 队列节点数",
+          "oracle_cypher": "MATCH (queue:消息队列) WHERE queue.队列名称 = 'email' RETURN count(DISTINCT queue) AS 队列节点数",
+          "comparison_mode": "scalar",
+          "expected_columns": [
+            "队列节点数"
+          ],
+          "accepted_aliases": {
+            "队列节点数": [
+              "队列节点数",
+              "email队列节点数量",
+              "消息队列数量",
+              "队列数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "队列节点数": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "default-exchange-owners",
+      "difficulty": "simple",
+      "category": "ownership",
+      "question": "列出各微服务拥有的默认消息交换机及其交换机类型。",
+      "intents": [
+        {
+          "id": "exchanges",
+          "label": "默认交换机",
+          "oracle_cypher": "MATCH (exchange:消息交换机)-[:归属于]->(service:微服务) WHERE exchange.交换机名称 = '(default)' RETURN service.服务名称 AS 服务名称, exchange.交换机名称 AS 交换机名称, exchange.交换机类型 AS 交换机类型 ORDER BY 服务名称",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "服务名称",
+            "交换机名称",
+            "交换机类型"
+          ],
+          "accepted_aliases": {
+            "服务名称": [
+              "服务名称",
+              "微服务名称",
+              "微服务",
+              "所属服务",
+              "目标服务"
+            ],
+            "交换机名称": [
+              "交换机名称",
+              "消息交换机",
+              "交换机"
+            ],
+            "交换机类型": [
+              "交换机类型",
+              "类型"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "服务名称": "ts-delivery-service",
+              "交换机名称": "(default)",
+              "交换机类型": "default"
+            },
+            {
+              "服务名称": "ts-food-service",
+              "交换机名称": "(default)",
+              "交换机类型": "default"
+            },
+            {
+              "服务名称": "ts-notification-service",
+              "交换机名称": "(default)",
+              "交换机类型": "default"
+            },
+            {
+              "服务名称": "ts-preserve-other-service",
+              "交换机名称": "(default)",
+              "交换机类型": "default"
+            },
+            {
+              "服务名称": "ts-preserve-service",
+              "交换机名称": "(default)",
+              "交换机类型": "default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inside-payment-pay-targets",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "InsidePaymentServiceImpl.pay 发出的远程请求会到达哪些目标服务？",
+      "intents": [
+        {
+          "id": "targets",
+          "label": "方法下游服务",
+          "oracle_cypher": "MATCH (method:方法)-[remote:调用]->(api:API端点) WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "外部应用",
+              "远程下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "下游服务": "ts-order-service"
+            },
+            {
+              "下游服务": "ts-payment-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rebook-service-rest-targets",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "ts-rebook-service 通过同步 REST 请求依赖哪些其他微服务？",
+      "intents": [
+        {
+          "id": "targets",
+          "label": "服务 REST 下游",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-rebook-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "被依赖微服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-inside-payment-service"
+            },
+            {
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "下游服务": "ts-order-service"
+            },
+            {
+              "下游服务": "ts-route-service"
+            },
+            {
+              "下游服务": "ts-seat-service"
+            },
+            {
+              "下游服务": "ts-train-service"
+            },
+            {
+              "下游服务": "ts-travel-service"
+            },
+            {
+              "下游服务": "ts-travel2-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "order-other-rest-callers",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "哪些微服务把 ts-order-other-service 当作 REST 调用目标？",
+      "intents": [
+        {
+          "id": "callers",
+          "label": "REST 上游服务",
+          "oracle_cypher": "MATCH (source_api:API端点)-[cross:调用]->(:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(caller:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND source_api.目标微服务 = 'ts-order-other-service' AND caller.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "上游服务"
+          ],
+          "accepted_aliases": {
+            "上游服务": [
+              "上游服务",
+              "调用方服务",
+              "来源服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "上游服务": "ts-admin-order-service"
+            },
+            {
+              "上游服务": "ts-cancel-service"
+            },
+            {
+              "上游服务": "ts-execute-service"
+            },
+            {
+              "上游服务": "ts-inside-payment-service"
+            },
+            {
+              "上游服务": "ts-rebook-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "consign-update-entry-apis",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "变更 ConsignServiceImpl.updateConsignRecord 可能波及哪些入口 HTTP 接口？",
+      "intents": [
+        {
+          "id": "entry_apis",
+          "label": "入口影响",
+          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "入口接口",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "入口接口": [
+              "入口接口",
+              "入口API",
+              "接口路径",
+              "API路径"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "入口接口": "/api/v1/consignservice/consigns",
+              "请求方式": "PUT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food-delivery-publisher-methods",
+      "difficulty": "medium",
+      "category": "mq_dependency",
+      "question": "追踪 food_delivery 队列的生产端，返回所有发布消息的方法。",
+      "intents": [
+        {
+          "id": "publishers",
+          "label": "MQ 发布方法",
+          "oracle_cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列) WHERE queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' RETURN DISTINCT publisher.全限定名 AS 发布方法 ORDER BY 发布方法",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "发布方法"
+          ],
+          "accepted_aliases": {
+            "发布方法": [
+              "发布方法",
+              "生产方法",
+              "生产者方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "发布方法": "foodsearch.mq.RabbitSend.send"
+            },
+            {
+              "发布方法": "notification.mq.RabbitSend.send"
+            },
+            {
+              "发布方法": "preserve.mq.RabbitSend.send"
+            },
+            {
+              "发布方法": "preserveOther.mq.RabbitSend.send"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "email-consumer-methods",
+      "difficulty": "medium",
+      "category": "mq_dependency",
+      "question": "谁消费 email 队列中的消息？返回消费方法的全限定名。",
+      "intents": [
+        {
+          "id": "consumers",
+          "label": "MQ 消费方法",
+          "oracle_cypher": "MATCH (queue:消息队列)-[consume:消息流]->(method:方法) WHERE queue.队列名称 = 'email' AND consume.消息流类型 = '消费' RETURN DISTINCT method.全限定名 AS 消费方法 ORDER BY 消费方法",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "消费方法"
+          ],
+          "accepted_aliases": {
+            "消费方法": [
+              "消费方法",
+              "消费者方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "消费方法": "notification.mq.RabbitReceive.void process"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "preserve-rabbit-message-path",
+      "difficulty": "medium",
+      "category": "mq_dependency",
+      "question": "preserve.mq.RabbitSend.send 发布的消息经过哪个交换机和队列，最终由哪个方法消费？",
+      "intents": [
+        {
+          "id": "message_path",
+          "label": "MQ 消息路径",
+          "oracle_cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法) WHERE publisher.全限定名 = 'preserve.mq.RabbitSend.send' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法 ORDER BY 队列名称, 消费方法",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "交换机名称",
+            "队列名称",
+            "消费方法"
+          ],
+          "accepted_aliases": {
+            "交换机名称": [
+              "交换机名称",
+              "消息交换机",
+              "交换机"
+            ],
+            "队列名称": [
+              "队列名称",
+              "消息队列",
+              "队列"
+            ],
+            "消费方法": [
+              "消费方法",
+              "消费者方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "交换机名称": "(default)",
+              "队列名称": "email",
+              "消费方法": "notification.mq.RabbitReceive.void process"
+            },
+            {
+              "交换机名称": "(default)",
+              "队列名称": "food_delivery",
+              "消费方法": "delivery.mq.RabbitReceive.void process"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-route-api-method-counts",
+      "difficulty": "medium",
+      "category": "aggregate",
+      "question": "ts-admin-route-service 的上游 API 按 HTTP 请求方式分别有多少个？",
+      "intents": [
+        {
+          "id": "method_counts",
+          "label": "HTTP 方法统计",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS 调用关系数 ORDER BY 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "请求方式",
+            "调用关系数"
+          ],
+          "accepted_aliases": {
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ],
+            "调用关系数": [
+              "调用关系数",
+              "调用次数",
+              "关系数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "请求方式": "DELETE",
+              "调用关系数": 1
+            },
+            {
+              "请求方式": "GET",
+              "调用关系数": 2
+            },
+            {
+              "请求方式": "POST",
+              "调用关系数": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "service-interface-implementation-counts",
+      "difficulty": "medium",
+      "category": "aggregate",
+      "question": "按微服务统计接口实现类数量，只返回至少有一个实现类的服务。",
+      "intents": [
+        {
+          "id": "implementation_counts",
+          "label": "接口实现统计",
+          "oracle_cypher": "MATCH (implementation:类)-[:接口实现]->(:类), (implementation)-[:归属于]->(service:微服务) RETURN service.服务名称 AS 服务名称, count(DISTINCT implementation) AS 接口实现类数 ORDER BY 接口实现类数 DESC, 服务名称",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "服务名称",
+            "接口实现类数"
+          ],
+          "accepted_aliases": {
+            "服务名称": [
+              "服务名称",
+              "微服务",
+              "所属服务",
+              "目标服务"
+            ],
+            "接口实现类数": [
+              "接口实现类数",
+              "实现类数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "服务名称": "ts-auth-service",
+              "接口实现类数": 2
+            },
+            {
+              "服务名称": "ts-admin-basic-info-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-admin-order-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-admin-route-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-admin-travel-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-admin-user-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-assurance-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-basic-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-cancel-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-config-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-consign-price-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-consign-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-contacts-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-execute-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-food-delivery-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-food-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-inside-payment-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-notification-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-order-other-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-order-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-payment-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-preserve-other-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-preserve-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-price-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-rebook-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-route-plan-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-route-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-seat-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-security-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-station-food-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-station-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-train-food-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-train-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-travel-plan-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-travel2-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-user-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-verification-code-service",
+              "接口实现类数": 1
+            },
+            {
+              "服务名称": "ts-wait-order-service",
+              "接口实现类数": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rebook-direct-code-calls",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "RebookServiceImpl.rebook 直接调用了哪些代码方法？",
+      "intents": [
+        {
+          "id": "callees",
+          "label": "直接代码调用",
+          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(callee:方法) WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT callee.全限定名 AS 被调用方法 ORDER BY 被调用方法",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "被调用方法"
+          ],
+          "accepted_aliases": {
+            "被调用方法": [
+              "被调用方法",
+              "下游方法",
+              "直接调用方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "被调用方法": "rebook.service.RebookServiceImpl.drawBackMoney"
+            },
+            {
+              "被调用方法": "rebook.service.RebookServiceImpl.getOrderByRebookInfo"
+            },
+            {
+              "被调用方法": "rebook.service.RebookServiceImpl.getTripAllDetailInformation"
+            },
+            {
+              "被调用方法": "rebook.service.RebookServiceImpl.updateOrder"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inside-payment-boundary-apps",
+      "difficulty": "medium",
+      "category": "call_dependency",
+      "question": "InsidePaymentServiceImpl.pay 会把请求发送到系统边界外的哪些应用？",
+      "intents": [
+        {
+          "id": "targets",
+          "label": "跨进程目标",
+          "oracle_cypher": "MATCH (method:方法)-[remote:调用]->(api:API端点) WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "外部应用",
+              "远程下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "下游服务": "ts-order-service"
+            },
+            {
+              "下游服务": "ts-payment-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-basic-target-call-counts",
+      "difficulty": "medium",
+      "category": "aggregate",
+      "question": "把 ts-admin-basic-info-service 的远程调用按目标服务分组计数。",
+      "intents": [
+        {
+          "id": "target_counts",
+          "label": "下游调用统计",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "下游服务",
+            "调用关系数"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ],
+            "调用关系数": [
+              "调用关系数",
+              "调用次数",
+              "关系数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-config-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-contacts-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-price-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-station-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-train-service",
+              "调用关系数": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inside-payment-pay-impact",
+      "difficulty": "hard",
+      "category": "impact_analysis",
+      "question": "修改 InsidePaymentServiceImpl.pay 后，调用它的上游方法、可到达的入口 API 和远程下游服务分别是什么？",
+      "intents": [
+        {
+          "id": "upstream_methods",
+          "label": "上游方法",
+          "oracle_cypher": "MATCH (upstream:方法)-[rel:调用]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "上游方法"
+          ],
+          "accepted_aliases": {
+            "上游方法": [
+              "上游方法",
+              "调用方方法",
+              "调用方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "上游方法": "inside_payment.controller.InsidePaymentController.pay"
+            }
+          ]
+        },
+        {
+          "id": "entry_apis",
+          "label": "入口 API",
+          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "入口接口",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "入口接口": [
+              "入口接口",
+              "入口API",
+              "接口路径",
+              "API路径"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "入口接口": "/api/v1/inside_pay_service/inside_payment",
+              "请求方式": "POST"
+            }
+          ]
+        },
+        {
+          "id": "downstreams",
+          "label": "远程下游",
+          "oracle_cypher": "MATCH (changed:方法)-[remote:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "远程下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "下游服务": "ts-order-service"
+            },
+            {
+              "下游服务": "ts-payment-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "consign-insert-impact",
+      "difficulty": "hard",
+      "category": "impact_analysis",
+      "question": "若 ConsignServiceImpl.insertConsignRecord 被修改，哪些调用方法、入口端点和外部服务需要回归验证？",
+      "intents": [
+        {
+          "id": "upstream_methods",
+          "label": "调用方法",
+          "oracle_cypher": "MATCH (upstream:方法)-[rel:调用]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "上游方法"
+          ],
+          "accepted_aliases": {
+            "上游方法": [
+              "上游方法",
+              "调用方方法",
+              "调用方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "上游方法": "consign.controller.ConsignController.insertConsign"
+            },
+            {
+              "上游方法": "consign.service.ConsignServiceImpl.updateConsignRecord"
+            }
+          ]
+        },
+        {
+          "id": "entry_apis",
+          "label": "入口端点",
+          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "入口接口",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "入口接口": [
+              "入口接口",
+              "入口API",
+              "接口路径",
+              "API路径"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "入口接口": "/api/v1/consignservice/consigns",
+              "请求方式": "POST"
+            },
+            {
+              "入口接口": "/api/v1/consignservice/consigns",
+              "请求方式": "PUT"
+            }
+          ]
+        },
+        {
+          "id": "downstreams",
+          "label": "外部服务",
+          "oracle_cypher": "MATCH (changed:方法)-[remote:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "外部服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-consign-price-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notification-api-mq-consumers",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "汇总 ts-notification-service 的公开 API、通过 MQ 向它发送消息的服务，以及 email 消息的消费方法。",
+      "intents": [
+        {
+          "id": "apis",
+          "label": "公开 API",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-notification-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "接口路径",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "接口路径": [
+              "接口路径",
+              "API路径",
+              "API端点",
+              "入口接口",
+              "公开资源"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "接口路径": "/api/v1/notifyservice/notification/order_cancel_success",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/notification/order_changed_success",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/notification/order_create_success",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/notification/preserve_success",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/test_send_mail",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/test_send_mq",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/notifyservice/welcome",
+              "请求方式": "GET"
+            }
+          ]
+        },
+        {
+          "id": "senders",
+          "label": "MQ 发送服务",
+          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND sender.服务名称 <> receiver.服务名称 RETURN DISTINCT sender.服务名称 AS 发送服务 ORDER BY 发送服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "发送服务"
+          ],
+          "accepted_aliases": {
+            "发送服务": [
+              "发送服务",
+              "消息发送服务",
+              "上游服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "发送服务": "ts-preserve-other-service"
+            },
+            {
+              "发送服务": "ts-preserve-service"
+            }
+          ]
+        },
+        {
+          "id": "consumers",
+          "label": "email 消费方法",
+          "oracle_cypher": "MATCH (queue:消息队列)-[consume:消息流]->(method:方法) WHERE queue.队列名称 = 'email' AND consume.消息流类型 = '消费' RETURN DISTINCT method.全限定名 AS 消费方法 ORDER BY 消费方法",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "消费方法"
+          ],
+          "accepted_aliases": {
+            "消费方法": [
+              "消费方法",
+              "消费者方法",
+              "方法全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "消费方法": "notification.mq.RabbitReceive.void process"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-service-three-way",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "分析 ts-security-service 的公开 API、REST 下游服务，以及通过 REST 依赖它的上游服务。",
+      "intents": [
+        {
+          "id": "apis",
+          "label": "公开 API",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-security-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "接口路径",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "接口路径": [
+              "接口路径",
+              "API路径",
+              "API端点",
+              "入口接口",
+              "公开资源"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "接口路径": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/orderservice/order/security/{checkDate}/{accountId}",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/securityConfigs",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/securityConfigs",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/securityConfigs",
+              "请求方式": "PUT"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/securityConfigs/{id}",
+              "请求方式": "DELETE"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/welcome",
+              "请求方式": "GET"
+            }
+          ]
+        },
+        {
+          "id": "downstreams",
+          "label": "REST 下游",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-security-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "下游服务": "ts-order-service"
+            }
+          ]
+        },
+        {
+          "id": "upstreams",
+          "label": "REST 上游",
+          "oracle_cypher": "MATCH (source_api:API端点)-[cross:调用]->(:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(caller:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND source_api.目标微服务 = 'ts-security-service' AND caller.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "上游服务"
+          ],
+          "accepted_aliases": {
+            "上游服务": [
+              "上游服务",
+              "调用方服务",
+              "来源服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "上游服务": "ts-preserve-other-service"
+            },
+            {
+              "上游服务": "ts-preserve-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notification-senders-rest-matrix",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "找出通过 MQ 向 ts-notification-service 发送消息的服务，并列出每个发送服务的 REST 下游服务。",
+      "intents": [
+        {
+          "id": "sender_targets",
+          "label": "发送方 REST 依赖",
+          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务), (sender)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND sender.服务名称 <> receiver.服务名称 AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT sender.服务名称 AS 发送服务, api.目标微服务 AS 下游服务 ORDER BY 发送服务, 下游服务",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "发送服务",
+            "下游服务"
+          ],
+          "accepted_aliases": {
+            "发送服务": [
+              "发送服务",
+              "消息发送服务",
+              "上游服务"
+            ],
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-assurance-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-contacts-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-seat-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-security-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-travel2-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-user-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-assurance-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-contacts-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-seat-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-security-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-travel-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-user-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food-delivery-full-message-chain",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "展开 food_delivery 的完整消息链，返回发布方法、发送服务、交换机、消费方法和接收服务。",
+      "intents": [
+        {
+          "id": "chain",
+          "label": "完整消息链",
+          "oracle_cypher": "MATCH (publisher:方法)-[:归属于]->(:类)-[:归属于]->(sender:微服务), (publisher)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法)-[:归属于]->(:类)-[:归属于]->(receiver:微服务) WHERE queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT publisher.全限定名 AS 发布方法, sender.服务名称 AS 发送服务, exchange.交换机名称 AS 交换机名称, consumer.全限定名 AS 消费方法, receiver.服务名称 AS 接收服务 ORDER BY 发布方法, 发送服务",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "发布方法",
+            "发送服务",
+            "交换机名称",
+            "消费方法",
+            "接收服务"
+          ],
+          "accepted_aliases": {
+            "发布方法": [
+              "发布方法",
+              "生产方法",
+              "生产者方法",
+              "方法全限定名"
+            ],
+            "发送服务": [
+              "发送服务",
+              "消息发送服务",
+              "上游服务"
+            ],
+            "交换机名称": [
+              "交换机名称",
+              "消息交换机",
+              "交换机"
+            ],
+            "消费方法": [
+              "消费方法",
+              "消费者方法",
+              "方法全限定名"
+            ],
+            "接收服务": [
+              "接收服务",
+              "消息接收服务",
+              "下游服务"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "发布方法": "foodsearch.mq.RabbitSend.send",
+              "发送服务": "ts-food-service",
+              "交换机名称": "(default)",
+              "消费方法": "delivery.mq.RabbitReceive.void process",
+              "接收服务": "ts-delivery-service"
+            },
+            {
+              "发布方法": "notification.mq.RabbitSend.send",
+              "发送服务": "ts-notification-service",
+              "交换机名称": "(default)",
+              "消费方法": "delivery.mq.RabbitReceive.void process",
+              "接收服务": "ts-delivery-service"
+            },
+            {
+              "发布方法": "preserve.mq.RabbitSend.send",
+              "发送服务": "ts-preserve-service",
+              "交换机名称": "(default)",
+              "消费方法": "delivery.mq.RabbitReceive.void process",
+              "接收服务": "ts-delivery-service"
+            },
+            {
+              "发布方法": "preserveOther.mq.RabbitSend.send",
+              "发送服务": "ts-preserve-other-service",
+              "交换机名称": "(default)",
+              "消费方法": "delivery.mq.RabbitReceive.void process",
+              "接收服务": "ts-delivery-service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-route-implementation-slice",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "从 AdminRouteServiceImpl 出发，返回所属微服务、实现接口和声明方法，并列出该服务的公开 API。",
+      "intents": [
+        {
+          "id": "owner_interface",
+          "label": "所属服务与接口",
+          "oracle_cypher": "MATCH (implementation:类)-[:归属于]->(service:微服务), (implementation)-[:接口实现]->(interface:类) WHERE implementation.全限定名 = 'adminroute.service.AdminRouteServiceImpl' RETURN service.服务名称 AS 服务名称, interface.全限定名 AS 接口全限定名",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "服务名称",
+            "接口全限定名"
+          ],
+          "accepted_aliases": {
+            "服务名称": [
+              "服务名称",
+              "微服务",
+              "所属服务",
+              "目标服务"
+            ],
+            "接口全限定名": [
+              "接口全限定名",
+              "接口名称",
+              "实现接口",
+              "接口"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "服务名称": "ts-admin-route-service",
+              "接口全限定名": "adminroute.service.AdminRouteService"
+            }
+          ]
+        },
+        {
+          "id": "methods",
+          "label": "声明方法",
+          "oracle_cypher": "MATCH (method:方法)-[:归属于]->(implementation:类) WHERE implementation.全限定名 = 'adminroute.service.AdminRouteServiceImpl' RETURN DISTINCT method.全限定名 AS 方法全限定名 ORDER BY 方法全限定名",
+          "comparison_mode": "collected_set",
+          "expected_columns": [
+            "方法全限定名"
+          ],
+          "accepted_aliases": {
+            "方法全限定名": [
+              "方法全限定名",
+              "全限定名",
+              "完整方法名",
+              "方法"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "方法全限定名": "adminroute.service.AdminRouteServiceImpl.checkStationsExists"
+            },
+            {
+              "方法全限定名": "adminroute.service.AdminRouteServiceImpl.createAndModifyRoute"
+            },
+            {
+              "方法全限定名": "adminroute.service.AdminRouteServiceImpl.deleteRoute"
+            },
+            {
+              "方法全限定名": "adminroute.service.AdminRouteServiceImpl.getAllRoutes"
+            }
+          ]
+        },
+        {
+          "id": "service_apis",
+          "label": "服务公开 API",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "接口路径",
+            "请求方式"
+          ],
+          "accepted_aliases": {
+            "接口路径": [
+              "接口路径",
+              "API路径",
+              "API端点",
+              "入口接口",
+              "公开资源"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "接口路径": "/api/v1/adminrouteservice/adminroute",
+              "请求方式": "GET"
+            },
+            {
+              "接口路径": "/api/v1/adminrouteservice/adminroute",
+              "请求方式": "POST"
+            },
+            {
+              "接口路径": "/api/v1/adminrouteservice/adminroute/{routeId}",
+              "请求方式": "DELETE"
+            },
+            {
+              "接口路径": "/api/v1/adminrouteservice/welcome",
+              "请求方式": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-basic-architecture-aggregates",
+      "difficulty": "hard",
+      "category": "compound_architecture",
+      "question": "对 ts-admin-basic-info-service 同时给出上游 API 的 HTTP 方法分布、REST 目标调用数和接口实现类。",
+      "intents": [
+        {
+          "id": "api_counts",
+          "label": "API 方法分布",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS 调用关系数 ORDER BY 请求方式",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "请求方式",
+            "调用关系数"
+          ],
+          "accepted_aliases": {
+            "请求方式": [
+              "请求方式",
+              "HTTP方法",
+              "HTTP动词"
+            ],
+            "调用关系数": [
+              "调用关系数",
+              "调用次数",
+              "关系数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "请求方式": "DELETE",
+              "调用关系数": 5
+            },
+            {
+              "请求方式": "GET",
+              "调用关系数": 6
+            },
+            {
+              "请求方式": "POST",
+              "调用关系数": 5
+            },
+            {
+              "请求方式": "PUT",
+              "调用关系数": 5
+            }
+          ]
+        },
+        {
+          "id": "rest_counts",
+          "label": "REST 目标统计",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "下游服务",
+            "调用关系数"
+          ],
+          "accepted_aliases": {
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目的应用",
+              "被调用服务"
+            ],
+            "调用关系数": [
+              "调用关系数",
+              "调用次数",
+              "关系数量",
+              "数量"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "下游服务": "ts-config-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-contacts-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-price-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-station-service",
+              "调用关系数": 4
+            },
+            {
+              "下游服务": "ts-train-service",
+              "调用关系数": 4
+            }
+          ]
+        },
+        {
+          "id": "implementations",
+          "label": "接口实现类",
+          "oracle_cypher": "MATCH (implementation:类)-[:接口实现]->(:类), (implementation)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-basic-info-service' RETURN DISTINCT implementation.全限定名 AS 实现类 ORDER BY 实现类",
+          "comparison_mode": "value_set",
+          "expected_columns": [
+            "实现类"
+          ],
+          "accepted_aliases": {
+            "实现类": [
+              "实现类",
+              "接口实现类",
+              "类全限定名"
+            ]
+          },
+          "expected_snapshot": [
+            {
+              "实现类": "adminbasic.service.AdminBasicInfoServiceImpl"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

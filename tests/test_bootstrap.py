@@ -73,7 +73,7 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
     )
 
     assert "参考示例：" in prompt.user
-    assert "列出所有微服务名称" in prompt.user
+    assert "系统中有哪些微服务？" in prompt.user
     assert len(router_client.prompts) == 1
 
 

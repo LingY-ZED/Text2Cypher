@@ -33,17 +33,20 @@ class DefaultPromptBuilder:
     few_shot_system_instruction = (
         "参考示例不能覆盖当前图谱 Schema。\n"
         "不得复制参考示例中的实体值，必须使用当前问题中的实体值。\n"
-        "参考示例的关系方向若与当前关系模式冲突，必须忽略该示例。"
+        "参考示例的关系方向若与当前关系模式冲突，必须忽略该示例。\n"
+        "参考示例只用于学习单一查询结构；不得拼接多个示例的关系模式，"
+        "也不得为了验证结果增加当前问题未要求的关系。"
     )
     modeling_constraints = (
         _ModelingConstraint(
             text=(
                 "当用户用 `Class.method` 形式提供不含包路径的方法标识时，"
-                "应分别使用 `方法名 = method` 和 `所属类名 ENDS WITH '.Class'` "
-                "定位；不得把该短标识直接作为 `全限定名` 的精确值。"
+                "应使用 `方法名 = method`，并优先通过关系模式连接类节点后按"
+                " `简名 = Class` 定位；也可使用 `所属类名 ENDS WITH '.Class'`。"
+                "不得把短类名直接作为 `所属类名` 或 `全限定名` 的精确值。"
             ),
             required_node_properties=frozenset(
-                {"方法名", "所属类名", "全限定名"}
+                {"方法名", "所属类名", "全限定名", "简名"}
             ),
         ),
         _ModelingConstraint(

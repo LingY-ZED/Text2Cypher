@@ -1,0 +1,77 @@
+"""Tests for official metrics, latency, stability, and recovery gates."""
+
+from __future__ import annotations
+
+from evaluation.metrics import calculate_metrics
+
+
+def _record(index: int, *, semantic: bool = True) -> dict[str, object]:
+    return {
+        "case_id": f"case-{index % 30}",
+        "difficulty": ("simple", "medium", "hard")[index % 3],
+        "category": f"category-{index % 5}",
+        "duration_seconds": float(index + 1),
+        "generation_success": True,
+        "syntax_success": True,
+        "execution_success": True,
+        "semantic_success": semantic,
+        "initial_syntax_success": True,
+        "initial_execution_success": True,
+        "nonempty_success": True,
+        "recovery_events": [],
+    }
+
+
+def test_calculates_ninety_sample_rates_nearest_rank_and_stability() -> None:
+    records = [_record(index, semantic=index < 77) for index in range(90)]
+    metrics = calculate_metrics(
+        records,
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["sample_count"] == 90
+    assert metrics["official"]["query_accuracy"]["count"] == 77
+    assert metrics["official"]["query_accuracy"]["passed"] is True
+    assert metrics["official"]["average_response_seconds"] == 45.5
+    assert metrics["official"]["p95_response_seconds"]["value"] == 86.0
+    assert metrics["quality_gate_passed"] is False
+    assert metrics["diagnostics"]["stability"]["cases"]["case-0"] == {
+        "passed": 3,
+        "runs": 3,
+        "stable": True,
+    }
+
+
+def test_zero_natural_recovery_is_na_and_not_a_false_success() -> None:
+    metrics = calculate_metrics(
+        [_record(0)],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    recovery = metrics["official"]["error_recovery_rate"]
+    assert recovery["value"] is None
+    assert recovery["passed"] is None
+    assert metrics["quality_gate_passed"] is True
+
+
+def test_natural_recovery_and_transport_retries_are_counted_separately() -> None:
+    record = _record(0)
+    record["recovery_events"] = [
+        {"event": "cypher_correction_started", "reason": "validation"},
+        {"event": "cypher_correction_succeeded", "reason": "validation"},
+        {"event": "retry_scheduled", "reason": "http_503"},
+        {"event": "retry_succeeded", "reason": "http_503"},
+    ]
+
+    metrics = calculate_metrics(
+        [record],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["official"]["error_recovery_rate"]["value"] == 1.0
+    assert metrics["diagnostics"]["correction_reasons"] == {"validation": 1}
+    assert metrics["diagnostics"]["transport_retries"] == {
+        "scheduled": 1,
+        "recovered": 1,
+        "exhausted": 0,
+    }
