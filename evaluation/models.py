@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -32,6 +32,21 @@ class ComparisonMode(StrEnum):
     COLLECTED_SET = "collected_set"
 
 
+class ValueNormalizer(StrEnum):
+    """Explicit value normalization allowed by an evaluation intent."""
+
+    IDENTITY = "identity"
+    QUALIFIED_NAME_TAIL = "qualified_name_tail"
+
+
+class SemanticOutcome(StrEnum):
+    """Three-level semantic outcome for one evaluated question run."""
+
+    FULL = "full"
+    PARTIAL = "partial"
+    INCORRECT = "incorrect"
+
+
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
 
@@ -46,6 +61,7 @@ class EvaluationIntent:
     expected_columns: tuple[str, ...]
     accepted_aliases: Mapping[str, tuple[str, ...]]
     expected_snapshot: tuple[Mapping[str, Any], ...]
+    value_normalizers: Mapping[str, ValueNormalizer] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", _text(self.id, "intent id"))
@@ -74,6 +90,24 @@ class EvaluationIntent:
         if set(self.accepted_aliases) != set(columns):
             raise ValueError("accepted_aliases must cover exactly expected_columns")
         object.__setattr__(self, "accepted_aliases", MappingProxyType(aliases))
+        unknown_normalizers = set(self.value_normalizers) - set(columns)
+        if unknown_normalizers:
+            raise ValueError("value_normalizers may only reference expected_columns")
+        normalizers: dict[str, ValueNormalizer] = {}
+        for column in columns:
+            try:
+                normalizers[column] = ValueNormalizer(
+                    self.value_normalizers.get(column, ValueNormalizer.IDENTITY)
+                )
+            except ValueError as error:
+                raise ValueError(
+                    f"value normalizer for {column} is invalid"
+                ) from error
+        object.__setattr__(
+            self,
+            "value_normalizers",
+            MappingProxyType(normalizers),
+        )
         snapshot = tuple(MappingProxyType(dict(row)) for row in self.expected_snapshot)
         if not snapshot:
             raise ValueError("expected_snapshot must be non-empty")

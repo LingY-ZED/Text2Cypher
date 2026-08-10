@@ -385,6 +385,7 @@ def _case_record(
             and all(sub_query.result.rows for sub_query in response.sub_queries)
         ),
         "semantic_success": verdict.matched,
+        "semantic_outcome": verdict.semantic_outcome.value,
         "intent_verdicts": [asdict(item) for item in verdict.intents],
         "failure_stage": _failure_stage(
             recorder.events,
@@ -582,6 +583,7 @@ def _write_csv(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
         "execution_success",
         "nonempty_success",
         "semantic_success",
+        "semantic_outcome",
         "failure_stage",
     )
     with path.open("w", encoding="utf-8-sig", newline="") as handle:

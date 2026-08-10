@@ -8,6 +8,8 @@ from collections.abc import Mapping, Sequence
 from statistics import fmean
 from typing import Any
 
+from evaluation.models import SemanticOutcome
+
 RATE_TARGETS = {
     "generation_rate": 0.95,
     "syntax_rate": 0.90,
@@ -70,7 +72,15 @@ def calculate_metrics(
     )
     metrics["official"]["error_recovery_rate"] = natural_recovery
 
+    outcome_counts = Counter(_semantic_outcome(record) for record in records)
+    intent_matched, intent_total = _intent_totals(records)
+
     metrics["diagnostics"] = {
+        "semantic_outcomes": {
+            outcome.value: _plain_rate(outcome_counts[outcome], total)
+            for outcome in SemanticOutcome
+        },
+        "intent_coverage": _plain_rate(intent_matched, intent_total),
         "initial_syntax_rate": _plain_rate(
             sum(bool(record.get("initial_syntax_success")) for record in records),
             total,
@@ -171,8 +181,11 @@ def _group_rates(
     grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for record in records:
         grouped[str(record[field])].append(record)
-    return {
-        key: {
+    output: dict[str, dict[str, Any]] = {}
+    for key, values in sorted(grouped.items()):
+        outcomes = Counter(_semantic_outcome(value) for value in values)
+        intent_matched, intent_total = _intent_totals(values)
+        output[key] = {
             "samples": len(values),
             "generation_rate": _plain_rate(
                 sum(bool(value.get("generation_success")) for value in values),
@@ -186,9 +199,69 @@ def _group_rates(
                 sum(bool(value.get("semantic_success")) for value in values),
                 len(values),
             )["value"],
+            "full_rate": _plain_rate(
+                outcomes[SemanticOutcome.FULL],
+                len(values),
+            )["value"],
+            "partial_rate": _plain_rate(
+                outcomes[SemanticOutcome.PARTIAL],
+                len(values),
+            )["value"],
+            "incorrect_rate": _plain_rate(
+                outcomes[SemanticOutcome.INCORRECT],
+                len(values),
+            )["value"],
+            "intent_coverage": _plain_rate(intent_matched, intent_total)["value"],
         }
-        for key, values in sorted(grouped.items())
-    }
+    return output
+
+
+def _semantic_outcome(record: Mapping[str, Any]) -> SemanticOutcome:
+    raw_outcome = record.get("semantic_outcome")
+    try:
+        return SemanticOutcome(str(raw_outcome))
+    except ValueError:
+        pass
+    verdicts = record.get("intent_verdicts")
+    if isinstance(verdicts, Sequence) and not isinstance(verdicts, (str, bytes)):
+        matched = [
+            bool(verdict.get("matched"))
+            for verdict in verdicts
+            if isinstance(verdict, Mapping)
+        ]
+        if matched:
+            if all(matched):
+                return SemanticOutcome.FULL
+            if any(matched):
+                return SemanticOutcome.PARTIAL
+            return SemanticOutcome.INCORRECT
+    return (
+        SemanticOutcome.FULL
+        if record.get("semantic_success")
+        else SemanticOutcome.INCORRECT
+    )
+
+
+def _intent_totals(
+    records: Sequence[Mapping[str, Any]],
+) -> tuple[int, int]:
+    matched = 0
+    total = 0
+    for record in records:
+        verdicts = record.get("intent_verdicts")
+        valid_verdicts = (
+            [verdict for verdict in verdicts if isinstance(verdict, Mapping)]
+            if isinstance(verdicts, Sequence)
+            and not isinstance(verdicts, (str, bytes))
+            else []
+        )
+        if valid_verdicts:
+            matched += sum(bool(verdict.get("matched")) for verdict in valid_verdicts)
+            total += len(valid_verdicts)
+        else:
+            matched += int(bool(record.get("semantic_success")))
+            total += 1
+    return matched, total
 
 
 def _stability(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

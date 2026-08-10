@@ -15,6 +15,10 @@ def _record(index: int, *, semantic: bool = True) -> dict[str, object]:
         "syntax_success": True,
         "execution_success": True,
         "semantic_success": semantic,
+        "semantic_outcome": "full" if semantic else "incorrect",
+        "intent_verdicts": [
+            {"intent_id": "intent", "matched": semantic, "reason": "result"}
+        ],
         "initial_syntax_success": True,
         "initial_execution_success": True,
         "nonempty_success": True,
@@ -75,3 +79,42 @@ def test_natural_recovery_and_transport_retries_are_counted_separately() -> None
         "recovered": 1,
         "exhausted": 0,
     }
+
+
+def test_three_level_outcomes_and_intent_coverage_are_diagnostic_only() -> None:
+    full = _record(0)
+    full["intent_verdicts"] = [
+        {"intent_id": "a", "matched": True},
+        {"intent_id": "b", "matched": True},
+    ]
+    partial = _record(1, semantic=False)
+    partial["semantic_outcome"] = "partial"
+    partial["intent_verdicts"] = [
+        {"intent_id": "a", "matched": True},
+        {"intent_id": "b", "matched": False},
+    ]
+    incorrect = _record(2, semantic=False)
+    incorrect["intent_verdicts"] = [
+        {"intent_id": "a", "matched": False},
+        {"intent_id": "b", "matched": False},
+    ]
+
+    metrics = calculate_metrics(
+        [full, partial, incorrect],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["official"]["query_accuracy"]["count"] == 1
+    assert metrics["diagnostics"]["semantic_outcomes"] == {
+        "full": {"count": 1, "total": 3, "value": 0.333333},
+        "partial": {"count": 1, "total": 3, "value": 0.333333},
+        "incorrect": {"count": 1, "total": 3, "value": 0.333333},
+    }
+    assert metrics["diagnostics"]["intent_coverage"] == {
+        "count": 3,
+        "total": 6,
+        "value": 0.5,
+    }
+    assert metrics["diagnostics"]["by_difficulty"]["medium"][
+        "partial_rate"
+    ] == 1.0

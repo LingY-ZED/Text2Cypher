@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 from evaluation.dataset import load_cases
-from evaluation.models import ComparisonMode, Difficulty
+from evaluation.models import ComparisonMode, Difficulty, ValueNormalizer
 
 
 def test_dataset_has_fixed_size_distribution_and_unique_questions() -> None:
@@ -39,6 +39,82 @@ def test_every_intent_has_a_readonly_nonempty_frozen_contract() -> None:
             )
 
     assert modes == set(ComparisonMode)
+
+
+def test_corrected_evaluation_contracts_are_explicit() -> None:
+    cases = {case.id: case for case in load_cases()}
+
+    config_owner = cases["config-api-owner"].intents[0]
+    assert "所属微服务" in config_owner.accepted_aliases["服务名称"]
+
+    method_counts = cases["admin-route-api-method-counts"].intents[0]
+    assert method_counts.expected_columns == ("请求方式", "API数量")
+    assert "接口数量" in method_counts.accepted_aliases["API数量"]
+
+    email_consumers = cases["email-consumer-methods"].intents[0]
+    assert "消费方法全限定名" in email_consumers.accepted_aliases["消费方法"]
+
+    implementation_methods = next(
+        intent
+        for intent in cases["admin-route-implementation-slice"].intents
+        if intent.id == "methods"
+    )
+    assert implementation_methods.value_normalizers["方法全限定名"] is (
+        ValueNormalizer.QUALIFIED_NAME_TAIL
+    )
+
+    implementations = next(
+        intent
+        for intent in cases["admin-basic-architecture-aggregates"].intents
+        if intent.id == "implementations"
+    )
+    assert "接口实现类全限定名" in implementations.accepted_aliases["实现类"]
+
+
+def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:
+    cases = {case.id: case for case in load_cases()}
+
+    callers = cases["order-other-rest-callers"].intents[0]
+    assert "远程调用" in callers.oracle_cypher
+    assert "跨服务调用" not in callers.oracle_cypher
+    assert {row["上游服务"] for row in callers.expected_snapshot} == {
+        "ts-admin-order-service",
+        "ts-cancel-service",
+        "ts-execute-service",
+        "ts-inside-payment-service",
+        "ts-rebook-service",
+        "ts-security-service",
+    }
+
+    impact = next(
+        intent
+        for intent in cases["consign-insert-impact"].intents
+        if intent.id == "upstream_methods"
+    )
+    assert "[:调用*1..5]" in impact.oracle_cypher
+    assert any(
+        row["上游方法"] == "consign.controller.ConsignController.updateConsign"
+        for row in impact.expected_snapshot
+    )
+
+    senders = next(
+        intent
+        for intent in cases["notification-api-mq-consumers"].intents
+        if intent.id == "senders"
+    )
+    assert "sender.服务名称 <> receiver.服务名称" not in senders.oracle_cypher
+    assert any(
+        row["发送服务"] == "ts-notification-service"
+        for row in senders.expected_snapshot
+    )
+
+    security_upstreams = next(
+        intent
+        for intent in cases["security-service-three-way"].intents
+        if intent.id == "upstreams"
+    )
+    assert "远程调用" in security_upstreams.oracle_cypher
+    assert "跨服务调用" not in security_upstreams.oracle_cypher
 
 
 def test_questions_do_not_reuse_the_previous_comparison_set() -> None:

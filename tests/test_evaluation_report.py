@@ -8,7 +8,7 @@ from evaluation.metrics import calculate_metrics
 from evaluation.report import render_report
 
 
-def test_report_contains_metrics_and_four_valid_png_charts(tmp_path: Path) -> None:
+def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> None:
     record = {
         "case_id": "case",
         "difficulty": "simple",
@@ -21,6 +21,7 @@ def test_report_contains_metrics_and_four_valid_png_charts(tmp_path: Path) -> No
         "execution_success": True,
         "nonempty_success": True,
         "semantic_success": True,
+        "semantic_outcome": "full",
         "intent_verdicts": [
             {"intent_id": "intent", "matched": True, "reason": "matched"}
         ],
@@ -50,9 +51,12 @@ def test_report_contains_metrics_and_four_valid_png_charts(tmp_path: Path) -> No
 
     report = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "Cypher 生成率" in report
+    assert "三级语义结果" in report
+    assert "Intent 覆盖率" in report
     assert "100.0%" in report
     for name in (
         "quality-gates.png",
+        "semantic-outcomes.png",
         "difficulty-and-category.png",
         "latency-distribution.png",
         "recovery-outcomes.png",

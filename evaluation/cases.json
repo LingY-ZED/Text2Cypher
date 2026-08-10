@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "id": "queue-owner-services",
@@ -26,6 +26,7 @@
               "服务名称",
               "微服务",
               "所属服务",
+              "所属微服务",
               "目标服务"
             ]
           },
@@ -199,6 +200,7 @@
               "服务名称",
               "微服务",
               "所属服务",
+              "所属微服务",
               "目标服务"
             ]
           },
@@ -519,7 +521,7 @@
         {
           "id": "callers",
           "label": "REST 上游服务",
-          "oracle_cypher": "MATCH (source_api:API端点)-[cross:调用]->(:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(caller:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND source_api.目标微服务 = 'ts-order-other-service' AND caller.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE remote.调用类型 = '远程调用' AND api.API类型 = '下游API' AND api.目标微服务 = 'ts-order-other-service' RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游服务"
@@ -546,6 +548,9 @@
             },
             {
               "上游服务": "ts-rebook-service"
+            },
+            {
+              "上游服务": "ts-security-service"
             }
           ]
         }
@@ -645,6 +650,7 @@
             "消费方法": [
               "消费方法",
               "消费者方法",
+              "消费方法全限定名",
               "方法全限定名"
             ]
           },
@@ -713,11 +719,11 @@
         {
           "id": "method_counts",
           "label": "HTTP 方法统计",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS 调用关系数 ORDER BY 请求方式",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS API数量 ORDER BY 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "请求方式",
-            "调用关系数"
+            "API数量"
           ],
           "accepted_aliases": {
             "请求方式": [
@@ -725,25 +731,24 @@
               "HTTP方法",
               "HTTP动词"
             ],
-            "调用关系数": [
-              "调用关系数",
-              "调用次数",
-              "关系数量",
+            "API数量": [
+              "API数量",
+              "接口数量",
               "数量"
             ]
           },
           "expected_snapshot": [
             {
               "请求方式": "DELETE",
-              "调用关系数": 1
+              "API数量": 1
             },
             {
               "请求方式": "GET",
-              "调用关系数": 2
+              "API数量": 2
             },
             {
               "请求方式": "POST",
-              "调用关系数": 1
+              "API数量": 1
             }
           ]
         }
@@ -1162,7 +1167,7 @@
         {
           "id": "upstream_methods",
           "label": "调用方法",
-          "oracle_cypher": "MATCH (upstream:方法)-[rel:调用]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (upstream:方法)-[:调用*1..5]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游方法"
@@ -1178,6 +1183,9 @@
           "expected_snapshot": [
             {
               "上游方法": "consign.controller.ConsignController.insertConsign"
+            },
+            {
+              "上游方法": "consign.controller.ConsignController.updateConsign"
             },
             {
               "上游方法": "consign.service.ConsignServiceImpl.updateConsignRecord"
@@ -1305,7 +1313,7 @@
         {
           "id": "senders",
           "label": "MQ 发送服务",
-          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND sender.服务名称 <> receiver.服务名称 RETURN DISTINCT sender.服务名称 AS 发送服务 ORDER BY 发送服务",
+          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' RETURN DISTINCT sender.服务名称 AS 发送服务 ORDER BY 发送服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "发送服务"
@@ -1318,6 +1326,9 @@
             ]
           },
           "expected_snapshot": [
+            {
+              "发送服务": "ts-notification-service"
+            },
             {
               "发送服务": "ts-preserve-other-service"
             },
@@ -1338,6 +1349,7 @@
             "消费方法": [
               "消费方法",
               "消费者方法",
+              "消费方法全限定名",
               "方法全限定名"
             ]
           },
@@ -1437,7 +1449,7 @@
         {
           "id": "upstreams",
           "label": "REST 上游",
-          "oracle_cypher": "MATCH (source_api:API端点)-[cross:调用]->(:API端点), (source_api)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(caller:微服务) WHERE cross.调用类型 = '跨服务调用' AND source_api.API类型 = '下游API' AND source_api.目标微服务 = 'ts-security-service' AND caller.服务名称 <> source_api.目标微服务 RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE remote.调用类型 = '远程调用' AND api.API类型 = '下游API' AND api.目标微服务 = 'ts-security-service' RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游服务"
@@ -1469,7 +1481,7 @@
         {
           "id": "sender_targets",
           "label": "发送方 REST 依赖",
-          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务), (sender)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND sender.服务名称 <> receiver.服务名称 AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT sender.服务名称 AS 发送服务, api.目标微服务 AS 下游服务 ORDER BY 发送服务, 下游服务",
+          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务), (sender)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT sender.服务名称 AS 发送服务, api.目标微服务 AS 下游服务 ORDER BY 发送服务, 下游服务",
           "comparison_mode": "row_set",
           "expected_columns": [
             "发送服务",
@@ -1640,6 +1652,7 @@
               "服务名称",
               "微服务",
               "所属服务",
+              "所属微服务",
               "目标服务"
             ],
             "接口全限定名": [
@@ -1669,8 +1682,12 @@
               "方法全限定名",
               "全限定名",
               "完整方法名",
+              "声明方法",
               "方法"
             ]
+          },
+          "value_normalizers": {
+            "方法全限定名": "qualified_name_tail"
           },
           "expected_snapshot": [
             {
@@ -1740,11 +1757,11 @@
         {
           "id": "api_counts",
           "label": "API 方法分布",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS 调用关系数 ORDER BY 请求方式",
+          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS API数量 ORDER BY 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "请求方式",
-            "调用关系数"
+            "API数量"
           ],
           "accepted_aliases": {
             "请求方式": [
@@ -1752,29 +1769,28 @@
               "HTTP方法",
               "HTTP动词"
             ],
-            "调用关系数": [
-              "调用关系数",
-              "调用次数",
-              "关系数量",
+            "API数量": [
+              "API数量",
+              "接口数量",
               "数量"
             ]
           },
           "expected_snapshot": [
             {
               "请求方式": "DELETE",
-              "调用关系数": 5
+              "API数量": 5
             },
             {
               "请求方式": "GET",
-              "调用关系数": 6
+              "API数量": 6
             },
             {
               "请求方式": "POST",
-              "调用关系数": 5
+              "API数量": 5
             },
             {
               "请求方式": "PUT",
-              "调用关系数": 5
+              "API数量": 5
             }
           ]
         },
@@ -1796,6 +1812,7 @@
             ],
             "调用关系数": [
               "调用关系数",
+              "调用数",
               "调用次数",
               "关系数量",
               "数量"
@@ -1836,6 +1853,7 @@
             "实现类": [
               "实现类",
               "接口实现类",
+              "接口实现类全限定名",
               "类全限定名"
             ]
           },

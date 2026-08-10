@@ -29,24 +29,47 @@ def render_report(
     charts = output / "charts"
     charts.mkdir(parents=True, exist_ok=True)
     _render_charts(charts, records, metrics)
+    diagnostics = metrics["diagnostics"]
     run_summary = (
         f"- 题目：30；每题运行：{metadata['runs_per_case']} 次；"
         f"总样本：{metrics['sample_count']}"
     )
+    raw_regrade = metadata.get("regrade")
+    regrade = raw_regrade if isinstance(raw_regrade, Mapping) else None
     lines = [
-        "# Text2Cypher Week 4 完整评测报告",
+        (
+            "# Text2Cypher Week 4 历史结果重判报告"
+            if regrade is not None
+            else "# Text2Cypher Week 4 完整评测报告"
+        ),
         "",
         f"- 分支：`{metadata['revision']}`",
         f"- 提交：`{metadata['revision_sha']}`",
         f"- 模型：`{metadata['model']}`",
         run_summary,
         f"- Schema 指纹：`{metadata.get('schema_fingerprint', 'unknown')}`",
-        "",
-        "## 质量门",
-        "",
-        "| 指标 | 结果 | 目标 | 判定 |",
-        "| --- | ---: | ---: | --- |",
     ]
+    if regrade is not None:
+        lines.extend(
+            (
+                f"- 原始运行：`{regrade['source_run']}`",
+                f"- 判定数据集：`{regrade['dataset_sha256']}`",
+                f"- 语义正确数：{regrade['old_matched']} → "
+                f"{regrade['new_matched']}",
+                f"- 判定翻转：{regrade['flip_count']} 个题次",
+                "- 说明：仅依据已保存的最终查询结果重新判定，"
+                "未调用 LLM 或 Neo4j。",
+            )
+        )
+    lines.extend(
+        (
+            "",
+            "## 质量门",
+            "",
+            "| 指标 | 结果 | 目标 | 判定 |",
+            "| --- | ---: | ---: | --- |",
+        )
+    )
     official = metrics["official"]
     for key, label in (
         ("generation_rate", "Cypher 生成率"),
@@ -87,25 +110,55 @@ def render_report(
             "",
             "图中柱形为实际百分比，菱形标记为目标值；自然恢复无样本时显示 N/A。",
             "",
+            "## 三级语义结果",
+            "",
+            "![完全正确、部分正确与错误分布](charts/semantic-outcomes.png)",
+            "",
+            "该图按题次展示三级结果；正式查询正确率仍只统计完全正确。",
+            "",
+            "| 结果 | 题次数 | 比例 |",
+            "| --- | ---: | ---: |",
+        )
+    )
+    for outcome, label in (
+        ("full", "完全正确"),
+        ("partial", "部分正确"),
+        ("incorrect", "错误"),
+    ):
+        value = diagnostics["semantic_outcomes"][outcome]
+        lines.append(
+            f"| {label} | {value['count']}/{value['total']} | "
+            f"{_percent(value['value'])} |"
+        )
+    lines.extend(
+        (
+            "",
+            f"- Intent 覆盖率：{_format_rate(diagnostics['intent_coverage'])}",
+            "- 部分正确表示至少一个、但并非全部 Oracle intent 通过。",
+            "",
             "## 难度与类别",
             "",
             "![难度与类别表现](charts/difficulty-and-category.png)",
             "",
-            "上图比较三档难度的执行率和正确率；下图展示各类别的生成、执行和语义正确率。",
+            "上图比较三档难度的执行率、完整正确率和 Intent 覆盖率；"
+            "下图展示各类别的完整、部分及 Intent 覆盖表现。",
             "",
-            "| 难度 | 样本数 | 生成率 | 执行率 | 查询正确率 |",
-            "| --- | ---: | ---: | ---: | ---: |",
+            "| 难度 | 样本数 | 生成率 | 执行率 | 完整正确率 | "
+            "部分正确率 | Intent 覆盖率 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         )
     )
     for difficulty, value in metrics["diagnostics"]["by_difficulty"].items():
         generation_rate = _percent(value["generation_rate"])
         execution_rate = _percent(value["execution_rate"])
         query_accuracy = _percent(value["query_accuracy"])
+        partial_rate = _percent(value["partial_rate"])
+        intent_coverage = _percent(value["intent_coverage"])
         lines.append(
             f"| {difficulty} | {value['samples']} | {generation_rate} | "
-            f"{execution_rate} | {query_accuracy} |"
+            f"{execution_rate} | {query_accuracy} | {partial_rate} | "
+            f"{intent_coverage} |"
         )
-    diagnostics = metrics["diagnostics"]
     initial_syntax = _format_rate(diagnostics["initial_syntax_rate"])
     initial_execution = _format_rate(diagnostics["initial_execution_rate"])
     nonempty = _format_rate(diagnostics["nonempty_result_rate"])
@@ -154,38 +207,74 @@ def render_report(
             f"{'是' if value['stable'] else '否'} |"
         )
 
-    failures = [record for record in records if not record.get("semantic_success")]
-    lines.extend(("", "## 失败案例", ""))
-    if not failures:
-        lines.append("全部题次均与 Oracle 一致。")
+    partial_records = [
+        record for record in records if _record_outcome(record) == "partial"
+    ]
+    incorrect_records = [
+        record for record in records if _record_outcome(record) == "incorrect"
+    ]
+    lines.extend(("", "## 部分正确案例", ""))
+    if not partial_records:
+        lines.append("没有部分正确题次。")
     else:
-        for record in failures:
-            intent_summary = "; ".join(
-                _intent_summary(item) for item in record.get("intent_verdicts", ())
-            )
-            lines.extend(
-                (
-                    f"### {record['case_id']} / run {record['run']}",
-                    "",
-                    f"- 阶段：`{record.get('failure_stage')}`",
-                    f"- 耗时：{record['duration_seconds']:.3f} 秒",
-                    f"- 错误：`{_error_text(record.get('error'))}`",
-                    "- 意图判定：" + intent_summary,
-                    "",
-                )
-            )
-            for sub_query in record.get("sub_queries", ()):
-                lines.extend(
-                    (
-                        f"子问题：{sub_query['question']}",
-                        "",
-                        "```cypher",
-                        str(sub_query["cypher"]),
-                        "```",
-                        "",
-                    )
-                )
+        for record in partial_records:
+            _append_result_detail(lines, record)
+    lines.extend(("", "## 错误案例", ""))
+    if not incorrect_records:
+        lines.append("没有完全错误题次。")
+    else:
+        for record in incorrect_records:
+            _append_result_detail(lines, record)
     (output / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _append_result_detail(
+    lines: list[str],
+    record: Mapping[str, Any],
+) -> None:
+    intent_summary = "; ".join(
+        _intent_summary(item) for item in record.get("intent_verdicts", ())
+    )
+    lines.extend(
+        (
+            f"### {record['case_id']} / run {record['run']}",
+            "",
+            f"- 阶段：`{record.get('failure_stage')}`",
+            f"- 耗时：{record['duration_seconds']:.3f} 秒",
+            f"- 错误：`{_error_text(record.get('error'))}`",
+            "- 意图判定：" + intent_summary,
+            "",
+        )
+    )
+    for sub_query in record.get("sub_queries", ()):
+        lines.extend(
+            (
+                f"子问题：{sub_query['question']}",
+                "",
+                "```cypher",
+                str(sub_query["cypher"]),
+                "```",
+                "",
+            )
+        )
+
+
+def _record_outcome(record: Mapping[str, Any]) -> str:
+    outcome = record.get("semantic_outcome")
+    if outcome in {"full", "partial", "incorrect"}:
+        return str(outcome)
+    verdicts = [
+        item
+        for item in record.get("intent_verdicts", ())
+        if isinstance(item, Mapping)
+    ]
+    if verdicts:
+        passed = sum(bool(item.get("matched")) for item in verdicts)
+        if passed == len(verdicts):
+            return "full"
+        if passed:
+            return "partial"
+    return "full" if record.get("semantic_success") else "incorrect"
 
 
 def _render_drift_report(
@@ -242,6 +331,7 @@ def _render_charts(
     plt.rcParams["axes.unicode_minus"] = False
 
     _quality_chart(plt, charts / "quality-gates.png", metrics)
+    _semantic_outcome_chart(plt, charts / "semantic-outcomes.png", metrics)
     _difficulty_category_chart(
         plt,
         np,
@@ -250,6 +340,41 @@ def _render_charts(
     )
     _latency_chart(plt, charts / "latency-distribution.png", records, metrics)
     _recovery_chart(plt, charts / "recovery-outcomes.png", metrics)
+
+
+def _semantic_outcome_chart(
+    plt: Any,
+    path: Path,
+    metrics: Mapping[str, Any],
+) -> None:
+    outcomes = metrics["diagnostics"]["semantic_outcomes"]
+    labels = ("完全正确", "部分正确", "错误")
+    keys = ("full", "partial", "incorrect")
+    values = [outcomes[key]["count"] for key in keys]
+    colors = ("#15803d", "#f59e0b", "#b91c1c")
+    figure, axis = plt.subplots(figsize=(9, 4.8))
+    left = 0
+    total = sum(values)
+    for label, value, color in zip(labels, values, colors, strict=True):
+        axis.barh(["全部题次"], [value], left=left, label=label, color=color)
+        if value:
+            axis.text(
+                left + value / 2,
+                0,
+                f"{value}\n{value / total:.1%}",
+                ha="center",
+                va="center",
+                color="white" if color != "#f59e0b" else "black",
+                fontweight="bold",
+            )
+        left += value
+    axis.set_xlim(0, total)
+    axis.set_xlabel("题次数")
+    axis.set_title("三级语义结果分布")
+    axis.legend(ncols=3, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+    figure.tight_layout()
+    figure.savefig(path, dpi=160)
+    plt.close(figure)
 
 
 def _quality_chart(plt: Any, path: Path, metrics: Mapping[str, Any]) -> None:
@@ -296,14 +421,24 @@ def _difficulty_category_chart(
     )
     labels = list(difficulties)
     positions = np.arange(len(labels))
-    width = 0.34
+    width = 0.25
     execution = [difficulties[label]["execution_rate"] * 100 for label in labels]
     accuracy = [difficulties[label]["query_accuracy"] * 100 for label in labels]
+    intent_coverage = [
+        difficulties[label]["intent_coverage"] * 100 for label in labels
+    ]
     first = axes[0].bar(
-        positions - width / 2, execution, width, label="执行率", color="#0f766e"
+        positions - width, execution, width, label="执行率", color="#0f766e"
     )
     second = axes[0].bar(
-        positions + width / 2, accuracy, width, label="查询正确率", color="#f59e0b"
+        positions, accuracy, width, label="完整正确率", color="#f59e0b"
+    )
+    third = axes[0].bar(
+        positions + width,
+        intent_coverage,
+        width,
+        label="Intent 覆盖率",
+        color="#2563eb",
     )
     axes[0].set_xticks(positions, labels)
     axes[0].set_ylim(0, 110)
@@ -313,20 +448,29 @@ def _difficulty_category_chart(
     axes[0].grid(axis="y", alpha=0.2)
     axes[0].bar_label(first, fmt="%.1f%%", padding=2)
     axes[0].bar_label(second, fmt="%.1f%%", padding=2)
+    axes[0].bar_label(third, fmt="%.1f%%", padding=2)
 
     category_names = list(categories)
     matrix = np.array(
         [
             [categories[name][metric] * 100 for name in category_names]
-            for metric in ("generation_rate", "execution_rate", "query_accuracy")
+            for metric in (
+                "query_accuracy",
+                "partial_rate",
+                "incorrect_rate",
+                "intent_coverage",
+            )
         ]
     )
     image = axes[1].imshow(matrix, aspect="auto", vmin=0, vmax=100, cmap="YlGnBu")
     axes[1].set_xticks(
         range(len(category_names)), category_names, rotation=55, ha="right"
     )
-    axes[1].set_yticks(range(3), ["生成率", "执行率", "查询正确率"])
-    axes[1].set_title("类别指标热力图")
+    axes[1].set_yticks(
+        range(4),
+        ["完整正确率", "部分正确率", "错误率", "Intent 覆盖率"],
+    )
+    axes[1].set_title("类别三级语义指标热力图")
     for row in range(matrix.shape[0]):
         for column in range(matrix.shape[1]):
             axes[1].text(

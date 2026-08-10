@@ -12,6 +12,7 @@ from evaluation.models import (
     Difficulty,
     EvaluationCase,
     EvaluationIntent,
+    ValueNormalizer,
 )
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("cases.json")
@@ -62,6 +63,7 @@ def _parse_intent(value: object) -> EvaluationIntent:
         raise ValueError("intent comparison_mode is invalid") from error
     columns = data.get("expected_columns")
     aliases = data.get("accepted_aliases")
+    normalizers = data.get("value_normalizers", {})
     snapshot = data.get("expected_snapshot")
     if not isinstance(columns, list) or not all(isinstance(v, str) for v in columns):
         raise ValueError("expected_columns must be a string list")
@@ -74,6 +76,18 @@ def _parse_intent(value: object) -> EvaluationIntent:
         if not all(isinstance(alias, str) for alias in values):
             raise ValueError("accepted_aliases values must be string lists")
         parsed_aliases[column] = tuple(values)
+    if not isinstance(normalizers, dict) or not all(
+        isinstance(column, str) and isinstance(normalizer, str)
+        for column, normalizer in normalizers.items()
+    ):
+        raise ValueError("value_normalizers must be a string object")
+    try:
+        parsed_normalizers = {
+            column: ValueNormalizer(normalizer)
+            for column, normalizer in normalizers.items()
+        }
+    except ValueError as error:
+        raise ValueError("value_normalizers contains an invalid strategy") from error
     if not isinstance(snapshot, list) or not all(
         isinstance(row, dict) for row in snapshot
     ):
@@ -86,6 +100,7 @@ def _parse_intent(value: object) -> EvaluationIntent:
         expected_columns=tuple(columns),
         accepted_aliases=parsed_aliases,
         expected_snapshot=tuple(dict(row) for row in snapshot),
+        value_normalizers=parsed_normalizers,
     )
 
 

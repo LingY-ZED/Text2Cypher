@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from evaluation.models import ComparisonMode, EvaluationCase, EvaluationIntent
+from evaluation.models import (
+    ComparisonMode,
+    EvaluationCase,
+    EvaluationIntent,
+    SemanticOutcome,
+    ValueNormalizer,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +31,19 @@ class CaseVerdict:
 
     matched: bool
     intents: tuple[IntentVerdict, ...]
+    semantic_outcome: SemanticOutcome = field(init=False)
+
+    def __post_init__(self) -> None:
+        matched_count = sum(verdict.matched for verdict in self.intents)
+        if matched_count == len(self.intents) and self.intents:
+            outcome = SemanticOutcome.FULL
+        elif matched_count:
+            outcome = SemanticOutcome.PARTIAL
+        else:
+            outcome = SemanticOutcome.INCORRECT
+        if self.matched is not (outcome is SemanticOutcome.FULL):
+            raise ValueError("matched must agree with the intent verdicts")
+        object.__setattr__(self, "semantic_outcome", outcome)
 
 
 def compare_case(
@@ -54,6 +73,12 @@ def _compare_intent(
         return IntentVerdict(intent.id, True, "结果与 Oracle 精确一致")
     if _matches_singleton_fragments(intent, result_sets):
         return IntentVerdict(intent.id, True, "多个结果共同覆盖单行 Oracle")
+    if _matches_column_sets(intent, result_sets):
+        return IntentVerdict(
+            intent.id,
+            True,
+            "各语义列集合与 Oracle 一致（忽略行内配对）",
+        )
     if not candidates:
         return IntentVerdict(intent.id, False, "未找到包含所需语义列的结果")
     return IntentVerdict(
@@ -135,8 +160,58 @@ def _matches_singleton_fragments(
                 set(),
             )
             if actual is not None:
-                values.update(_freeze(row[actual]) for row in rows if actual in row)
-        if values != {_freeze(expected[expected_column])}:
+                values.update(
+                    _canonical_value(intent, expected_column, row[actual])
+                    for row in rows
+                    if actual in row
+                )
+        if values != {
+            _canonical_value(intent, expected_column, expected[expected_column])
+        }:
+            return False
+    return True
+
+
+def _matches_column_sets(
+    intent: EvaluationIntent,
+    result_sets: Sequence[Sequence[Mapping[str, Any]]],
+) -> bool:
+    """Compare every ROW_SET column independently after exact rows fail.
+
+    This deliberately ignores row-level pairing while retaining exact set equality
+    for every explicitly aliased and normalized semantic column.
+    """
+
+    if (
+        intent.comparison_mode is not ComparisonMode.ROW_SET
+        or len(intent.expected_columns) < 2
+    ):
+        return False
+    for expected_column in intent.expected_columns:
+        expected_values = {
+            _canonical_value(intent, expected_column, value)
+            for row in intent.expected_snapshot
+            for value in _flatten(row[expected_column])
+        }
+        actual_values: set[object] = set()
+        found = False
+        for rows in result_sets:
+            available = sorted({str(column) for row in rows for column in row})
+            actual_column = _find_column(
+                available,
+                intent.accepted_aliases[expected_column],
+                set(),
+            )
+            if actual_column is None:
+                continue
+            found = True
+            actual_values.update(
+                _canonical_value(intent, expected_column, value)
+                for row in rows
+                if actual_column in row
+                for value in _flatten(row[actual_column])
+            )
+        if not found or actual_values != expected_values:
             return False
     return True
 
@@ -149,23 +224,33 @@ def _canonical_projection(
     if intent.comparison_mode is ComparisonMode.SCALAR:
         column = mapping[intent.expected_columns[0]]
         values = tuple(row[column] for row in rows if column in row)
-        return _freeze(values[0]) if len(values) == 1 else ("invalid_scalar",)
+        return (
+            _canonical_value(intent, intent.expected_columns[0], values[0])
+            if len(values) == 1
+            else ("invalid_scalar",)
+        )
     if intent.comparison_mode is ComparisonMode.VALUE_SET:
         column = mapping[intent.expected_columns[0]]
         values = tuple(row[column] for row in rows if column in row)
         if any(isinstance(value, (list, tuple, set)) for value in values):
             return ("invalid_value_set",)
-        return frozenset(_freeze(value) for value in values)
+        return frozenset(
+            _canonical_value(intent, intent.expected_columns[0], value)
+            for value in values
+        )
     if intent.comparison_mode is ComparisonMode.COLLECTED_SET:
         column = mapping[intent.expected_columns[0]]
         return frozenset(
-            _freeze(value)
+            _canonical_value(intent, intent.expected_columns[0], value)
             for row in rows
             if column in row
             for value in _flatten(row[column])
         )
     return frozenset(
-        tuple(_freeze(row[mapping[column]]) for column in intent.expected_columns)
+        tuple(
+            _canonical_value(intent, column, row[mapping[column]])
+            for column in intent.expected_columns
+        )
         for row in rows
         if all(mapping[column] in row for column in intent.expected_columns)
     )
@@ -175,6 +260,17 @@ def _flatten(value: Any) -> Iterable[Any]:
     if isinstance(value, (list, tuple, set)):
         return value
     return (value,)
+
+
+def _canonical_value(
+    intent: EvaluationIntent,
+    expected_column: str,
+    value: Any,
+) -> object:
+    normalizer = intent.value_normalizers[expected_column]
+    if normalizer is ValueNormalizer.QUALIFIED_NAME_TAIL and isinstance(value, str):
+        value = value.rsplit(".", maxsplit=1)[-1]
+    return _freeze(value)
 
 
 def _freeze(value: Any) -> object:
