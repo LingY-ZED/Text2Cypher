@@ -14,7 +14,9 @@ from text2cypher.domain.errors import (
 )
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureContext,
     CypherFailureKind,
+    CypherFailureSource,
     GraphSchema,
     LLMResponse,
     QueryResult,
@@ -61,15 +63,15 @@ class StubLLMClient:
 class RecordingCorrector:
     def __init__(self, response: LLMResponse | Exception) -> None:
         self._response = response
-        self.calls: list[tuple[ChatPrompt, str, CypherFailureKind]] = []
+        self.calls: list[tuple[ChatPrompt, str, CypherFailureContext]] = []
 
     def correct(
         self,
         base_prompt: ChatPrompt,
         failed_candidate: str,
-        failure_kind: CypherFailureKind,
+        failure: CypherFailureContext,
     ) -> LLMResponse:
-        self.calls.append((base_prompt, failed_candidate, failure_kind))
+        self.calls.append((base_prompt, failed_candidate, failure))
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
@@ -190,7 +192,19 @@ def test_pipeline_corrects_each_repairable_failure_once(
     assert response.sub_queries[0].cypher == "corrected"
     assert response.sub_queries[0].result == corrected_result
     assert corrector.calls == [
-        (ChatPrompt(system="system", user="user"), initial_content, kind)
+        (
+            ChatPrompt(system="system", user="user"),
+            initial_content,
+            CypherFailureContext(
+                kind=kind,
+                source=CypherFailureSource.LOCAL,
+                message={
+                    CypherFailureKind.PARSE: "无法解析",
+                    CypherFailureKind.VALIDATION: "校验失败",
+                    CypherFailureKind.EXECUTION: "执行失败",
+                }[kind],
+            ),
+        )
     ]
     assert parser.calls == [initial_content, "corrected"]
     assert validator.calls[-1] == "corrected"
@@ -256,7 +270,67 @@ def test_pipeline_replaces_empty_result_only_when_correction_is_non_empty() -> N
         ),
         formatted="formatted",
     )
-    assert corrector.calls[0][2] is CypherFailureKind.EMPTY_RESULT
+    failure = corrector.calls[0][2]
+    assert failure.kind is CypherFailureKind.EMPTY_RESULT
+    assert failure.source is CypherFailureSource.RESULT
+
+
+def test_pipeline_preserves_adapter_neo4j_failure_context(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    actual_failure = CypherFailureContext(
+        kind=CypherFailureKind.VALIDATION,
+        source=CypherFailureSource.NEO4J,
+        message="Unknown property `missing`",
+        code="Neo.ClientError.Statement.PropertyNotFound",
+        line=1,
+        column=12,
+    )
+
+    class ContextValidator(MappingValidator):
+        def validate(self, cypher: str) -> ValidationReport:
+            self.calls.append(cypher)
+            if cypher == "initial":
+                raise CypherValidationError(
+                    "Cypher 未通过 Neo4j EXPLAIN 校验",
+                    failure_context=actual_failure,
+                )
+            return ValidationReport(query_type="r")
+
+    corrected_result = QueryResult(("value",), ({"value": 1},))
+    corrector = RecordingCorrector(LLMResponse(content="corrected"))
+    caplog.set_level(logging.WARNING)
+    _pipeline(
+        parser=MappingParser(),
+        validator=ContextValidator(),
+        executor=MappingExecutor({"corrected": corrected_result}),
+        corrector=corrector,
+    ).run("查询")
+
+    assert corrector.calls[0][2] is actual_failure
+    assert "Unknown property" not in caplog.text
+    assert "PropertyNotFound" not in caplog.text
+
+
+def test_pipeline_uses_fallback_when_local_error_has_no_message() -> None:
+    corrector = RecordingCorrector(LLMResponse(content="corrected"))
+    corrected_result = QueryResult(("value",), ({"value": 1},))
+
+    class BlankParser(MappingParser):
+        def parse(self, text: str) -> str:
+            self.calls.append(text)
+            if text == "initial":
+                raise CypherParseError("")
+            return text
+
+    _pipeline(
+        parser=BlankParser(),
+        validator=MappingValidator(),
+        executor=MappingExecutor({"corrected": corrected_result}),
+        corrector=corrector,
+    ).run("查询")
+
+    assert corrector.calls[0][2].message == "上一轮输出无法提取出一条 Cypher。"
 
 
 @pytest.mark.parametrize(

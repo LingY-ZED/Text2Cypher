@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable
 
 from text2cypher.components.retry import RetryPolicy
 from text2cypher.domain.errors import CypherValidationError, Neo4jAccessError
@@ -24,6 +24,8 @@ class FakeStatus:
     """模拟 Neo4j 的 GQL 状态对象。"""
 
     gql_status: str
+    status_description: str | None = None
+    diagnostic_record: dict[str, object] | None = None
 
 
 @dataclass
@@ -143,3 +145,47 @@ def test_validator_does_not_retry_neo4j_access_error() -> None:
         ).validate("RETURN 1")
 
     assert len(driver.calls) == 1
+
+
+def test_validator_preserves_whitelisted_server_error_for_corrector() -> None:
+    error = Neo4jError._hydrate_neo4j(
+        code="Neo.ClientError.Statement.SyntaxError",
+        message="Invalid input 'RETURN': expected ')'",
+        position={"line": 1, "column": 18, "offset": 17},
+    )
+    driver = FakeValidatorDriver(errors=[error])
+
+    with pytest.raises(CypherValidationError) as captured:
+        Neo4jCypherValidator(driver, "neo4j", 5).validate("RETURN (")
+
+    assert str(captured.value) == "Cypher 未通过 Neo4j EXPLAIN 校验"
+    context = captured.value.failure_context
+    assert context is not None
+    assert context.message == "Invalid input 'RETURN': expected ')'"
+    assert context.code == "Neo.ClientError.Statement.SyntaxError"
+    assert context.gql_status == "50N42"
+    assert context.classification == "ClientError"
+    assert (context.line, context.column, context.offset) == (1, 18, 17)
+
+
+def test_validator_preserves_unknown_property_explain_status_for_corrector() -> None:
+    driver = FakeValidatorDriver(
+        statuses=(
+            FakeStatus(
+                gql_status="01N52",
+                status_description="Unknown property `missing`",
+                diagnostic_record={
+                    "_position": {"line": 1, "column": 8, "offset": 7}
+                },
+            ),
+        )
+    )
+
+    with pytest.raises(CypherValidationError) as captured:
+        Neo4jCypherValidator(driver, "neo4j", 5).validate("RETURN n.missing")
+
+    context = captured.value.failure_context
+    assert context is not None
+    assert context.message == "Unknown property `missing`"
+    assert context.gql_status == "01N52"
+    assert (context.line, context.column, context.offset) == (1, 8, 7)

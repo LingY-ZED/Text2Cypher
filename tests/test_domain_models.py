@@ -5,11 +5,55 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from text2cypher.domain.models import (
+    CypherFailureContext,
+    CypherFailureKind,
+    CypherFailureSource,
     QueryResult,
     QuestionDecomposition,
     SubQueryResponse,
     Text2CypherResponse,
 )
+
+
+def test_cypher_failure_context_normalizes_and_is_immutable() -> None:
+    context = CypherFailureContext(
+        kind=CypherFailureKind.VALIDATION,
+        source=CypherFailureSource.NEO4J,
+        message="  Invalid input  ",
+        code="  Neo.ClientError.Statement.SyntaxError  ",
+        line=1,
+        column=2,
+        offset=0,
+    )
+
+    assert context.message == "Invalid input"
+    assert context.code == "Neo.ClientError.Statement.SyntaxError"
+    with pytest.raises(FrozenInstanceError):
+        context.message = "other"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"kind": "parse"}, "CypherFailureKind"),
+        ({"source": "local"}, "CypherFailureSource"),
+        ({"line": -1}, "非负整数"),
+        ({"column": True}, "非负整数"),
+    ],
+)
+def test_cypher_failure_context_rejects_invalid_values(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "kind": CypherFailureKind.PARSE,
+        "source": CypherFailureSource.LOCAL,
+        "message": "错误",
+    }
+    values.update(kwargs)
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        CypherFailureContext(**values)  # type: ignore[arg-type]
 
 
 def test_question_decomposition_normalizes_and_preserves_order() -> None:

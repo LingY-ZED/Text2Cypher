@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 from neo4j import READ_ACCESS
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable
 
 from text2cypher.components.retry import RetryPolicy
-from text2cypher.domain.errors import Neo4jAccessError
+from text2cypher.domain.errors import CypherExecutionError, Neo4jAccessError
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 
 
@@ -158,3 +158,24 @@ def test_executor_does_not_retry_neo4j_access_error() -> None:
         ).execute("RETURN 1")
 
     assert driver.session_count == 1
+
+
+def test_executor_preserves_whitelisted_server_error_for_corrector() -> None:
+    error = Neo4jError._hydrate_neo4j(
+        code="Neo.ClientError.Statement.TypeError",
+        message="Expected Integer but got String",
+        position={"line": 2, "column": 4, "offset": 20},
+    )
+    driver = FakeExecutorDriver([], errors=[error])
+
+    with pytest.raises(CypherExecutionError) as captured:
+        Neo4jCypherExecutor(driver, "neo4j", 5, 2).execute("RETURN 'text' + 1")
+
+    assert str(captured.value) == "Neo4j 无法执行 Cypher 查询"
+    context = captured.value.failure_context
+    assert context is not None
+    assert context.message == "Expected Integer but got String"
+    assert context.code == "Neo.ClientError.Statement.TypeError"
+    assert context.gql_status == "50N42"
+    assert context.classification == "ClientError"
+    assert (context.line, context.column, context.offset) == (2, 4, 20)

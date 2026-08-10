@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
-from text2cypher.domain.models import ChatPrompt, CypherFailureKind, LLMResponse
+from text2cypher.domain.models import (
+    ChatPrompt,
+    CypherFailureContext,
+    LLMResponse,
+)
 from text2cypher.domain.ports import LLMClient
 
 
@@ -22,13 +26,13 @@ class LLMCypherCorrector:
         self,
         base_prompt: ChatPrompt,
         failed_candidate: str,
-        failure_kind: CypherFailureKind,
+        failure: CypherFailureContext,
     ) -> LLMResponse:
         """生成一条待重新走完整安全链路的修正版模型输出。"""
 
         prompt = self._prompt_builder.build(
             base_prompt,
             failed_candidate,
-            failure_kind,
+            failure,
         )
         return self._llm_client.generate(prompt)

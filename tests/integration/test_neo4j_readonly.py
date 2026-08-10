@@ -8,12 +8,22 @@ from typing import Any
 
 import pytest
 
+from text2cypher.application.pipeline import Text2CypherPipeline
+from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.config import Settings
-from text2cypher.domain.models import QueryResult
+from text2cypher.domain.models import (
+    ChatPrompt,
+    CypherFailureContext,
+    CypherFailureSource,
+    GraphSchema,
+    LLMResponse,
+    QueryResult,
+    SubQueryResponse,
+)
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
@@ -118,6 +128,86 @@ def test_real_neo4j_schema_and_readonly_query() -> None:
     assert schema.nodes or schema.relationships or schema.patterns
     assert report.query_type == "r"
     assert result.rows == ({"数值": 1},)
+
+
+def test_real_neo4j_error_reaches_corrector_as_structured_context() -> None:
+    """确定性 EXPLAIN 错误应带着真实诊断进入 Corrector，而不调用真实模型。"""
+
+    class StaticPromptBuilder:
+        def build(
+            self,
+            schema: GraphSchema,
+            question: str,
+            examples: tuple[object, ...] = (),
+        ) -> ChatPrompt:
+            del schema, question, examples
+            return ChatPrompt(system="system", user="user")
+
+    class InvalidCypherLLM:
+        def generate(self, prompt: ChatPrompt) -> LLMResponse:
+            del prompt
+            return LLMResponse(content="RETURN (")
+
+    class RecordingCorrector:
+        def __init__(self) -> None:
+            self.failure: CypherFailureContext | None = None
+
+        def correct(
+            self,
+            base_prompt: ChatPrompt,
+            failed_candidate: str,
+            failure: CypherFailureContext,
+        ) -> LLMResponse:
+            del base_prompt, failed_candidate
+            self.failure = failure
+            return LLMResponse(content="RETURN 1 AS 数值")
+
+    class StaticFormatter:
+        def format(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> str:
+            del question, sub_queries
+            return "formatted"
+
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings)
+    corrector = RecordingCorrector()
+    try:
+        pipeline = Text2CypherPipeline(
+            schema_fetcher=Neo4jSchemaFetcher(
+                provider.driver,
+                settings.neo4j_database,
+                settings.schema_timeout_seconds,
+            ),
+            prompt_builder=StaticPromptBuilder(),
+            llm_client=InvalidCypherLLM(),
+            cypher_parser=DefaultCypherParser(),
+            cypher_validator=Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            cypher_executor=Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+            result_formatter=StaticFormatter(),
+            cypher_corrector=corrector,
+        )
+        response = pipeline.run("验证实际错误传递")
+    finally:
+        provider.close()
+
+    assert response.sub_queries[0].result.rows == ({"数值": 1},)
+    assert corrector.failure is not None
+    assert corrector.failure.source is CypherFailureSource.NEO4J
+    assert corrector.failure.code is not None
+    assert corrector.failure.code.startswith("Neo.ClientError.Statement.")
+    assert corrector.failure.message
 
 
 def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:

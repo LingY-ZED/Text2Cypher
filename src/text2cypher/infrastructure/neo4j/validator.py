@@ -18,7 +18,11 @@ from text2cypher.domain.errors import (
     Neo4jAccessError,
     Neo4jConnectionError,
 )
-from text2cypher.domain.models import ValidationReport
+from text2cypher.domain.models import CypherFailureKind, ValidationReport
+from text2cypher.infrastructure.neo4j.failure_context import (
+    neo4j_error_context,
+    neo4j_status_context,
+)
 from text2cypher.infrastructure.neo4j.retry import (
     is_neo4j_access_error,
     is_transient_neo4j_error,
@@ -102,15 +106,37 @@ class Neo4jCypherValidator:
                 raise Neo4jAccessError("Neo4j 拒绝执行 EXPLAIN 查询") from None
             if is_transient_neo4j_error(error):
                 raise Neo4jConnectionError("Neo4j 暂时无法执行 EXPLAIN 查询") from None
-            raise CypherValidationError("Cypher 未通过 Neo4j EXPLAIN 校验") from None
+            raise CypherValidationError(
+                "Cypher 未通过 Neo4j EXPLAIN 校验",
+                failure_context=neo4j_error_context(
+                    CypherFailureKind.VALIDATION,
+                    error,
+                    fallback_message="Neo4j EXPLAIN 未通过校验。",
+                ),
+            ) from None
 
         summary = self._summary(result)
         query_type = getattr(summary, "query_type", None)
         if query_type != "r":
             raise CypherValidationError("Neo4j 未将 Cypher 判定为只读查询")
-        status_codes = self._status_codes(summary)
-        if "01N52" in status_codes:
-            raise CypherValidationError("Cypher 使用了当前 Schema 中不存在的属性")
+        statuses = self._statuses(summary)
+        status_codes = self._status_codes(statuses)
+        if unknown_property_status := next(
+            (
+                status
+                for status in statuses
+                if getattr(status, "gql_status", None) == "01N52"
+            ),
+            None,
+        ):
+            raise CypherValidationError(
+                "Cypher 使用了当前 Schema 中不存在的属性",
+                failure_context=neo4j_status_context(
+                    CypherFailureKind.VALIDATION,
+                    unknown_property_status,
+                    fallback_message="Neo4j EXPLAIN 指出 Cypher 使用了不存在的属性。",
+                ),
+            )
         return ValidationReport(
             query_type=query_type,
             notifications=status_codes,
@@ -123,8 +149,14 @@ class Neo4jCypherValidator:
         return result[1]
 
     @staticmethod
-    def _status_codes(summary: Any) -> tuple[str, ...]:
+    def _statuses(summary: Any) -> tuple[Any, ...]:
         statuses = getattr(summary, "gql_status_objects", ())
+        if not isinstance(statuses, tuple):
+            return tuple(statuses) if isinstance(statuses, list) else ()
+        return statuses
+
+    @staticmethod
+    def _status_codes(statuses: tuple[Any, ...]) -> tuple[str, ...]:
         return tuple(
             status_code
             for status in statuses

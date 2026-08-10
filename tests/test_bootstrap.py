@@ -14,7 +14,9 @@ from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureContext,
     CypherFailureKind,
+    CypherFailureSource,
     GraphSchema,
     LLMResponse,
     NodeSchema,
@@ -142,7 +144,11 @@ def test_bootstrap_enables_cypher_corrector_with_shared_client() -> None:
     response = corrector.correct(
         ChatPrompt(system="system", user="user"),
         "bad output",
-        CypherFailureKind.PARSE,
+        CypherFailureContext(
+            kind=CypherFailureKind.PARSE,
+            source=CypherFailureSource.LOCAL,
+            message="模型响应不包含 Cypher",
+        ),
     )
 
     assert response.content == "RETURN 1"

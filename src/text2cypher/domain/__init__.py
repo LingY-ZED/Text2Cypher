@@ -2,7 +2,9 @@
 
 from .errors import Text2CypherError
 from .models import (
+    CypherFailureContext,
     CypherFailureKind,
+    CypherFailureSource,
     FewShotExample,
     FewShotSchemaRequirements,
     GraphSchema,
@@ -17,7 +19,9 @@ __all__ = [
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphSchema",
+    "CypherFailureContext",
     "CypherFailureKind",
+    "CypherFailureSource",
     "QuestionDecomposition",
     "SchemaGraph",
     "SchemaGraphEdge",

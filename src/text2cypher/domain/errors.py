@@ -1,5 +1,9 @@
 """领域层对外暴露的分阶段异常。"""
 
+from __future__ import annotations
+
+from text2cypher.domain.models import CypherFailureContext
+
 
 class Text2CypherError(RuntimeError):
     """预期的 Text2Cypher 错误基类。"""
@@ -44,9 +48,27 @@ class CypherParseError(Text2CypherError):
 class CypherValidationError(Text2CypherError):
     """Cypher 不安全或不是只读查询时抛出。"""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_context: CypherFailureContext | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failure_context = failure_context
+
 
 class CypherExecutionError(Text2CypherError):
     """Neo4j 无法执行已批准查询时抛出。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_context: CypherFailureContext | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failure_context = failure_context
 
 
 class BootstrapNotReadyError(Text2CypherError):

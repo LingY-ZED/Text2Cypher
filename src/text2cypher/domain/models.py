@@ -25,6 +25,50 @@ class CypherFailureKind(StrEnum):
     EMPTY_RESULT = "empty_result"
 
 
+class CypherFailureSource(StrEnum):
+    """纠错失败信息的来源。"""
+
+    LOCAL = "local"
+    NEO4J = "neo4j"
+    RESULT = "result"
+
+
+@dataclass(frozen=True, slots=True)
+class CypherFailureContext:
+    """一次 Cypher 纠错可安全使用的结构化失败上下文。"""
+
+    kind: CypherFailureKind
+    source: CypherFailureSource
+    message: str
+    code: str | None = None
+    gql_status: str | None = None
+    classification: str | None = None
+    line: int | None = None
+    column: int | None = None
+    offset: int | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, CypherFailureKind):
+            raise TypeError("失败类型必须是 CypherFailureKind")
+        if not isinstance(self.source, CypherFailureSource):
+            raise TypeError("失败来源必须是 CypherFailureSource")
+        object.__setattr__(self, "message", _require_text(self.message, "失败信息"))
+        for field_name in ("code", "gql_status", "classification"):
+            value = getattr(self, field_name)
+            if value is not None:
+                object.__setattr__(
+                    self,
+                    field_name,
+                    _require_text(value, field_name),
+                )
+        for field_name in ("line", "column", "offset"):
+            value = getattr(self, field_name)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+            ):
+                raise ValueError(f"{field_name}必须是非负整数或 None")
+
+
 @dataclass(frozen=True, slots=True)
 class PropertySchema:
     """节点标签或关系类型可用的属性。"""

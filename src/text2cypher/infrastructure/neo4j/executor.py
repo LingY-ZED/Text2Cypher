@@ -21,7 +21,8 @@ from text2cypher.domain.errors import (
     Neo4jAccessError,
     Neo4jConnectionError,
 )
-from text2cypher.domain.models import QueryResult
+from text2cypher.domain.models import CypherFailureKind, QueryResult
+from text2cypher.infrastructure.neo4j.failure_context import neo4j_error_context
 from text2cypher.infrastructure.neo4j.retry import (
     is_neo4j_access_error,
     is_transient_neo4j_error,
@@ -77,7 +78,14 @@ class Neo4jCypherExecutor:
                 raise Neo4jAccessError("Neo4j 拒绝执行 Cypher 查询") from None
             if is_transient_neo4j_error(error):
                 raise Neo4jConnectionError("Neo4j 暂时无法执行 Cypher 查询") from None
-            raise CypherExecutionError("Neo4j 无法执行 Cypher 查询") from None
+            raise CypherExecutionError(
+                "Neo4j 无法执行 Cypher 查询",
+                failure_context=neo4j_error_context(
+                    CypherFailureKind.EXECUTION,
+                    error,
+                    fallback_message="Neo4j 无法执行 Cypher 查询。",
+                ),
+            ) from None
 
         truncated = len(records) > self._max_result_rows
         bounded_records = records[: self._max_result_rows]

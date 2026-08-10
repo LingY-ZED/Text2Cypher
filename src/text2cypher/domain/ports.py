@@ -7,7 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from text2cypher.domain.models import (
     ChatPrompt,
-    CypherFailureKind,
+    CypherFailureContext,
     FewShotExample,
     GraphSchema,
     LLMResponse,
@@ -74,7 +74,7 @@ class CypherCorrector(Protocol):
         self,
         base_prompt: ChatPrompt,
         failed_candidate: str,
-        failure_kind: CypherFailureKind,
+        failure: CypherFailureContext,
     ) -> LLMResponse: ...
 
 

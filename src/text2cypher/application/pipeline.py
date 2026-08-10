@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
 from text2cypher.components.recovery_logging import log_correction_event
 from text2cypher.domain.errors import (
     CypherExecutionError,
@@ -17,7 +18,9 @@ from text2cypher.domain.errors import (
 )
 from text2cypher.domain.models import (
     ChatPrompt,
+    CypherFailureContext,
     CypherFailureKind,
+    CypherFailureSource,
     GraphSchema,
     QueryResult,
     QuestionDecomposition,
@@ -121,33 +124,33 @@ class Text2CypherPipeline:
         llm_response = self._llm_client.generate(prompt)
         try:
             cypher = self._cypher_parser.parse(llm_response.content)
-        except CypherParseError:
+        except CypherParseError as error:
             if self._cypher_corrector is None:
                 raise
             cypher, result = self._correct_and_execute(
                 prompt,
                 llm_response.content,
-                CypherFailureKind.PARSE,
+                self._failure_context(CypherFailureKind.PARSE, error),
             )
         else:
             try:
                 self._cypher_validator.validate(cypher)
                 result = self._cypher_executor.execute(cypher)
-            except CypherValidationError:
+            except CypherValidationError as error:
                 if self._cypher_corrector is None:
                     raise
                 cypher, result = self._correct_and_execute(
                     prompt,
                     cypher,
-                    CypherFailureKind.VALIDATION,
+                    self._failure_context(CypherFailureKind.VALIDATION, error),
                 )
-            except CypherExecutionError:
+            except CypherExecutionError as error:
                 if self._cypher_corrector is None:
                     raise
                 cypher, result = self._correct_and_execute(
                     prompt,
                     cypher,
-                    CypherFailureKind.EXECUTION,
+                    self._failure_context(CypherFailureKind.EXECUTION, error),
                 )
 
         if (
@@ -166,7 +169,7 @@ class Text2CypherPipeline:
         self,
         base_prompt: ChatPrompt,
         failed_candidate: str,
-        failure_kind: CypherFailureKind,
+        failure: CypherFailureContext,
     ) -> tuple[str, QueryResult]:
         """仅执行一次修正，并让修正版重新通过完整的安全链路。"""
 
@@ -176,14 +179,14 @@ class Text2CypherPipeline:
         log_correction_event(
             _LOGGER,
             event="cypher_correction_started",
-            reason=failure_kind.value,
+            reason=failure.kind.value,
             outcome="started",
         )
         try:
             corrected = corrector.correct(
                 base_prompt,
                 failed_candidate,
-                failure_kind,
+                failure,
             )
             cypher = self._cypher_parser.parse(corrected.content)
             self._cypher_validator.validate(cypher)
@@ -192,14 +195,14 @@ class Text2CypherPipeline:
             log_correction_event(
                 _LOGGER,
                 event="cypher_correction_exhausted",
-                reason=failure_kind.value,
+                reason=failure.kind.value,
                 outcome="failed",
             )
             raise
         log_correction_event(
             _LOGGER,
             event="cypher_correction_succeeded",
-            reason=failure_kind.value,
+            reason=failure.kind.value,
             outcome="corrected",
         )
         return cypher, result
@@ -216,7 +219,13 @@ class Text2CypherPipeline:
             corrected_cypher, corrected_result = self._correct_and_execute(
                 base_prompt,
                 original_cypher,
-                CypherFailureKind.EMPTY_RESULT,
+                CypherFailureContext(
+                    kind=CypherFailureKind.EMPTY_RESULT,
+                    source=CypherFailureSource.RESULT,
+                    message=CypherCorrectionPromptBuilder.fallback_failure(
+                        CypherFailureKind.EMPTY_RESULT
+                    ),
+                ),
             )
         except (
             LLMGenerationError,
@@ -242,6 +251,25 @@ class Text2CypherPipeline:
             outcome="no_improvement",
         )
         return original_cypher, original_result
+
+    @staticmethod
+    def _failure_context(
+        kind: CypherFailureKind,
+        error: CypherParseError | CypherValidationError | CypherExecutionError,
+    ) -> CypherFailureContext:
+        """优先保留适配器提取的 Neo4j 诊断，否则使用本地实际原因。"""
+
+        if isinstance(error, (CypherValidationError, CypherExecutionError)):
+            if error.failure_context is not None:
+                return error.failure_context
+        message = str(error).strip()
+        if not message:
+            message = CypherCorrectionPromptBuilder.fallback_failure(kind)
+        return CypherFailureContext(
+            kind=kind,
+            source=CypherFailureSource.LOCAL,
+            message=message,
+        )
 
     def close(self) -> None:
         """关闭流水线持有的外部资源，重复调用安全。"""
