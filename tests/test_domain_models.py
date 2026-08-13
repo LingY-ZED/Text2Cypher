@@ -10,9 +10,67 @@ from text2cypher.domain.models import (
     CypherFailureSource,
     QueryResult,
     QuestionDecomposition,
+    QuestionDecompositionReview,
+    QuestionDecompositionReviewReason,
     SubQueryResponse,
     Text2CypherResponse,
 )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        QuestionDecompositionReviewReason.RESULT_DEPENDENCY,
+        QuestionDecompositionReviewReason.CORRELATION_LOSS,
+        QuestionDecompositionReviewReason.NOT_SELF_CONTAINED,
+        QuestionDecompositionReviewReason.COVERAGE_MISMATCH,
+        QuestionDecompositionReviewReason.MECHANICAL_SPLIT,
+        QuestionDecompositionReviewReason.UNCERTAIN,
+    ],
+)
+def test_question_decomposition_review_accepts_rejection_reasons(
+    reason: QuestionDecompositionReviewReason,
+) -> None:
+    review = QuestionDecompositionReview(False, reason)
+
+    assert review.valid is False
+    assert review.reason is reason
+
+
+def test_question_decomposition_review_accepts_valid_result() -> None:
+    review = QuestionDecompositionReview(
+        True,
+        QuestionDecompositionReviewReason.VALID,
+    )
+
+    assert review.valid is True
+
+
+@pytest.mark.parametrize(
+    ("valid", "reason"),
+    [
+        (True, QuestionDecompositionReviewReason.RESULT_DEPENDENCY),
+        (False, QuestionDecompositionReviewReason.VALID),
+        (1, QuestionDecompositionReviewReason.VALID),
+        ("true", QuestionDecompositionReviewReason.VALID),
+    ],
+)
+def test_question_decomposition_review_rejects_invalid_state(
+    valid: object,
+    reason: QuestionDecompositionReviewReason,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        QuestionDecompositionReview(valid, reason)  # type: ignore[arg-type]
+
+
+def test_question_decomposition_review_is_immutable() -> None:
+    review = QuestionDecompositionReview(
+        True,
+        QuestionDecompositionReviewReason.VALID,
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        review.valid = False  # type: ignore[misc]
 
 
 def test_cypher_failure_context_normalizes_and_is_immutable() -> None:
