@@ -8,6 +8,10 @@ from text2cypher.components.question_decomposition import (
     QuestionDecompositionPromptBuilder,
     QuestionDecompositionResponseParser,
 )
+from text2cypher.components.question_decomposition_review import (
+    QuestionDecompositionReviewPromptBuilder,
+    QuestionDecompositionReviewResponseParser,
+)
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import GraphSchema, QuestionDecomposition
 from text2cypher.domain.ports import LLMClient
@@ -25,6 +29,12 @@ class LLMQuestionDecomposer:
         max_subquestions: int = 3,
         prompt_builder: QuestionDecompositionPromptBuilder | None = None,
         response_parser: QuestionDecompositionResponseParser | None = None,
+        review_prompt_builder: (
+            QuestionDecompositionReviewPromptBuilder | None
+        ) = None,
+        review_response_parser: (
+            QuestionDecompositionReviewResponseParser | None
+        ) = None,
     ) -> None:
         if not 2 <= max_subquestions <= 3:
             raise ValueError("max_subquestions 必须在 2 到 3 之间")
@@ -35,6 +45,12 @@ class LLMQuestionDecomposer:
         )
         self._response_parser = (
             response_parser or QuestionDecompositionResponseParser()
+        )
+        self._review_prompt_builder = (
+            review_prompt_builder or QuestionDecompositionReviewPromptBuilder()
+        )
+        self._review_response_parser = (
+            review_response_parser or QuestionDecompositionReviewResponseParser()
         )
 
     def decompose(
@@ -54,7 +70,7 @@ class LLMQuestionDecomposer:
                 self._max_subquestions,
             )
             response = self._llm_client.generate(prompt)
-            return self._response_parser.parse(
+            candidate = self._response_parser.parse(
                 response.content,
                 normalized_question,
                 self._max_subquestions,
@@ -65,3 +81,46 @@ class LLMQuestionDecomposer:
                 type(error).__name__,
             )
             return fallback
+
+        if not candidate.decomposed:
+            return candidate
+
+        try:
+            review_prompt = self._review_prompt_builder.build(
+                normalized_question,
+                candidate.sub_questions,
+            )
+            review_response = self._llm_client.generate(review_prompt)
+            review = self._review_response_parser.parse(review_response.content)
+        except (LLMGenerationError, ValueError) as error:
+            self._log_review(
+                outcome="fallback",
+                reason=type(error).__name__,
+            )
+            return fallback
+
+        if not review.valid:
+            self._log_review(
+                outcome="rejected",
+                reason=review.reason.value,
+            )
+            return fallback
+
+        self._log_review(outcome="accepted", reason=review.reason.value)
+        return candidate
+
+    @staticmethod
+    def _log_review(*, outcome: str, reason: str) -> None:
+        level = logging.INFO if outcome == "accepted" else logging.WARNING
+        _LOGGER.log(
+            level,
+            "question_decomposition_review",
+            extra={
+                "decomposition_review_event": {
+                    "component": "decomposer",
+                    "stage": "review",
+                    "outcome": outcome,
+                    "reason": reason,
+                }
+            },
+        )

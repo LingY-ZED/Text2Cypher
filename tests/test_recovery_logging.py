@@ -72,3 +72,31 @@ def test_retry_event_has_only_safe_structured_fields(
         "delay_ms": 500,
         "outcome": "retrying",
     }
+
+
+def test_json_log_formatter_keeps_decomposition_review_fields_structured() -> None:
+    logger = logging.getLogger("text2cypher.test.decomposition")
+    record = logger.makeRecord(
+        logger.name,
+        logging.WARNING,
+        "test.py",
+        1,
+        "question_decomposition_review",
+        (),
+        None,
+        extra={
+            "decomposition_review_event": {
+                "component": "decomposer",
+                "stage": "review",
+                "outcome": "rejected",
+                "reason": "RESULT_DEPENDENCY",
+            }
+        },
+    )
+
+    payload = json.loads(JsonLogFormatter().format(record))
+
+    assert payload["component"] == "decomposer"
+    assert payload["stage"] == "review"
+    assert payload["outcome"] == "rejected"
+    assert payload["reason"] == "RESULT_DEPENDENCY"

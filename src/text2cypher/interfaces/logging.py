@@ -19,6 +19,13 @@ class JsonLogFormatter(logging.Formatter):
         recovery_event = getattr(record, "recovery_event", None)
         if isinstance(recovery_event, dict):
             payload.update(recovery_event)
+        decomposition_review_event = getattr(
+            record,
+            "decomposition_review_event",
+            None,
+        )
+        if isinstance(decomposition_review_event, dict):
+            payload.update(decomposition_review_event)
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 

@@ -88,6 +88,24 @@ def test_bootstrap_enables_decomposer_with_shared_client() -> None:
     assert len(shared_client.prompts) == 1
 
 
+def test_bootstrap_reuses_shared_client_for_decomposer_review() -> None:
+    shared_client = StubLLMClient(
+        '{"sub_questions":["查询 REST 下游","查询 MQ 下游"]}'
+    )
+    decomposer = _build_question_decomposer(_settings(), shared_client)
+    assert decomposer is not None
+
+    decomposition = decomposer.decompose(
+        "查询服务的 REST 和 MQ 下游",
+        _service_schema(),
+    )
+
+    assert decomposition.sub_questions == (
+        "查询服务的 REST 和 MQ 下游",
+    )
+    assert len(shared_client.prompts) == 2
+
+
 def test_bootstrap_can_disable_decomposer_without_model_call() -> None:
     shared_client = StubLLMClient("not-used")
 
