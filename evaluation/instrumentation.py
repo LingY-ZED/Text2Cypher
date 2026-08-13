@@ -281,6 +281,10 @@ class RecoveryEventHandler(logging.Handler):
         if isinstance(review_event, dict):
             self._recorder.add(**dict(review_event))
             return
+        summary_event = getattr(record, "result_summary_event", None)
+        if isinstance(summary_event, dict):
+            self._recorder.add(**dict(summary_event))
+            return
         event = getattr(record, "recovery_event", None)
         if isinstance(event, dict):
             self._recorder.recovery_events.append(dict(event))

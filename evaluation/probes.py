@@ -18,6 +18,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     QueryResult,
+    ResultSummary,
     SubQueryResponse,
     ValidationReport,
 )
@@ -101,8 +102,9 @@ class _Formatter:
         self,
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
+        summary: ResultSummary | None = None,
     ) -> str:
-        del question, sub_queries
+        del question, sub_queries, summary
         return "formatted"
 
 

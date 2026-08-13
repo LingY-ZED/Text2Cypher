@@ -106,6 +106,46 @@ def test_reviewer_calls_and_structured_verdicts_are_counted_separately() -> None
     }
 
 
+def test_summary_calls_and_template_fallbacks_are_counted_separately() -> None:
+    llm_generated = _record(0)
+    llm_generated["events"] = [
+        {"component": "llm", "stage": "summarizer", "outcome": "succeeded"},
+        {
+            "component": "result_summarizer",
+            "stage": "summary",
+            "outcome": "generated",
+            "mode": "llm",
+            "reason": None,
+        },
+    ]
+    no_model_fallback = _record(1)
+    no_model_fallback["events"] = [
+        {
+            "component": "result_summarizer",
+            "stage": "summary",
+            "outcome": "fallback",
+            "mode": "template",
+            "reason": "empty_result",
+        }
+    ]
+
+    metrics = calculate_metrics(
+        [llm_generated, no_model_fallback],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["diagnostics"]["result_summary"] == {
+        "calls": 1,
+        "summaries": 2,
+        "fallbacks": 1,
+        "missing_events": 0,
+        "consistent": True,
+        "outcomes": {"fallback": 1, "generated": 1},
+        "modes": {"llm": 1, "template": 1},
+        "reasons": {"empty_result": 1},
+    }
+
+
 def test_natural_recovery_and_transport_retries_are_counted_separately() -> None:
     record = _record(0)
     record["recovery_events"] = [

@@ -35,6 +35,7 @@ from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.application.question_decomposer import LLMQuestionDecomposer
+from text2cypher.application.result_summarizer import LLMResultSummarizer
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
@@ -121,8 +122,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         decomposer_logger = logging.getLogger(
             "text2cypher.application.question_decomposer"
         )
+        summarizer_logger = logging.getLogger(
+            "text2cypher.application.result_summarizer"
+        )
         previous_decomposer_level = decomposer_logger.level
+        previous_summarizer_level = summarizer_logger.level
         decomposer_logger.setLevel(logging.INFO)
+        summarizer_logger.setLevel(logging.INFO)
         logging.getLogger().addHandler(handler)
         try:
             pipeline = _build_instrumented_pipeline(
@@ -142,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         finally:
             logging.getLogger().removeHandler(handler)
             decomposer_logger.setLevel(previous_decomposer_level)
+            summarizer_logger.setLevel(previous_summarizer_level)
             llm_client.close()
     finally:
         provider.close()
@@ -161,6 +168,7 @@ def _evaluation_settings() -> Settings:
             "question_decomposition_enabled": True,
             "cypher_correction_enabled": True,
             "empty_result_correction_enabled": True,
+            "natural_language_summary_enabled": True,
             "retry_enabled": True,
             "retry_max_attempts": 3,
             "llm_disable_thinking": True,
@@ -233,6 +241,11 @@ def _build_instrumented_pipeline(
             recorder,
         ),
         result_formatter=JsonResultFormatter(),
+        result_summarizer=LLMResultSummarizer(
+            StageLLMClient(llm_client, recorder, "summarizer"),
+            enabled=settings.natural_language_summary_enabled,
+            max_input_chars=settings.natural_language_summary_max_input_chars,
+        ),
         question_decomposer=question_decomposer,
         few_shot_router=few_shot_router,
         cypher_corrector=LLMCypherCorrector(
@@ -599,6 +612,12 @@ def _metadata(
             "question_decomposition_enabled": settings.question_decomposition_enabled,
             "cypher_correction_enabled": settings.cypher_correction_enabled,
             "empty_result_correction_enabled": settings.empty_result_correction_enabled,
+            "natural_language_summary_enabled": (
+                settings.natural_language_summary_enabled
+            ),
+            "natural_language_summary_max_input_chars": (
+                settings.natural_language_summary_max_input_chars
+            ),
             "retry_enabled": settings.retry_enabled,
             "retry_max_attempts": settings.retry_max_attempts,
             "llm_disable_thinking": settings.llm_disable_thinking,

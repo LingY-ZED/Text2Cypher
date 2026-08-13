@@ -5,7 +5,8 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出，并支持 Schema 感知的问题拆分、LLM Router 动态 Few-shot 和受控错误恢复。
+结构化结果输出和自然语言答案，并支持 Schema 感知的问题拆分、LLM Router 动态 Few-shot
+和受控错误恢复。
 
 ## 流程
 
@@ -22,6 +23,7 @@ Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API�
       → CypherValidator
       → CypherExecutor
       → 一次性 Cypher Corrector（仅在失败或空结果复核时）
+  → ResultSummarizer
   → ResultFormatter
 ```
 
@@ -68,10 +70,11 @@ TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED=true
 TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS=3
 ```
 
-Decomposer、拆分 Reviewer、Few-shot Router 和最终 Cypher 生成复用同一个模型客户端。
-简单问题在 Few-shot 开启时最多调用模型 3 次；候选拆成三个子问题并通过 Reviewer
-时最多调用 8 次；候选被 Reviewer 拒绝时会回退为原问题，最多调用 4 次。关闭拆分后
-仍返回统一的单元素 `sub_queries` 结构，但不会产生 Decomposer 或 Reviewer 模型调用。
+Decomposer、拆分 Reviewer、Few-shot Router、最终 Cypher 生成和结果总结复用同一个模型客户端。
+简单问题在 Few-shot 开启且存在结果时最多调用模型 4 次；候选拆成三个子问题并通过 Reviewer
+时最多调用 9 次；候选被 Reviewer 拒绝时会回退为原问题，最多调用 5 次。关闭拆分后
+仍返回统一的单元素 `sub_queries` 结构，但不会产生 Decomposer 或 Reviewer 模型调用；
+零结果、关闭总结或总结输入超限时不产生总结模型调用。
 
 Few-shot 默认启用。系统先按实时 Schema 过滤候选，再使用与 Cypher 生成共享的模型
 选择最多 3 条相关示例；Router 不可用或返回无效内容时自动回退 Zero-shot：
@@ -106,6 +109,15 @@ TEXT2CYPHER_EMPTY_RESULT_CORRECTION_ENABLED=true
 对于最终 Cypher 的解析、只读校验或执行错误，系统最多调用一次共享模型进行修正，
 修正版仍必须重新通过 Parser、EXPLAIN 和只读执行。安全执行但零行的查询也可复核一次；
 只有修正版返回非空结果才会替换原结果。关闭纠错开关可恢复原有直接失败行为。
+
+查询成功后默认使用共享模型将执行结果总结为自然语言；可通过以下配置关闭模型总结，
+此时仍由模板输出基于原始行的答案。零结果、输入超过预算、模型异常或无效响应也会
+自动模板降级，不会让已成功的查询失败：
+
+```dotenv
+TEXT2CYPHER_NATURAL_LANGUAGE_SUMMARY_ENABLED=true
+TEXT2CYPHER_NATURAL_LANGUAGE_SUMMARY_MAX_INPUT_CHARS=16000
+```
 
 恢复事件只在 stderr 输出结构化 JSON 日志，stdout 的 `--json` 查询结果不变。日志不会
 包含问题、Prompt、Cypher、数据库结果、服务响应正文或凭据。
@@ -148,12 +160,18 @@ python -m text2cypher ask "图谱中有哪些微服务？"
       "truncated": false,
       "duration_ms": 98
     }
-  ]
+  ],
+  "summary": {
+    "answer": "已分别查询上游和下游结果。",
+    "mode": "llm",
+    "fallback_reason": null
+  }
 }
 ```
 
 每个分组都包含对应问题、Cypher、列名、JSON 友好记录、截断标记和执行耗时。系统不做
-跨子查询联结、去重或自然语言总结；任一分支失败时整体立即失败。
+跨子查询联结、去重或重新配对；自然语言答案只依据同一组的已执行结果生成，任一分支
+失败时整体立即失败。普通 CLI 输出 `summary.answer`，`--json` 输出完整结构化结果。
 
 ## 安全边界
 
@@ -189,8 +207,8 @@ mypy
 
 脚本会先校验 Neo4j Schema、42 个只读 Oracle 和冻结快照；发现数据漂移时不会调用
 模型。运行结果、指标、Markdown 报告和 PNG 图表保存在 `tmp/evaluation/`，不会进入
-版本控制。评测报告包含生成率、语法正确率、可执行率、查询正确率、延迟、自然错误
-恢复和四类确定性恢复探针。
+版本控制。评测报告包含生成率、语法正确率、可执行率、查询正确率、延迟、自然错误恢复、
+四类确定性恢复探针以及自然语言总结的调用数、模板降级率和固定原因分布；答案正文不会保存。
 
 默认测试不会访问真实数据库。需要执行只读集成测试时：
 

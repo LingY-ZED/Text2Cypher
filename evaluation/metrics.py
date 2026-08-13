@@ -120,6 +120,7 @@ def calculate_metrics(
         ),
         "transport_retries": _transport_retries(recovery_events),
         "decomposition_review": _decomposition_review(records),
+        "result_summary": _result_summary(records),
         "decomposition_contract_violations": _decomposition_contract_violations(
             records
         ),
@@ -350,6 +351,46 @@ def _decomposition_contract_violations(
             if record.get("decomposition_contract_success") is False
         }
     )
+
+
+def _result_summary(
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    llm_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "llm"
+        and event.get("stage") == "summarizer"
+    ]
+    summary_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "result_summarizer"
+        and event.get("stage") == "summary"
+    ]
+    outcomes = Counter(str(event.get("outcome")) for event in summary_events)
+    modes = Counter(str(event.get("mode")) for event in summary_events)
+    reasons = Counter(
+        str(event.get("reason"))
+        for event in summary_events
+        if event.get("reason") is not None
+    )
+    call_count = len(llm_events)
+    summary_count = len(summary_events)
+    return {
+        "calls": call_count,
+        "summaries": summary_count,
+        "fallbacks": outcomes["fallback"],
+        "missing_events": max(0, call_count - summary_count),
+        "consistent": call_count <= summary_count,
+        "outcomes": dict(sorted(outcomes.items())),
+        "modes": dict(sorted(modes.items())),
+        "reasons": dict(sorted(reasons.items())),
+    }
 
 
 def _transport_retries(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

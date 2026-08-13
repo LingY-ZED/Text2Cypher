@@ -100,3 +100,32 @@ def test_json_log_formatter_keeps_decomposition_review_fields_structured() -> No
     assert payload["stage"] == "review"
     assert payload["outcome"] == "rejected"
     assert payload["reason"] == "RESULT_DEPENDENCY"
+
+
+def test_json_log_formatter_keeps_result_summary_fields_structured() -> None:
+    logger = logging.getLogger("text2cypher.test.summary")
+    record = logger.makeRecord(
+        logger.name,
+        logging.WARNING,
+        "test.py",
+        1,
+        "result_summary",
+        (),
+        None,
+        extra={
+            "result_summary_event": {
+                "component": "result_summarizer",
+                "stage": "summary",
+                "outcome": "fallback",
+                "mode": "template",
+                "reason": "llm_failure",
+            }
+        },
+    )
+
+    payload = json.loads(JsonLogFormatter().format(record))
+
+    assert payload["component"] == "result_summarizer"
+    assert payload["stage"] == "summary"
+    assert payload["mode"] == "template"
+    assert payload["reason"] == "llm_failure"

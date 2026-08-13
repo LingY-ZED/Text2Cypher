@@ -216,6 +216,31 @@ def render_report(
                 ensure_ascii=False,
             )
             + "`",
+            "",
+            "## 自然语言总结",
+            "",
+            f"- 总结 LLM 调用：{diagnostics['result_summary']['calls']}",
+            f"- 总结事件：{diagnostics['result_summary']['summaries']}",
+            f"- 模板降级：{diagnostics['result_summary']['fallbacks']}",
+            "- 总结观测一致性："
+            + (
+                "一致"
+                if diagnostics["result_summary"]["consistent"]
+                else "不一致（缺少 "
+                f"{diagnostics['result_summary']['missing_events']} 条总结事件）"
+            ),
+            "- 总结生成方式：`"
+            + json.dumps(
+                diagnostics["result_summary"]["modes"],
+                ensure_ascii=False,
+            )
+            + "`",
+            "- 模板降级原因：`"
+            + json.dumps(
+                diagnostics["result_summary"]["reasons"],
+                ensure_ascii=False,
+            )
+            + "`",
             "- 拆分契约违规案例："
             + (
                 "、".join(diagnostics["decomposition_contract_violations"])

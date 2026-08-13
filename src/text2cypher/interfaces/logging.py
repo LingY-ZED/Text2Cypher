@@ -26,6 +26,9 @@ class JsonLogFormatter(logging.Formatter):
         )
         if isinstance(decomposition_review_event, dict):
             payload.update(decomposition_review_event)
+        result_summary_event = getattr(record, "result_summary_event", None)
+        if isinstance(result_summary_event, dict):
+            payload.update(result_summary_event)
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 

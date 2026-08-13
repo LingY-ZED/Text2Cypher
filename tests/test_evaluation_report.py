@@ -38,6 +38,18 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
                 "outcome": "succeeded",
             },
             {
+                "component": "llm",
+                "stage": "summarizer",
+                "outcome": "succeeded",
+            },
+            {
+                "component": "result_summarizer",
+                "stage": "summary",
+                "outcome": "generated",
+                "mode": "llm",
+                "reason": None,
+            },
+            {
                 "component": "decomposer",
                 "stage": "review",
                 "outcome": "accepted",
@@ -69,6 +81,9 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
     assert "Reviewer 调用：1" in report
     assert "Reviewer 裁决：1" in report
     assert "Reviewer 观测一致性：一致" in report
+    assert "总结 LLM 调用：1" in report
+    assert "总结事件：1" in report
+    assert "总结观测一致性：一致" in report
     assert "100.0%" in report
     for name in (
         "quality-gates.png",

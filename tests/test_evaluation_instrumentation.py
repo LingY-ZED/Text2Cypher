@@ -135,3 +135,76 @@ def test_reviewer_info_event_is_visible_when_evaluation_enables_logger() -> None
             "reason": "VALID",
         }
     ]
+
+
+def test_summary_log_event_is_recorded_without_answer_content() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    handler = RecoveryEventHandler(recorder)
+    logger = logging.getLogger("text2cypher.application.result_summarizer")
+    logger.addHandler(handler)
+    try:
+        logger.warning(
+            "result_summary",
+            extra={
+                "result_summary_event": {
+                    "component": "result_summarizer",
+                    "stage": "summary",
+                    "outcome": "fallback",
+                    "mode": "template",
+                    "reason": "invalid_response",
+                }
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    serialized = json.dumps(recorder.events)
+    assert "answer" not in serialized
+    assert recorder.events == [
+        {
+            "component": "result_summarizer",
+            "stage": "summary",
+            "outcome": "fallback",
+            "mode": "template",
+            "reason": "invalid_response",
+        }
+    ]
+
+
+def test_summary_info_event_is_visible_when_evaluation_enables_logger() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    handler = RecoveryEventHandler(recorder)
+    logger = logging.getLogger("text2cypher.application.result_summarizer")
+    previous_level = logger.level
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    try:
+        logger.info(
+            "result_summary",
+            extra={
+                "result_summary_event": {
+                    "component": "result_summarizer",
+                    "stage": "summary",
+                    "outcome": "generated",
+                    "mode": "llm",
+                    "reason": None,
+                }
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+
+    assert recorder.events == [
+        {
+            "component": "result_summarizer",
+            "stage": "summary",
+            "outcome": "generated",
+            "mode": "llm",
+            "reason": None,
+        }
+    ]
