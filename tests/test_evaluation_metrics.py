@@ -58,6 +58,54 @@ def test_zero_natural_recovery_is_na_and_not_a_false_success() -> None:
     assert metrics["quality_gate_passed"] is True
 
 
+def test_decomposition_contract_is_a_hard_gate_with_legacy_default() -> None:
+    record = _record(0)
+    metrics = calculate_metrics(
+        [record],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+    assert metrics["official"]["decomposition_contract"]["passed"] is True
+
+    record["decomposition_contract_success"] = False
+    metrics = calculate_metrics(
+        [record],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+    assert metrics["official"]["decomposition_contract"]["passed"] is False
+    assert metrics["quality_gate_passed"] is False
+
+
+def test_reviewer_calls_and_structured_verdicts_are_counted_separately() -> None:
+    accepted = _record(0)
+    accepted["events"] = [
+        {"component": "llm", "stage": "reviewer", "outcome": "succeeded"},
+        {
+            "component": "decomposer",
+            "stage": "review",
+            "outcome": "accepted",
+            "reason": "VALID",
+        },
+    ]
+    missing = _record(1)
+    missing["events"] = [
+        {"component": "llm", "stage": "reviewer", "outcome": "succeeded"}
+    ]
+
+    metrics = calculate_metrics(
+        [accepted, missing],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["diagnostics"]["decomposition_review"] == {
+        "calls": 2,
+        "verdicts": 1,
+        "missing_verdicts": 1,
+        "consistent": False,
+        "outcomes": {"accepted": 1},
+        "reasons": {"VALID": 1},
+    }
+
+
 def test_natural_recovery_and_transport_retries_are_counted_separately() -> None:
     record = _record(0)
     record["recovery_events"] = [

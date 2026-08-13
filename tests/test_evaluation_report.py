@@ -31,6 +31,19 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
         "initial_syntax_success": True,
         "initial_execution_success": True,
         "recovery_events": [],
+        "events": [
+            {
+                "component": "llm",
+                "stage": "reviewer",
+                "outcome": "succeeded",
+            },
+            {
+                "component": "decomposer",
+                "stage": "review",
+                "outcome": "accepted",
+                "reason": "VALID",
+            },
+        ],
     }
     probes = {
         "parse": True,
@@ -53,6 +66,9 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
     assert "Cypher 生成率" in report
     assert "三级语义结果" in report
     assert "Intent 覆盖率" in report
+    assert "Reviewer 调用：1" in report
+    assert "Reviewer 裁决：1" in report
+    assert "Reviewer 观测一致性：一致" in report
     assert "100.0%" in report
     for name in (
         "quality-gates.png",

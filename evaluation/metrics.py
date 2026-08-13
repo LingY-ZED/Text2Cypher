@@ -15,6 +15,7 @@ RATE_TARGETS = {
     "syntax_rate": 0.90,
     "execution_rate": 0.90,
     "query_accuracy": 0.85,
+    "decomposition_contract": 1.0,
 }
 P95_TARGET_SECONDS = 30.0
 RECOVERY_TARGET = 0.80
@@ -38,8 +39,10 @@ def calculate_metrics(
         ("syntax_rate", "syntax_success"),
         ("execution_rate", "execution_success"),
         ("query_accuracy", "semantic_success"),
+        ("decomposition_contract", "decomposition_contract_success"),
     ):
-        count = sum(bool(record.get(field)) for record in records)
+        default = True if metric == "decomposition_contract" else False
+        count = sum(bool(record.get(field, default)) for record in records)
         target = RATE_TARGETS[metric]
         metrics["official"][metric] = _rate(count, total, target)
 
@@ -116,6 +119,10 @@ def calculate_metrics(
             )
         ),
         "transport_retries": _transport_retries(recovery_events),
+        "decomposition_review": _decomposition_review(records),
+        "decomposition_contract_violations": _decomposition_contract_violations(
+            records
+        ),
     }
 
     probes = dict(recovery_probes or {})
@@ -297,6 +304,51 @@ def _semantic_after_correction(
     return _plain_rate(
         sum(bool(record.get("semantic_success")) for record in corrected),
         len(corrected),
+    )
+
+
+def _decomposition_review(
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    llm_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "llm"
+        and event.get("stage") == "reviewer"
+    ]
+    verdict_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "decomposer"
+        and event.get("stage") == "review"
+    ]
+    outcomes = Counter(str(event.get("outcome")) for event in verdict_events)
+    reasons = Counter(str(event.get("reason")) for event in verdict_events)
+    call_count = len(llm_events)
+    verdict_count = len(verdict_events)
+    return {
+        "calls": call_count,
+        "verdicts": verdict_count,
+        "missing_verdicts": max(0, call_count - verdict_count),
+        "consistent": call_count == verdict_count,
+        "outcomes": dict(sorted(outcomes.items())),
+        "reasons": dict(sorted(reasons.items())),
+    }
+
+
+def _decomposition_contract_violations(
+    records: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    return sorted(
+        {
+            str(record["case_id"])
+            for record in records
+            if record.get("decomposition_contract_success") is False
+        }
     )
 
 

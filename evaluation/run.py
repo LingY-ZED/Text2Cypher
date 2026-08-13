@@ -118,6 +118,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         recorder = EvaluationRecorder()
         handler = RecoveryEventHandler(recorder)
+        decomposer_logger = logging.getLogger(
+            "text2cypher.application.question_decomposer"
+        )
+        previous_decomposer_level = decomposer_logger.level
+        decomposer_logger.setLevel(logging.INFO)
         logging.getLogger().addHandler(handler)
         try:
             pipeline = _build_instrumented_pipeline(
@@ -136,6 +141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         finally:
             logging.getLogger().removeHandler(handler)
+            decomposer_logger.setLevel(previous_decomposer_level)
             llm_client.close()
     finally:
         provider.close()
@@ -369,6 +375,11 @@ def _case_record(
         for events in query_events.values()
     )
     verdict = _semantic_verdict(case, response)
+    decomposition_contract_passed = _decomposition_contract_passed(
+        case,
+        recorder.events,
+    )
+    decomposition = _decomposition_observation(recorder.events)
     sub_queries = _response_payload(response)
     record: dict[str, Any] = {
         "case_id": case.id,
@@ -385,6 +396,7 @@ def _case_record(
             and all(sub_query.result.rows for sub_query in response.sub_queries)
         ),
         "semantic_success": verdict.matched,
+        "decomposition_contract_success": decomposition_contract_passed,
         "semantic_outcome": verdict.semantic_outcome.value,
         "intent_verdicts": [asdict(item) for item in verdict.intents],
         "failure_stage": _failure_stage(
@@ -401,7 +413,7 @@ def _case_record(
             if error is not None
             else None
         ),
-        "decomposed": response.decomposed if response is not None else None,
+        "decomposed": decomposition[0] if decomposition is not None else None,
         "sub_queries": sub_queries,
         "selected_example_ids": [
             event.get("selected_ids", [])
@@ -428,8 +440,8 @@ def _expected_query_count(events: Sequence[Mapping[str, Any]]) -> int:
     )
     if decomposition is None:
         return 1
-    sub_questions = decomposition.get("sub_questions")
-    return len(sub_questions) if isinstance(sub_questions, list) else 1
+    count = decomposition.get("sub_question_count")
+    return int(count) if isinstance(count, int) and count > 0 else 1
 
 
 def _last_outcome(events: Sequence[Mapping[str, Any]], stage: str) -> str | None:
@@ -452,6 +464,45 @@ def _semantic_verdict(
         case,
         tuple(sub_query.result.rows for sub_query in response.sub_queries),
     )
+
+
+def _decomposition_contract_passed(
+    case: EvaluationCase,
+    events: Sequence[Mapping[str, Any]],
+) -> bool:
+    if case.decomposition_contract.value == "any":
+        return True
+    observation = _decomposition_observation(events)
+    if observation is None:
+        return False
+    decomposed, sub_question_count = observation
+    if case.decomposition_contract.value == "must_preserve":
+        return not decomposed and sub_question_count == 1
+    if case.decomposition_contract.value == "must_split":
+        return decomposed and sub_question_count >= 2
+    return False
+
+
+def _decomposition_observation(
+    events: Sequence[Mapping[str, Any]],
+) -> tuple[bool, int] | None:
+    event = next(
+        (
+            item
+            for item in events
+            if item.get("component") == "decomposer"
+            and item.get("stage") == "decomposition"
+            and item.get("outcome") == "succeeded"
+        ),
+        None,
+    )
+    if event is None:
+        return None
+    decomposed = event.get("decomposed")
+    count = event.get("sub_question_count")
+    if type(decomposed) is not bool or not isinstance(count, int) or count < 1:
+        return None
+    return decomposed, count
 
 
 def _failed_intent(intent: EvaluationIntent, reason: str) -> Any:
@@ -583,6 +634,7 @@ def _write_csv(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
         "execution_success",
         "nonempty_success",
         "semantic_success",
+        "decomposition_contract_success",
         "semantic_outcome",
         "failure_stage",
     )

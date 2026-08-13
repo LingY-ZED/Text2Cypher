@@ -71,14 +71,6 @@ def _compare_intent(
     )
     if expected in candidates:
         return IntentVerdict(intent.id, True, "结果与 Oracle 精确一致")
-    if _matches_singleton_fragments(intent, result_sets):
-        return IntentVerdict(intent.id, True, "多个结果共同覆盖单行 Oracle")
-    if _matches_column_sets(intent, result_sets):
-        return IntentVerdict(
-            intent.id,
-            True,
-            "各语义列集合与 Oracle 一致（忽略行内配对）",
-        )
     if not candidates:
         return IntentVerdict(intent.id, False, "未找到包含所需语义列的结果")
     return IntentVerdict(
@@ -139,81 +131,6 @@ def _property_name(column: str) -> str:
     if "." not in candidate or any(token in candidate for token in " ()[]{}"):
         return candidate.strip("`")
     return candidate.rsplit(".", maxsplit=1)[-1].strip("`")
-
-
-def _matches_singleton_fragments(
-    intent: EvaluationIntent,
-    result_sets: Sequence[Sequence[Mapping[str, Any]]],
-) -> bool:
-    """Allow one Oracle row to be returned as independent scalar projections."""
-
-    if len(intent.expected_snapshot) != 1 or len(intent.expected_columns) < 2:
-        return False
-    expected = intent.expected_snapshot[0]
-    for expected_column in intent.expected_columns:
-        values: set[object] = set()
-        for rows in result_sets:
-            available = sorted({str(column) for row in rows for column in row})
-            actual = _find_column(
-                available,
-                intent.accepted_aliases[expected_column],
-                set(),
-            )
-            if actual is not None:
-                values.update(
-                    _canonical_value(intent, expected_column, row[actual])
-                    for row in rows
-                    if actual in row
-                )
-        if values != {
-            _canonical_value(intent, expected_column, expected[expected_column])
-        }:
-            return False
-    return True
-
-
-def _matches_column_sets(
-    intent: EvaluationIntent,
-    result_sets: Sequence[Sequence[Mapping[str, Any]]],
-) -> bool:
-    """Compare every ROW_SET column independently after exact rows fail.
-
-    This deliberately ignores row-level pairing while retaining exact set equality
-    for every explicitly aliased and normalized semantic column.
-    """
-
-    if (
-        intent.comparison_mode is not ComparisonMode.ROW_SET
-        or len(intent.expected_columns) < 2
-    ):
-        return False
-    for expected_column in intent.expected_columns:
-        expected_values = {
-            _canonical_value(intent, expected_column, value)
-            for row in intent.expected_snapshot
-            for value in _flatten(row[expected_column])
-        }
-        actual_values: set[object] = set()
-        found = False
-        for rows in result_sets:
-            available = sorted({str(column) for row in rows for column in row})
-            actual_column = _find_column(
-                available,
-                intent.accepted_aliases[expected_column],
-                set(),
-            )
-            if actual_column is None:
-                continue
-            found = True
-            actual_values.update(
-                _canonical_value(intent, expected_column, value)
-                for row in rows
-                if actual_column in row
-                for value in _flatten(row[actual_column])
-            )
-        if not found or actual_values != expected_values:
-            return False
-    return True
 
 
 def _canonical_projection(

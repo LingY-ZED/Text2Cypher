@@ -76,6 +76,7 @@ def render_report(
         ("syntax_rate", "Cypher 语法正确率"),
         ("execution_rate", "Cypher 可执行率"),
         ("query_accuracy", "查询正确率"),
+        ("decomposition_contract", "拆分契约通过率"),
         ("error_recovery_rate", "自然错误恢复成功率"),
     ):
         value = official[key]
@@ -191,6 +192,35 @@ def render_report(
             f"- 纠错样本语义正确率：{corrected_semantics}",
             f"- 确定性恢复探针：{probe_summary}",
             f"- 瞬态重试：`{retry_summary}`",
+            "",
+            "## Reviewer 与拆分契约",
+            "",
+            f"- Reviewer 调用：{diagnostics['decomposition_review']['calls']}",
+            f"- Reviewer 裁决：{diagnostics['decomposition_review']['verdicts']}",
+            "- Reviewer 观测一致性："
+            + (
+                "一致"
+                if diagnostics["decomposition_review"]["consistent"]
+                else "不一致（缺少 "
+                f"{diagnostics['decomposition_review']['missing_verdicts']} 条裁决）"
+            ),
+            "- Reviewer 结果：`"
+            + json.dumps(
+                diagnostics["decomposition_review"]["outcomes"],
+                ensure_ascii=False,
+            )
+            + "`",
+            "- Reviewer 原因码：`"
+            + json.dumps(
+                diagnostics["decomposition_review"]["reasons"],
+                ensure_ascii=False,
+            )
+            + "`",
+            "- 拆分契约违规案例："
+            + (
+                "、".join(diagnostics["decomposition_contract_violations"])
+                or "无"
+            ),
             "",
             "## 三轮稳定性",
             "",
@@ -384,6 +414,7 @@ def _quality_chart(plt: Any, path: Path, metrics: Mapping[str, Any]) -> None:
         ("语法", official["syntax_rate"]),
         ("执行", official["execution_rate"]),
         ("语义", official["query_accuracy"]),
+        ("拆分契约", official["decomposition_contract"]),
         ("自然恢复", official["error_recovery_rate"]),
     )
     values = [

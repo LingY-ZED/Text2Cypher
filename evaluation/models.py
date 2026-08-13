@@ -47,6 +47,14 @@ class SemanticOutcome(StrEnum):
     INCORRECT = "incorrect"
 
 
+class DecompositionContract(StrEnum):
+    """Expected decomposition behavior for an evaluation case."""
+
+    ANY = "any"
+    MUST_PRESERVE = "must_preserve"
+    MUST_SPLIT = "must_split"
+
+
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
 
@@ -138,11 +146,17 @@ class EvaluationCase:
     category: str
     question: str
     intents: tuple[EvaluationIntent, ...]
+    decomposition_contract: DecompositionContract = DecompositionContract.ANY
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", _text(self.id, "case id"))
         object.__setattr__(self, "category", _text(self.category, "category"))
         object.__setattr__(self, "question", _text(self.question, "question"))
+        try:
+            contract = DecompositionContract(self.decomposition_contract)
+        except ValueError as error:
+            raise ValueError("decomposition_contract is invalid") from error
+        object.__setattr__(self, "decomposition_contract", contract)
         intents = tuple(self.intents)
         if not intents or len(intents) > 3:
             raise ValueError("a case must contain one to three intents")

@@ -217,6 +217,7 @@
       "difficulty": "simple",
       "category": "api_schema",
       "question": "POST /api/v1/adminrouteservice/adminroute 的请求体类型和响应类型是什么？",
+      "decomposition_contract": "must_preserve",
       "intents": [
         {
           "id": "contract",
@@ -477,6 +478,7 @@
           "accepted_aliases": {
             "下游服务": [
               "下游服务",
+              "依赖微服务",
               "被依赖微服务",
               "目标服务",
               "目的应用",
@@ -667,6 +669,7 @@
       "difficulty": "medium",
       "category": "mq_dependency",
       "question": "preserve.mq.RabbitSend.send 发布的消息经过哪个交换机和队列，最终由哪个方法消费？",
+      "decomposition_contract": "must_preserve",
       "intents": [
         {
           "id": "message_path",
@@ -1075,6 +1078,7 @@
       "difficulty": "hard",
       "category": "impact_analysis",
       "question": "修改 InsidePaymentServiceImpl.pay 后，调用它的上游方法、可到达的入口 API 和远程下游服务分别是什么？",
+      "decomposition_contract": "must_split",
       "intents": [
         {
           "id": "upstream_methods",
@@ -1111,6 +1115,7 @@
             "入口接口": [
               "入口接口",
               "入口API",
+              "入口API路径",
               "接口路径",
               "API路径"
             ],
@@ -1163,6 +1168,7 @@
       "difficulty": "hard",
       "category": "impact_analysis",
       "question": "若 ConsignServiceImpl.insertConsignRecord 被修改，哪些调用方法、入口端点和外部服务需要回归验证？",
+      "decomposition_contract": "must_split",
       "intents": [
         {
           "id": "upstream_methods",
@@ -1255,6 +1261,7 @@
       "difficulty": "hard",
       "category": "compound_architecture",
       "question": "汇总 ts-notification-service 的公开 API、通过 MQ 向它发送消息的服务，以及 email 消息的消费方法。",
+      "decomposition_contract": "must_split",
       "intents": [
         {
           "id": "apis",
@@ -1366,6 +1373,7 @@
       "difficulty": "hard",
       "category": "compound_architecture",
       "question": "分析 ts-security-service 的公开 API、REST 下游服务，以及通过 REST 依赖它的上游服务。",
+      "decomposition_contract": "must_split",
       "intents": [
         {
           "id": "apis",
@@ -1477,6 +1485,7 @@
       "difficulty": "hard",
       "category": "compound_architecture",
       "question": "找出通过 MQ 向 ts-notification-service 发送消息的服务，并列出每个发送服务的 REST 下游服务。",
+      "decomposition_contract": "must_preserve",
       "intents": [
         {
           "id": "sender_targets",
@@ -1497,7 +1506,8 @@
               "下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "REST下游服务"
             ]
           },
           "expected_snapshot": [
@@ -1558,6 +1568,7 @@
       "difficulty": "hard",
       "category": "compound_architecture",
       "question": "展开 food_delivery 的完整消息链，返回发布方法、发送服务、交换机、消费方法和接收服务。",
+      "decomposition_contract": "must_preserve",
       "intents": [
         {
           "id": "chain",
@@ -1753,6 +1764,7 @@
       "difficulty": "hard",
       "category": "compound_architecture",
       "question": "对 ts-admin-basic-info-service 同时给出上游 API 的 HTTP 方法分布、REST 目标调用数和接口实现类。",
+      "decomposition_contract": "must_split",
       "intents": [
         {
           "id": "api_counts",

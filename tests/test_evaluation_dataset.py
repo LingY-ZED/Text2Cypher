@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections import Counter
 
 from evaluation.dataset import load_cases
-from evaluation.models import ComparisonMode, Difficulty, ValueNormalizer
+from evaluation.models import (
+    ComparisonMode,
+    DecompositionContract,
+    Difficulty,
+    ValueNormalizer,
+)
 
 
 def test_dataset_has_fixed_size_distribution_and_unique_questions() -> None:
@@ -69,6 +74,52 @@ def test_corrected_evaluation_contracts_are_explicit() -> None:
         if intent.id == "implementations"
     )
     assert "接口实现类全限定名" in implementations.accepted_aliases["实现类"]
+
+
+def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
+    cases = {case.id: case for case in load_cases()}
+
+    for case_id in (
+        "admin-route-post-contract",
+        "preserve-rabbit-message-path",
+        "notification-senders-rest-matrix",
+        "food-delivery-full-message-chain",
+    ):
+        assert cases[case_id].decomposition_contract is (
+            DecompositionContract.MUST_PRESERVE
+        )
+    for case_id in (
+        "inside-payment-pay-impact",
+        "consign-insert-impact",
+        "notification-api-mq-consumers",
+        "security-service-three-way",
+        "admin-basic-architecture-aggregates",
+    ):
+        assert cases[case_id].decomposition_contract is (
+            DecompositionContract.MUST_SPLIT
+        )
+    assert cases["admin-route-implementation-slice"].decomposition_contract is (
+        DecompositionContract.ANY
+    )
+
+    matrix = cases["notification-senders-rest-matrix"].intents[0]
+    assert "REST下游服务" in matrix.accepted_aliases["下游服务"]
+    target_counts = cases["admin-basic-target-call-counts"].intents[0]
+    assert "REST下游服务" not in target_counts.accepted_aliases["下游服务"]
+
+    entry = next(
+        intent
+        for intent in cases["inside-payment-pay-impact"].intents
+        if intent.id == "entry_apis"
+    )
+    assert "入口API路径" in entry.accepted_aliases["入口接口"]
+    other_entry = cases["consign-update-entry-apis"].intents[0]
+    assert "入口API路径" not in other_entry.accepted_aliases["入口接口"]
+
+    targets = cases["rebook-service-rest-targets"].intents[0]
+    assert "依赖微服务" in targets.accepted_aliases["下游服务"]
+    other_targets = cases["inside-payment-pay-targets"].intents[0]
+    assert "依赖微服务" not in other_targets.accepted_aliases["下游服务"]
 
 
 def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:

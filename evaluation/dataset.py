@@ -9,6 +9,7 @@ from typing import Any
 
 from evaluation.models import (
     ComparisonMode,
+    DecompositionContract,
     Difficulty,
     EvaluationCase,
     EvaluationIntent,
@@ -52,6 +53,9 @@ def _parse_case(value: object) -> EvaluationCase:
         category=_required(data, "category"),
         question=_required(data, "question"),
         intents=tuple(_parse_intent(item) for item in intents),
+        decomposition_contract=DecompositionContract(
+            data.get("decomposition_contract", DecompositionContract.ANY.value)
+        ),
     )
 
 

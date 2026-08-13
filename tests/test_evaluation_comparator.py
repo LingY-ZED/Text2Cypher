@@ -75,7 +75,7 @@ def test_collected_set_accepts_rows_or_collect_and_rejects_extra_values() -> Non
     assert not compare_case(case, (({"服务": ["a", "b", "c"]},),)).matched
 
 
-def test_row_set_prefers_exact_rows_then_accepts_equal_column_sets() -> None:
+def test_row_set_requires_exact_row_pairing() -> None:
     case = _case(
         ComparisonMode.ROW_SET,
         ("服务", "数量"),
@@ -96,8 +96,7 @@ def test_row_set_prefers_exact_rows_then_accepts_equal_column_sets() -> None:
         (({"服务": "a", "数量": 2}, {"服务": "b", "数量": 1}),),
     )
 
-    assert verdict.matched
-    assert "忽略行内配对" in verdict.intents[0].reason
+    assert not verdict.matched
 
 
 def test_all_intents_must_match_across_independent_result_sets() -> None:
@@ -139,7 +138,7 @@ def test_raw_property_column_is_normalized_to_property_name() -> None:
     assert verdict.matched
 
 
-def test_single_oracle_row_can_be_covered_by_independent_scalar_results() -> None:
+def test_single_oracle_row_cannot_be_covered_by_independent_scalar_results() -> None:
     case = _case(
         ComparisonMode.ROW_SET,
         ("请求体", "响应类型"),
@@ -151,10 +150,10 @@ def test_single_oracle_row_can_be_covered_by_independent_scalar_results() -> Non
         (({"请求体": "Request"},), ({"响应类型": "Response"},)),
     )
 
-    assert verdict.matched
+    assert not verdict.matched
 
 
-def test_multiple_oracle_rows_can_be_split_across_result_sets() -> None:
+def test_multiple_oracle_rows_cannot_be_split_across_result_sets() -> None:
     case = _case(
         ComparisonMode.ROW_SET,
         ("queue", "consumer"),
@@ -172,10 +171,10 @@ def test_multiple_oracle_rows_can_be_split_across_result_sets() -> None:
         ),
     )
 
-    assert verdict.matched
+    assert not verdict.matched
 
 
-def test_row_set_column_fallback_rejects_missing_or_extra_values() -> None:
+def test_row_set_requires_all_columns_in_one_result_set() -> None:
     case = _case(
         ComparisonMode.ROW_SET,
         ("queue", "consumer"),

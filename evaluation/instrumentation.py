@@ -141,7 +141,7 @@ class RecordingQuestionDecomposer:
             stage="decomposition",
             outcome="succeeded",
             decomposed=result.decomposed,
-            sub_questions=list(result.sub_questions),
+            sub_question_count=len(result.sub_questions),
         )
         return result
 
@@ -277,6 +277,10 @@ class RecoveryEventHandler(logging.Handler):
         self._recorder = recorder
 
     def emit(self, record: logging.LogRecord) -> None:
+        review_event = getattr(record, "decomposition_review_event", None)
+        if isinstance(review_event, dict):
+            self._recorder.add(**dict(review_event))
+            return
         event = getattr(record, "recovery_event", None)
         if isinstance(event, dict):
             self._recorder.recovery_events.append(dict(event))

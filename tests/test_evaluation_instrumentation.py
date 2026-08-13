@@ -6,7 +6,11 @@ import json
 
 import pytest
 
-from evaluation.instrumentation import EvaluationRecorder, StageLLMClient
+from evaluation.instrumentation import (
+    EvaluationRecorder,
+    RecoveryEventHandler,
+    StageLLMClient,
+)
 from text2cypher.domain.models import ChatPrompt, LLMResponse
 
 
@@ -62,5 +66,72 @@ def test_llm_failure_event_does_not_store_exception_response_body() -> None:
             "duration_seconds": recorder.events[0]["duration_seconds"],
             "error_type": "RuntimeError",
             "query_index": 0,
+        }
+    ]
+
+
+def test_reviewer_log_event_is_recorded_without_sensitive_content() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    handler = RecoveryEventHandler(recorder)
+    logger = logging.getLogger("text2cypher.application.question_decomposer")
+    logger.addHandler(handler)
+    try:
+        logger.warning(
+            "question_decomposition_review",
+            extra={
+                "decomposition_review_event": {
+                    "component": "decomposer",
+                    "stage": "review",
+                    "outcome": "rejected",
+                    "reason": "CORRELATION_LOSS",
+                }
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    assert recorder.events == [
+        {
+            "component": "decomposer",
+            "stage": "review",
+            "outcome": "rejected",
+            "reason": "CORRELATION_LOSS",
+        }
+    ]
+
+
+def test_reviewer_info_event_is_visible_when_evaluation_enables_logger() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    handler = RecoveryEventHandler(recorder)
+    logger = logging.getLogger("text2cypher.application.question_decomposer")
+    previous_level = logger.level
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    try:
+        logger.info(
+            "question_decomposition_review",
+            extra={
+                "decomposition_review_event": {
+                    "component": "decomposer",
+                    "stage": "review",
+                    "outcome": "accepted",
+                    "reason": "VALID",
+                }
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+
+    assert recorder.events == [
+        {
+            "component": "decomposer",
+            "stage": "review",
+            "outcome": "accepted",
+            "reason": "VALID",
         }
     ]
