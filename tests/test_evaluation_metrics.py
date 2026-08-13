@@ -137,7 +137,9 @@ def test_summary_calls_and_template_fallbacks_are_counted_separately() -> None:
     assert metrics["diagnostics"]["result_summary"] == {
         "calls": 1,
         "summaries": 2,
+        "llm_generated": 1,
         "fallbacks": 1,
+        "fallback_rate": {"count": 1, "total": 2, "value": 0.5},
         "missing_events": 0,
         "consistent": True,
         "outcomes": {"fallback": 1, "generated": 1},

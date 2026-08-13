@@ -221,7 +221,9 @@ def render_report(
             "",
             f"- 总结 LLM 调用：{diagnostics['result_summary']['calls']}",
             f"- 总结事件：{diagnostics['result_summary']['summaries']}",
-            f"- 模板降级：{diagnostics['result_summary']['fallbacks']}",
+            f"- LLM 总结成功：{diagnostics['result_summary']['llm_generated']}",
+            "- 模板降级："
+            + _format_rate(diagnostics["result_summary"]["fallback_rate"]),
             "- 总结观测一致性："
             + (
                 "一致"

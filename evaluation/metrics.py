@@ -381,10 +381,13 @@ def _result_summary(
     )
     call_count = len(llm_events)
     summary_count = len(summary_events)
+    fallback_count = outcomes["fallback"]
     return {
         "calls": call_count,
         "summaries": summary_count,
-        "fallbacks": outcomes["fallback"],
+        "llm_generated": outcomes["generated"],
+        "fallbacks": fallback_count,
+        "fallback_rate": _plain_rate(fallback_count, summary_count),
         "missing_events": max(0, call_count - summary_count),
         "consistent": call_count <= summary_count,
         "outcomes": dict(sorted(outcomes.items())),

@@ -83,6 +83,8 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
     assert "Reviewer 观测一致性：一致" in report
     assert "总结 LLM 调用：1" in report
     assert "总结事件：1" in report
+    assert "LLM 总结成功：1" in report
+    assert "模板降级：0.0%（0/1）" in report
     assert "总结观测一致性：一致" in report
     assert "100.0%" in report
     for name in (
