@@ -68,9 +68,10 @@ TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED=true
 TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS=3
 ```
 
-Decomposer、Few-shot Router 和最终 Cypher 生成复用同一个模型客户端。简单问题在
-Few-shot 开启时最多调用模型 3 次；三个子问题最多调用 7 次。关闭拆分后仍返回统一的
-单元素 `sub_queries` 结构，但不会产生 Decomposer 模型调用。
+Decomposer、拆分 Reviewer、Few-shot Router 和最终 Cypher 生成复用同一个模型客户端。
+简单问题在 Few-shot 开启时最多调用模型 3 次；候选拆成三个子问题并通过 Reviewer
+时最多调用 8 次；候选被 Reviewer 拒绝时会回退为原问题，最多调用 4 次。关闭拆分后
+仍返回统一的单元素 `sub_queries` 结构，但不会产生 Decomposer 或 Reviewer 模型调用。
 
 Few-shot 默认启用。系统先按实时 Schema 过滤候选，再使用与 Cypher 生成共享的模型
 选择最多 3 条相关示例；Router 不可用或返回无效内容时自动回退 Zero-shot：
