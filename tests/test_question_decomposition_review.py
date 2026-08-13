@@ -22,6 +22,17 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "2. 查询 MQ 下游依赖" in prompt.user
     assert "Schema" not in prompt.user
     assert "完整重复原始问题中的固定对象和筛选条件并独立重算" in prompt.system
+    assert "固定对象上的独立多意图不做此检查" in prompt.system
+    assert "跨意图传播对象、范围和直接性限定" in prompt.system
+    assert "变更对象作为发起方、直接、远程" in prompt.system
+    assert "哪些外部对象需要回归" in prompt.system
+    assert "必须返回 COVERAGE_MISMATCH" in prompt.system
+    assert "哪些外部服务需要回归验证" in prompt.system
+    assert "合并互不兼容的分组和返回形状" in prompt.system
+    assert "按维度分布、按另一对象分组计数和实体明细" in prompt.system
+    assert "优先于其他接受规则的强制拒绝" in prompt.system
+    assert "固定起点沿一条连续路径询问多个位置" in prompt.system
+    assert "重复固定起点和完整路径前缀" in prompt.system
     assert "RESULT_DEPENDENCY" in prompt.system
 
 

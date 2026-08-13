@@ -189,6 +189,7 @@ def _build_instrumented_pipeline(
     question_decomposer = RecordingQuestionDecomposer(
         LLMQuestionDecomposer(
             StageLLMClient(llm_client, recorder, "decomposer"),
+            review_llm_client=StageLLMClient(llm_client, recorder, "reviewer"),
             max_subquestions=settings.question_decomposition_max_subquestions,
         ),
         recorder,

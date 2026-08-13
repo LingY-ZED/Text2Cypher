@@ -144,6 +144,26 @@ def test_llm_decomposer_accepts_review_without_rewriting_candidate() -> None:
     assert decomposition.sub_questions == candidate
 
 
+def test_llm_decomposer_can_use_a_separate_reviewer_client() -> None:
+    decomposer_client = StubLLMClient(
+        LLMResponse(content='{"sub_questions":["查询 A","查询 B"]}')
+    )
+    reviewer_client = StubLLMClient(
+        LLMResponse(content='{"valid":true,"reason":"VALID"}')
+    )
+
+    decomposition = LLMQuestionDecomposer(
+        decomposer_client,
+        review_llm_client=reviewer_client,
+    ).decompose("查询 A 和 B", GraphSchema())
+
+    assert decomposition.sub_questions == ("查询 A", "查询 B")
+    assert len(decomposer_client.prompts) == 1
+    assert len(reviewer_client.prompts) == 1
+    assert "图谱 Schema" in decomposer_client.prompts[0].user
+    assert "Schema" not in reviewer_client.prompts[0].user
+
+
 @pytest.mark.parametrize(
     "response",
     [

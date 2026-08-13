@@ -45,6 +45,19 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "- (:Person)-[:`WORKS-AT`]->(:Company)" in prompt.user
     assert "查询 Alice 的任职公司和同事" in prompt.user
     assert "最多拆成 3 个子问题" in prompt.user
+    assert "不得把只属于一个分句的服务、对象或范围" in prompt.system
+    assert "不得把不同分组维度或不同返回形状合并" in prompt.system
+    assert "按某一维度分布" in prompt.system
+    assert "按另一对象分组计数" in prompt.system
+    assert "必须拆成三个独立子问题" in prompt.system
+    assert "全部反向上游路径" in prompt.system
+    assert "变更对象直接访问的远程下游" in prompt.system
+    assert "变更对象直接远程访问的哪些外部对象" in prompt.system
+    assert "会丢失方向和直接性" in prompt.system
+    assert "Component.action 直接远程访问" in prompt.system
+    assert "哪些外部服务需要回归验证" in prompt.system
+    assert "固定起点沿一条连续路径询问多个位置" in prompt.system
+    assert "重复固定起点和完整路径前缀" in prompt.system
 
 
 def test_decomposition_implementation_has_no_current_schema_names() -> None:

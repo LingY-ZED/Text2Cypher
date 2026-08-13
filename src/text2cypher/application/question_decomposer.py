@@ -26,6 +26,7 @@ class LLMQuestionDecomposer:
         self,
         llm_client: LLMClient,
         *,
+        review_llm_client: LLMClient | None = None,
         max_subquestions: int = 3,
         prompt_builder: QuestionDecompositionPromptBuilder | None = None,
         response_parser: QuestionDecompositionResponseParser | None = None,
@@ -39,6 +40,7 @@ class LLMQuestionDecomposer:
         if not 2 <= max_subquestions <= 3:
             raise ValueError("max_subquestions 必须在 2 到 3 之间")
         self._llm_client = llm_client
+        self._review_llm_client = review_llm_client or llm_client
         self._max_subquestions = max_subquestions
         self._prompt_builder = (
             prompt_builder or QuestionDecompositionPromptBuilder()
@@ -90,7 +92,7 @@ class LLMQuestionDecomposer:
                 normalized_question,
                 candidate.sub_questions,
             )
-            review_response = self._llm_client.generate(review_prompt)
+            review_response = self._review_llm_client.generate(review_prompt)
             review = self._review_response_parser.parse(review_response.content)
         except (LLMGenerationError, ValueError) as error:
             self._log_review(
