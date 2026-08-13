@@ -45,6 +45,46 @@ class QuestionDecompositionReviewReason(StrEnum):
     UNCERTAIN = "UNCERTAIN"
 
 
+class ResultSummaryMode(StrEnum):
+    """查询结果自然语言总结的生成方式。"""
+
+    LLM = "llm"
+    TEMPLATE = "template"
+
+
+class ResultSummaryFallbackReason(StrEnum):
+    """确定性模板总结的固定降级原因。"""
+
+    DISABLED = "disabled"
+    EMPTY_RESULT = "empty_result"
+    INPUT_TOO_LARGE = "input_too_large"
+    LLM_FAILURE = "llm_failure"
+    INVALID_RESPONSE = "invalid_response"
+
+
+@dataclass(frozen=True, slots=True)
+class ResultSummary:
+    """一次查询结果的自然语言答案及其生成来源。"""
+
+    answer: str
+    mode: ResultSummaryMode
+    fallback_reason: ResultSummaryFallbackReason | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "answer", _require_text(self.answer, "自然语言答案"))
+        if not isinstance(self.mode, ResultSummaryMode):
+            raise TypeError("总结生成方式必须是 ResultSummaryMode")
+        if self.fallback_reason is not None and not isinstance(
+            self.fallback_reason,
+            ResultSummaryFallbackReason,
+        ):
+            raise TypeError("总结降级原因必须是 ResultSummaryFallbackReason 或 None")
+        if self.mode is ResultSummaryMode.LLM and self.fallback_reason is not None:
+            raise ValueError("LLM 总结不能包含降级原因")
+        if self.mode is ResultSummaryMode.TEMPLATE and self.fallback_reason is None:
+            raise ValueError("模板总结必须包含降级原因")
+
+
 @dataclass(frozen=True, slots=True)
 class QuestionDecompositionReview:
     """一次只接受或拒绝候选拆分的不可变审查结果。"""

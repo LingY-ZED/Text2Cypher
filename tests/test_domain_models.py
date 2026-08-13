@@ -12,6 +12,9 @@ from text2cypher.domain.models import (
     QuestionDecomposition,
     QuestionDecompositionReview,
     QuestionDecompositionReviewReason,
+    ResultSummary,
+    ResultSummaryFallbackReason,
+    ResultSummaryMode,
     SubQueryResponse,
     Text2CypherResponse,
 )
@@ -71,6 +74,36 @@ def test_question_decomposition_review_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         review.valid = False  # type: ignore[misc]
+
+
+def test_result_summary_accepts_llm_and_template_states() -> None:
+    llm_summary = ResultSummary("  已查询到服务。  ", ResultSummaryMode.LLM)
+    template_summary = ResultSummary(
+        "未查询到匹配数据。",
+        ResultSummaryMode.TEMPLATE,
+        ResultSummaryFallbackReason.EMPTY_RESULT,
+    )
+
+    assert llm_summary.answer == "已查询到服务。"
+    assert llm_summary.fallback_reason is None
+    assert template_summary.mode is ResultSummaryMode.TEMPLATE
+
+
+@pytest.mark.parametrize(
+    ("mode", "reason"),
+    [
+        (ResultSummaryMode.LLM, ResultSummaryFallbackReason.DISABLED),
+        (ResultSummaryMode.TEMPLATE, None),
+        ("llm", None),
+        (ResultSummaryMode.LLM, "disabled"),
+    ],
+)
+def test_result_summary_rejects_inconsistent_state(
+    mode: object,
+    reason: object,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        ResultSummary("答案", mode, reason)  # type: ignore[arg-type]
 
 
 def test_cypher_failure_context_normalizes_and_is_immutable() -> None:

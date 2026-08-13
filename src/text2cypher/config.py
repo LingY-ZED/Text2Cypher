@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     few_shot_top_k: int = 3
     few_shot_max_chars: int = 3500
     few_shot_library_path: Path | None = None
+    natural_language_summary_enabled: bool = True
+    natural_language_summary_max_input_chars: int = 16000
     schema_timeout_seconds: int = 10
     query_timeout_seconds: int = 10
     max_result_rows: int = 100
@@ -79,6 +81,7 @@ class Settings(BaseSettings):
         "llm_timeout_seconds",
         "llm_max_tokens",
         "few_shot_max_chars",
+        "natural_language_summary_max_input_chars",
         "schema_timeout_seconds",
         "query_timeout_seconds",
         "max_result_rows",

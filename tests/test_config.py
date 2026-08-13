@@ -108,6 +108,21 @@ def test_settings_has_production_decomposition_defaults() -> None:
     assert settings.question_decomposition_max_subquestions == 3
 
 
+def test_settings_has_natural_language_summary_defaults() -> None:
+    settings = Settings(**_settings_kwargs())
+
+    assert settings.natural_language_summary_enabled is True
+    assert settings.natural_language_summary_max_input_chars == 16000
+
+
+def test_settings_rejects_non_positive_summary_character_budget() -> None:
+    with pytest.raises(ValidationError, match="必须为正数"):
+        Settings(
+            **_settings_kwargs(),
+            natural_language_summary_max_input_chars=0,
+        )
+
+
 @pytest.mark.parametrize("maximum", [1, 4])
 def test_settings_rejects_invalid_decomposition_limit(maximum: int) -> None:
     with pytest.raises(ValidationError, match="必须在 2 到 3 之间"):

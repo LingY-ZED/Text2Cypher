@@ -13,6 +13,7 @@ from text2cypher.domain.models import (
     LLMResponse,
     QueryResult,
     QuestionDecomposition,
+    ResultSummary,
     SubQueryResponse,
     ValidationReport,
 )
@@ -112,3 +113,14 @@ class ResultFormatter(Protocol):
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
     ) -> str: ...
+
+
+@runtime_checkable
+class ResultSummarizer(Protocol):
+    """将已成功执行的子查询结果总结为自然语言答案。"""
+
+    def summarize(
+        self,
+        question: str,
+        sub_queries: tuple[SubQueryResponse, ...],
+    ) -> ResultSummary: ...
