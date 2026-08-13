@@ -72,7 +72,14 @@ GOLDEN_COLUMNS = {
     "impact-entry-apis": ("上游方法", "入口接口", "请求方式"),
     "mq-between-services": ("交换机名称", "队列名称", "路由键"),
     "mq-publishers-for-queue": ("发布方法", "交换机名称"),
-    "mq-full-message-chain": ("交换机名称", "队列名称", "消费方法"),
+    "mq-full-message-chain": (
+        "p.全限定名",
+        "s.服务名称",
+        "e.交换机名称",
+        "q.队列名称",
+        "c.全限定名",
+        "r.服务名称",
+    ),
     "aggregate-service-api-counts": ("请求方式", "API数量"),
     "aggregate-service-target-calls": ("下游服务", "调用关系数"),
     "aggregate-interface-implementations": ("服务名称", "接口实现类数"),
@@ -326,12 +333,19 @@ def _assert_golden_result_semantics(
     assert _values(results["mq-publishers-for-queue"], "交换机名称") == {
         "(default)"
     }
-    assert _values(results["mq-full-message-chain"], "交换机名称") == {
+    assert _values(results["mq-full-message-chain"], "e.交换机名称") == {
         "(default)"
     }
-    assert _values(results["mq-full-message-chain"], "队列名称") == {
+    assert _values(results["mq-full-message-chain"], "q.队列名称") == {
         "email",
         "food_delivery",
+    }
+    assert _values(results["mq-full-message-chain"], "s.服务名称") == {
+        "ts-preserve-service"
+    }
+    assert _values(results["mq-full-message-chain"], "r.服务名称") == {
+        "ts-delivery-service",
+        "ts-notification-service",
     }
     assert {
         (row["请求方式"], row["API数量"])

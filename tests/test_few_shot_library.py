@@ -167,3 +167,18 @@ def test_default_library_contains_only_short_atomic_cypher() -> None:
     assert "{简名: 'ConsignServiceImpl'}" in catalog
     assert "food_delivery" in catalog
     assert "preserve.mq.RabbitSend.send" in catalog
+
+    examples_by_id = {example.id: example for example in examples}
+    mq_chain = examples_by_id["mq-full-message-chain"]
+    assert (
+        "(q:消息队列)-[:消息流 {消息流类型:'消费'}]->(c:方法)"
+        in mq_chain.cypher
+    )
+    assert "(p)-[:消息流" in mq_chain.cypher
+    assert "(p:方法" in mq_chain.cypher
+    assert "(s:微服务)" in mq_chain.cypher
+    assert "(r:微服务)" in mq_chain.cypher
+    publishers = examples_by_id["mq-publishers-for-queue"]
+    assert "仅发布方向" in publishers.tags
+    downstream = examples_by_id["call-method-downstream-services"]
+    assert "直接下游" in downstream.tags

@@ -98,6 +98,12 @@ def test_router_sends_only_stable_compatible_metadata() -> None:
     assert "MATCH" not in prompt.user
     assert "schema_requirements" not in prompt.user
     assert "Internal" not in prompt.user
+    assert "查询锚点是否一致" in prompt.system
+    assert "关系方向是否一致" in prompt.system
+    assert "返回字段、分组维度和聚合形状是否一致" in prompt.system
+    assert "不得仅因共享关键词而优先选择" in prompt.system
+    assert "固定方法直接远程访问的下游服务" in prompt.system
+    assert "同时覆盖起始锚点和最终返回形状" in prompt.system
 
 
 @pytest.mark.parametrize(

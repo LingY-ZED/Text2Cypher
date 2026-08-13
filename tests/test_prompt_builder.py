@@ -130,6 +130,143 @@ def test_relationship_semantics_require_relationship_properties() -> None:
     assert "服务间消息依赖" not in prompt.user
 
 
+def test_mq_and_impact_constraints_require_relevant_question_and_patterns() -> None:
+    schema = GraphSchema(
+        nodes=(
+            NodeSchema("方法", (PropertySchema("全限定名"), PropertySchema("方法名"))),
+            NodeSchema("类"),
+            NodeSchema("微服务", (PropertySchema("服务名称"),)),
+            NodeSchema("消息交换机", (PropertySchema("交换机名称"),)),
+            NodeSchema("消息队列", (PropertySchema("队列名称"),)),
+            NodeSchema(
+                "API端点",
+                (PropertySchema("API类型"), PropertySchema("目标微服务")),
+            ),
+        ),
+        relationships=(
+            RelationshipSchema("归属于"),
+            RelationshipSchema("消息流", (PropertySchema("消息流类型"),)),
+            RelationshipSchema("调用", (PropertySchema("调用类型"),)),
+        ),
+        patterns=(
+            RelationshipPattern(("方法",), "归属于", ("类",)),
+            RelationshipPattern(("类",), "归属于", ("微服务",)),
+            RelationshipPattern(("方法",), "消息流", ("消息交换机",)),
+            RelationshipPattern(("消息交换机",), "消息流", ("消息队列",)),
+            RelationshipPattern(("消息队列",), "消息流", ("方法",)),
+            RelationshipPattern(("方法",), "调用", ("方法",)),
+            RelationshipPattern(("方法",), "调用", ("API端点",)),
+        ),
+    )
+
+    mq_prompt = DefaultPromptBuilder().build(schema, "谁消费 email 队列中的消息？")
+    impact_prompt = DefaultPromptBuilder().build(
+        schema,
+        "修改 Sample.method 后有哪些上游方法、入口 API 和远程下游？",
+    )
+    unrelated_prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
+
+    assert "消息队列再经" in mq_prompt.user
+    assert "不得把消费关系写成方法指向队列" in mq_prompt.user
+    assert "发送服务必须从发布方法" not in mq_prompt.user
+    assert "[:调用*1..5]->(changed)" in impact_prompt.user
+    assert "[:调用*0..5]->(changed)" in impact_prompt.user
+    assert "MQ 关系方向必须" not in unrelated_prompt.user
+    assert "方法变更影响分析必须" not in unrelated_prompt.user
+
+
+def test_nonaggregate_distinct_rule_is_not_injected_into_statistics() -> None:
+    schema = GraphSchema(
+        nodes=(NodeSchema("微服务", (PropertySchema("服务名称"),)),)
+    )
+
+    list_prompt = DefaultPromptBuilder().build(schema, "列出微服务")
+    count_prompt = DefaultPromptBuilder().build(schema, "统计微服务数量")
+
+    assert "RETURN DISTINCT" in list_prompt.user
+    assert "最终完整投影" in list_prompt.user
+    assert "RETURN DISTINCT" not in count_prompt.user
+
+
+def test_cross_domain_sender_rest_rule_requires_relevant_question() -> None:
+    schema = GraphSchema(
+        nodes=(
+            NodeSchema("微服务", (PropertySchema("服务名称"),)),
+            NodeSchema("类"),
+            NodeSchema("方法"),
+            NodeSchema(
+                "API端点",
+                (PropertySchema("API类型"), PropertySchema("目标微服务")),
+            ),
+        ),
+        relationships=(
+            RelationshipSchema("归属于"),
+            RelationshipSchema("消息流", (PropertySchema("消息流类型"),)),
+            RelationshipSchema("调用", (PropertySchema("调用类型"),)),
+        ),
+        patterns=(
+            RelationshipPattern(("微服务",), "消息流", ("微服务",)),
+            RelationshipPattern(("方法",), "归属于", ("类",)),
+            RelationshipPattern(("类",), "归属于", ("微服务",)),
+            RelationshipPattern(("方法",), "调用", ("API端点",)),
+        ),
+    )
+
+    matrix_prompt = DefaultPromptBuilder().build(
+        schema,
+        "找出消息发送方，并列出每个发送服务的 REST 下游",
+    )
+    unrelated_prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
+
+    assert "先通过服务间消息依赖确定发送服务" in matrix_prompt.user
+    assert "不得改用 API 之间的跨服务调用" in matrix_prompt.user
+    assert "先通过服务间消息依赖确定发送服务" not in unrelated_prompt.user
+
+
+def test_interface_implementation_entity_rule_excludes_counts() -> None:
+    schema = GraphSchema(
+        nodes=(
+            NodeSchema("类", (PropertySchema("全限定名"),)),
+            NodeSchema("微服务", (PropertySchema("服务名称"),)),
+        ),
+        relationships=(
+            RelationshipSchema("接口实现"),
+            RelationshipSchema("归属于"),
+        ),
+        patterns=(
+            RelationshipPattern(("类",), "接口实现", ("类",)),
+            RelationshipPattern(("类",), "归属于", ("微服务",)),
+        ),
+    )
+
+    entity_prompt = DefaultPromptBuilder().build(schema, "列出服务的接口实现类")
+    count_prompt = DefaultPromptBuilder().build(schema, "统计接口实现类数量")
+
+    assert "实现类作为 `接口实现` 关系起点" in entity_prompt.user
+    assert "不得返回被实现的接口" in entity_prompt.user
+    assert "实现类作为 `接口实现` 关系起点" not in count_prompt.user
+
+
+def test_boundary_application_alias_rule_requires_relevant_question() -> None:
+    schema = GraphSchema(
+        nodes=(
+            NodeSchema(
+                "API端点",
+                (PropertySchema("API类型"), PropertySchema("目标微服务")),
+            ),
+        )
+    )
+
+    boundary_prompt = DefaultPromptBuilder().build(
+        schema,
+        "这个方法会访问系统边界外的哪些应用？",
+    )
+    unrelated_prompt = DefaultPromptBuilder().build(schema, "列出目标服务")
+
+    assert "投影为 `外部应用`" in boundary_prompt.user
+    assert "投影为 `外部应用`" not in unrelated_prompt.user
+
+
 def test_partial_class_method_identifier_semantics_require_all_properties() -> None:
     method_schema = GraphSchema(
         nodes=(

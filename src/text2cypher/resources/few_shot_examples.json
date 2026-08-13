@@ -179,8 +179,8 @@
     "category": "path_query",
     "question": "inside_payment.service.InsidePaymentServiceImpl.pay 会调用哪些下游服务和接口？",
     "cypher": "MATCH (caller:方法 {所属类名: 'inside_payment.service.InsidePaymentServiceImpl', 方法名: 'pay'})-[:调用 {调用类型: '远程调用'}]->(api:API端点 {API类型: '下游API'}) RETURN DISTINCT api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
-    "aliases": ["查询方法访问的远程服务", "方法调用了哪些下游 API"],
-    "tags": ["路径查询", "远程调用", "下游服务", "REST"],
+    "aliases": ["查询方法直接访问的远程下游服务", "变更方法直接调用了哪些下游 API"],
+    "tags": ["路径查询", "远程调用", "直接下游", "返回服务与接口", "REST"],
     "schema_requirements": {
       "node_labels": ["方法", "API端点"],
       "relationship_types": ["调用"],
@@ -328,10 +328,10 @@
   {
     "id": "mq-publishers-for-queue",
     "category": "mq_query",
-    "question": "哪些方法会向 food_delivery 队列发布消息？",
+    "question": "哪些发布方法经交换机向 food_delivery 队列发送消息？",
     "cypher": "MATCH (publisher:方法)-[:消息流 {消息流类型: '发布'}]->(exchange:消息交换机)-[:消息流 {消息流类型: '路由'}]->(queue:消息队列 {队列名称: 'food_delivery'}) RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称 ORDER BY 发布方法",
-    "aliases": ["反向查询消息队列的发布方法", "谁向指定队列发送消息"],
-    "tags": ["MQ查询", "发布者", "消息队列", "路由"],
+    "aliases": ["沿方法到交换机再到队列查询发布方", "谁经发布和路由向指定队列发送消息"],
+    "tags": ["MQ查询", "方法到交换机", "交换机到队列", "仅发布方向"],
     "schema_requirements": {
       "node_labels": ["方法", "消息交换机", "消息队列"],
       "relationship_types": ["消息流"],
@@ -358,15 +358,16 @@
   {
     "id": "mq-full-message-chain",
     "category": "mq_query",
-    "question": "preserve.mq.RabbitSend.send 发布的消息经过哪些交换机和队列，由哪些方法消费？",
-    "cypher": "MATCH (publisher:方法 {全限定名: 'preserve.mq.RabbitSend.send'})-[:消息流 {消息流类型: '发布'}]->(exchange:消息交换机)-[:消息流 {消息流类型: '路由'}]->(queue:消息队列)-[:消息流 {消息流类型: '消费'}]->(consumer:方法) RETURN DISTINCT exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法 ORDER BY 队列名称, 消费方法",
-    "aliases": ["追踪 MQ 发布路由消费链路", "消息经过哪些交换机队列和消费者"],
-    "tags": ["MQ查询", "完整链路", "发布", "路由", "消费"],
+    "question": "preserve.mq.RabbitSend.send 的消息经过哪些交换机和队列，由哪些方法和服务消费？",
+    "cypher": "MATCH (p:方法 {全限定名:'preserve.mq.RabbitSend.send'})-[:归属于]->()-[:归属于]->(s:微服务),(p)-[:消息流 {消息流类型:'发布'}]->(e:消息交换机)-[:消息流 {消息流类型:'路由'}]->(q:消息队列)-[:消息流 {消息流类型:'消费'}]->(c:方法)-[:归属于]->()-[:归属于]->(r:微服务) RETURN DISTINCT p.全限定名,s.服务名称,e.交换机名称 AS 交换机名称,q.队列名称 AS 队列名称,c.全限定名 AS 消费方法,r.服务名称",
+    "aliases": ["追踪方法到交换机到队列到消费方法的完整 MQ 链路", "查询消息路径以及发布和消费方法所属服务"],
+    "tags": ["MQ查询", "完整链路", "队列到消费方法", "发送接收服务", "逐行路径"],
     "schema_requirements": {
-      "node_labels": ["方法", "消息交换机", "消息队列"],
-      "relationship_types": ["消息流"],
+      "node_labels": ["方法", "类", "微服务", "消息交换机", "消息队列"],
+      "relationship_types": ["归属于", "消息流"],
       "node_properties": {
         "方法": ["全限定名"],
+        "微服务": ["服务名称"],
         "消息交换机": ["交换机名称"],
         "消息队列": ["队列名称"]
       },
@@ -386,6 +387,16 @@
           "start_labels": ["消息队列"],
           "relationship_type": "消息流",
           "end_labels": ["方法"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
+        },
+        {
+          "start_labels": ["类"],
+          "relationship_type": "归属于",
+          "end_labels": ["微服务"]
         }
       ]
     }
