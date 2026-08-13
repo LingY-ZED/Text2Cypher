@@ -8,7 +8,9 @@ from text2cypher.application.bootstrap import (
     _build_cypher_corrector,
     _build_few_shot_router,
     _build_question_decomposer,
+    _build_result_summarizer,
 )
+from text2cypher.application.result_summarizer import LLMResultSummarizer
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.config import Settings
 from text2cypher.domain.errors import FewShotLibraryError
@@ -184,3 +186,9 @@ def test_bootstrap_can_disable_cypher_corrector() -> None:
 
     assert corrector is None
     assert client.prompts == []
+
+
+def test_bootstrap_summary_uses_shared_client_defaults() -> None:
+    summarizer = _build_result_summarizer(_settings(), StubLLMClient())
+
+    assert isinstance(summarizer, LLMResultSummarizer)

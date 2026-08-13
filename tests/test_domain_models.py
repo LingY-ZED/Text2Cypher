@@ -194,6 +194,7 @@ def test_text2cypher_response_uses_uniform_sub_query_shape() -> None:
 
     assert response.sub_queries == (first, second)
     assert response.decomposed is True
+    assert response.summary is None
     assert not hasattr(response, "cypher")
     assert not hasattr(response, "result")
 
@@ -201,3 +202,13 @@ def test_text2cypher_response_uses_uniform_sub_query_shape() -> None:
 def test_text2cypher_response_requires_at_least_one_sub_query() -> None:
     with pytest.raises(ValueError, match="1 到 3"):
         Text2CypherResponse("问题", (), "{}")
+
+
+def test_text2cypher_response_rejects_unknown_summary_type() -> None:
+    with pytest.raises(TypeError, match="ResultSummary"):
+        Text2CypherResponse(
+            "问题",
+            (SubQueryResponse("问题", "RETURN 1", QueryResult((), ())),),
+            "{}",
+            "摘要",  # type: ignore[arg-type]
+        )

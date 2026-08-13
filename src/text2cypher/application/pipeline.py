@@ -37,6 +37,7 @@ from text2cypher.domain.ports import (
     PromptBuilder,
     QuestionDecomposer,
     ResultFormatter,
+    ResultSummarizer,
     SchemaFetcher,
 )
 
@@ -56,6 +57,7 @@ class Text2CypherPipeline:
         cypher_validator: CypherValidator,
         cypher_executor: CypherExecutor,
         result_formatter: ResultFormatter,
+        result_summarizer: ResultSummarizer | None = None,
         question_decomposer: QuestionDecomposer | None = None,
         few_shot_router: FewShotRouter | None = None,
         cypher_corrector: CypherCorrector | None = None,
@@ -69,6 +71,7 @@ class Text2CypherPipeline:
         self._cypher_validator = cypher_validator
         self._cypher_executor = cypher_executor
         self._result_formatter = result_formatter
+        self._result_summarizer = result_summarizer
         self._question_decomposer = question_decomposer
         self._few_shot_router = few_shot_router
         self._cypher_corrector = cypher_corrector
@@ -94,14 +97,25 @@ class Text2CypherPipeline:
             self._run_sub_query(schema, sub_question)
             for sub_question in decomposition.sub_questions
         )
-        formatted = self._result_formatter.format(
-            normalized_question,
-            sub_queries,
+        summary = (
+            self._result_summarizer.summarize(normalized_question, sub_queries)
+            if self._result_summarizer is not None
+            else None
+        )
+        formatted = (
+            self._result_formatter.format(
+                normalized_question,
+                sub_queries,
+                summary,
+            )
+            if summary is not None
+            else self._result_formatter.format(normalized_question, sub_queries)
         )
         return Text2CypherResponse(
             question=normalized_question,
             sub_queries=sub_queries,
             formatted=formatted,
+            summary=summary,
         )
 
     def _run_sub_query(

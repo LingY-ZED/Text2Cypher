@@ -5,6 +5,7 @@ from __future__ import annotations
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.question_decomposer import LLMQuestionDecomposer
+from text2cypher.application.result_summarizer import LLMResultSummarizer
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.result_formatter import JsonResultFormatter
@@ -70,6 +71,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 retry_policy=retry_policy,
             ),
             result_formatter=JsonResultFormatter(),
+            result_summarizer=_build_result_summarizer(settings, llm_client),
             question_decomposer=question_decomposer,
             few_shot_router=few_shot_router,
             cypher_corrector=cypher_corrector,
@@ -135,6 +137,19 @@ def _build_cypher_corrector(
     if not settings.cypher_correction_enabled:
         return None
     return LLMCypherCorrector(llm_client)
+
+
+def _build_result_summarizer(
+    settings: Settings,
+    llm_client: LLMClient,
+) -> LLMResultSummarizer:
+    """构造复用主模型客户端的结果总结器。"""
+
+    return LLMResultSummarizer(
+        llm_client,
+        enabled=settings.natural_language_summary_enabled,
+        max_input_chars=settings.natural_language_summary_max_input_chars,
+    )
 
 
 def _close_resources(

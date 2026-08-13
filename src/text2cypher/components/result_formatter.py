@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from text2cypher.domain.models import SubQueryResponse
+from text2cypher.domain.models import ResultSummary, SubQueryResponse
 
 
 class JsonResultFormatter:
@@ -15,6 +15,7 @@ class JsonResultFormatter:
         self,
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
+        summary: ResultSummary | None = None,
     ) -> str:
         payload: dict[str, Any] = {
             "question": question,
@@ -33,4 +34,14 @@ class JsonResultFormatter:
                 for sub_query in sub_queries
             ],
         }
+        if summary is not None:
+            payload["summary"] = {
+                "answer": summary.answer,
+                "mode": summary.mode.value,
+                "fallback_reason": (
+                    summary.fallback_reason.value
+                    if summary.fallback_reason is not None
+                    else None
+                ),
+            }
         return json.dumps(payload, ensure_ascii=False, indent=2, default=str)

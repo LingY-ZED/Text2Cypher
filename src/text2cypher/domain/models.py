@@ -474,6 +474,7 @@ class Text2CypherResponse:
     question: str
     sub_queries: tuple[SubQueryResponse, ...]
     formatted: str
+    summary: ResultSummary | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "question", _require_text(self.question, "问题"))
@@ -486,6 +487,8 @@ class Text2CypherResponse:
             "formatted",
             _require_text(self.formatted, "格式化结果"),
         )
+        if self.summary is not None and not isinstance(self.summary, ResultSummary):
+            raise TypeError("自然语言总结必须是 ResultSummary 或 None")
 
     @property
     def decomposed(self) -> bool:

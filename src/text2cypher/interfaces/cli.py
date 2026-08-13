@@ -78,5 +78,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(response.formatted)
     else:
-        print(f"结果：\n{response.formatted}")
+        answer = (
+            response.summary.answer
+            if response.summary is not None
+            else response.formatted
+        )
+        print(f"结果：\n{answer}")
     return EXIT_SUCCESS

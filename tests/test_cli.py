@@ -4,6 +4,9 @@ import pytest
 
 from text2cypher.domain.models import (
     QueryResult,
+    ResultSummary,
+    ResultSummaryFallbackReason,
+    ResultSummaryMode,
     SubQueryResponse,
     Text2CypherResponse,
 )
@@ -70,3 +73,38 @@ def test_cli_help_is_available(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--help"])
 
     assert "text2cypher" in capsys.readouterr().out
+
+
+def test_cli_prints_natural_language_answer_without_json_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _set_required_environment(monkeypatch)
+
+    class FakePipeline:
+        def run(self, question: str) -> Text2CypherResponse:
+            return Text2CypherResponse(
+                question=question,
+                sub_queries=(
+                    SubQueryResponse(question, "RETURN 1", QueryResult((), ())),
+                ),
+                formatted='{"legacy": true}',
+                summary=ResultSummary(
+                    "已查询到结果。",
+                    ResultSummaryMode.TEMPLATE,
+                    ResultSummaryFallbackReason.DISABLED,
+                ),
+            )
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "text2cypher.interfaces.cli.build_pipeline",
+        lambda settings: FakePipeline(),
+    )
+
+    exit_code = main(["ask", "列出所有微服务"])
+
+    assert exit_code == EXIT_SUCCESS
+    assert capsys.readouterr().out.strip() == "结果：\n已查询到结果。"

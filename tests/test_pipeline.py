@@ -17,6 +17,9 @@ from text2cypher.domain.models import (
     LLMResponse,
     QueryResult,
     QuestionDecomposition,
+    ResultSummary,
+    ResultSummaryFallbackReason,
+    ResultSummaryMode,
     SubQueryResponse,
     Text2CypherResponse,
     ValidationReport,
@@ -154,12 +157,32 @@ class FakeFormatter:
         self,
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
+        summary: ResultSummary | None = None,
     ) -> str:
         assert question == "列出服务"
         assert sub_queries[0].cypher == "MATCH (n) RETURN n"
         assert sub_queries[0].result.rows[0]["name"] == "demo"
         self.calls.append("formatter")
         return "formatted"
+
+
+class FakeResultSummarizer:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def summarize(
+        self,
+        question: str,
+        sub_queries: tuple[SubQueryResponse, ...],
+    ) -> ResultSummary:
+        assert question == "列出服务"
+        assert sub_queries[0].result.rows == ({"name": "demo"},)
+        self.calls.append("summarizer")
+        return ResultSummary(
+            "查询到 demo。",
+            ResultSummaryMode.TEMPLATE,
+            ResultSummaryFallbackReason.DISABLED,
+        )
 
 
 def _pipeline(calls: list[str]) -> Text2CypherPipeline:
@@ -206,6 +229,26 @@ def test_pipeline_runs_every_stage_in_order() -> None:
         "executor",
         "formatter",
     ]
+
+
+def test_pipeline_summarizes_after_all_sub_queries_and_before_formatting() -> None:
+    calls: list[str] = []
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=FakePromptBuilder(calls),
+        llm_client=FakeLLMClient(calls),
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=FakeFormatter(calls),
+        result_summarizer=FakeResultSummarizer(calls),
+    )
+
+    response = pipeline.run("列出服务")
+
+    assert response.summary is not None
+    assert response.summary.answer == "查询到 demo。"
+    assert calls[-2:] == ["summarizer", "formatter"]
 
 
 def test_pipeline_rejects_blank_question_before_any_stage() -> None:
@@ -449,8 +492,108 @@ def test_pipeline_executes_each_sub_question_in_order_with_one_schema() -> None:
     ]
 
 
+def test_pipeline_summarizes_three_sub_queries_once_after_last_execution() -> None:
+    calls: list[str] = []
+
+    class ThreeWayDecomposer:
+        def decompose(
+            self,
+            question: str,
+            schema: GraphSchema,
+        ) -> QuestionDecomposition:
+            return QuestionDecomposition(question, ("一", "二", "三"))
+
+    class AnyPromptBuilder:
+        def build(
+            self,
+            schema: GraphSchema,
+            question: str,
+            examples: tuple[FewShotExample, ...] = (),
+        ) -> ChatPrompt:
+            del schema, examples
+            return ChatPrompt(system="system", user=question)
+
+    class AnyLLM:
+        def generate(self, prompt: ChatPrompt) -> LLMResponse:
+            return LLMResponse(content=prompt.user)
+
+    class AnyParser:
+        def parse(self, text: str) -> str:
+            return text
+
+    class AnyValidator:
+        def validate(self, cypher: str) -> ValidationReport:
+            del cypher
+            return ValidationReport(query_type="r")
+
+    class RecordingExecutor:
+        def execute(self, cypher: str) -> QueryResult:
+            calls.append(f"executor:{cypher}")
+            return QueryResult(("结果",), ({"结果": cypher},))
+
+    class RecordingSummarizer:
+        def summarize(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> ResultSummary:
+            assert question == "复杂问题"
+            assert tuple(item.question for item in sub_queries) == ("一", "二", "三")
+            calls.append("summarizer")
+            return ResultSummary(
+                "已完成。",
+                ResultSummaryMode.TEMPLATE,
+                ResultSummaryFallbackReason.DISABLED,
+            )
+
+    class RecordingFormatter:
+        def format(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+            summary: ResultSummary | None = None,
+        ) -> str:
+            del question, sub_queries
+            assert summary is not None
+            calls.append("formatter")
+            return "formatted"
+
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=AnyPromptBuilder(),
+        llm_client=AnyLLM(),
+        cypher_parser=AnyParser(),
+        cypher_validator=AnyValidator(),
+        cypher_executor=RecordingExecutor(),
+        result_formatter=RecordingFormatter(),
+        result_summarizer=RecordingSummarizer(),
+        question_decomposer=ThreeWayDecomposer(),
+    )
+
+    pipeline.run("复杂问题")
+
+    assert calls == [
+        "schema",
+        "executor:一",
+        "executor:二",
+        "executor:三",
+        "summarizer",
+        "formatter",
+    ]
+
+
 def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
     calls: list[str] = []
+
+    class FailingIfCalledSummarizer:
+        def summarize(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> ResultSummary:
+            del question, sub_queries
+            calls.append("summarizer")
+            raise AssertionError("子查询失败后不应总结")
 
     class ThreeWayDecomposer:
         def decompose(
@@ -498,6 +641,7 @@ def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
         cypher_validator=RejectSecondValidator(),
         cypher_executor=RecordingExecutor(),
         result_formatter=FakeFormatter(calls),
+        result_summarizer=FailingIfCalledSummarizer(),
         question_decomposer=ThreeWayDecomposer(),
     )
 
@@ -506,4 +650,5 @@ def test_pipeline_fails_fast_and_does_not_run_later_sub_questions() -> None:
 
     assert "prompt:三" not in calls
     assert "executor:RETURN '二'" not in calls
+    assert "summarizer" not in calls
     assert "formatter" not in calls

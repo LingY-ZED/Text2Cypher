@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 
 from text2cypher.components.result_formatter import JsonResultFormatter
-from text2cypher.domain.models import QueryResult, SubQueryResponse
+from text2cypher.domain.models import (
+    QueryResult,
+    ResultSummary,
+    ResultSummaryFallbackReason,
+    ResultSummaryMode,
+    SubQueryResponse,
+)
 
 
 def test_json_formatter_preserves_chinese_values() -> None:
@@ -61,3 +67,30 @@ def test_json_formatter_groups_multiple_sub_query_results() -> None:
         "查询下游",
     ]
     assert payload["sub_queries"][1]["rows"] == [{"下游": "service"}]
+
+
+def test_json_formatter_includes_summary_without_changing_raw_results() -> None:
+    formatted = JsonResultFormatter().format(
+        question="列出服务",
+        sub_queries=(
+            SubQueryResponse(
+                "列出服务",
+                "RETURN 'food-service' AS 服务",
+                QueryResult(("服务",), ({"服务": "food-service"},)),
+            ),
+        ),
+        summary=ResultSummary(
+            "查询到 food-service。",
+            ResultSummaryMode.TEMPLATE,
+            ResultSummaryFallbackReason.DISABLED,
+        ),
+    )
+
+    payload = json.loads(formatted)
+
+    assert payload["sub_queries"][0]["rows"] == [{"服务": "food-service"}]
+    assert payload["summary"] == {
+        "answer": "查询到 food-service。",
+        "mode": "template",
+        "fallback_reason": "disabled",
+    }

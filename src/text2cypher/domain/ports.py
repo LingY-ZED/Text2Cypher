@@ -112,6 +112,7 @@ class ResultFormatter(Protocol):
         self,
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
+        summary: ResultSummary | None = None,
     ) -> str: ...
 
 
