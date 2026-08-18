@@ -224,3 +224,14 @@ def test_questions_do_not_reuse_the_previous_comparison_set() -> None:
     }
 
     assert not ({case.question for case in load_cases()} & previous_questions)
+
+
+def test_call_chain_method_paths_do_not_include_class_nodes() -> None:
+    cases = {case.id: case for case in load_cases()}
+    intent = cases["consign-insert-full-upstream-chain"].intents[0]
+
+    assert "), (target)-[:归属于]" in intent.oracle_cypher
+    assert all(
+        path[-1] == "consign.service.ConsignServiceImpl.insertConsignRecord"
+        for path in (row["方法路径"] for row in intent.expected_snapshot)
+    )

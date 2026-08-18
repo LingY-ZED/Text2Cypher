@@ -2060,7 +2060,7 @@
         {
           "id": "full-upstream-chain",
           "label": "完整上游调用链",
-          "oracle_cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名:'insertConsignRecord'})-[:归属于]->(:类 {简名:'ConsignServiceImpl'}), (entry)-[:调用 {调用类型:'接口入口'}]->(entry_api:API端点 {API类型:'上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 入口API, 方法路径",
+          "oracle_cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名:'insertConsignRecord'}), (target)-[:归属于]->(:类 {简名:'ConsignServiceImpl'}), (entry)-[:调用 {调用类型:'接口入口'}]->(entry_api:API端点 {API类型:'上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 入口API, 方法路径",
           "comparison_mode": "row_set",
           "expected_columns": ["目标方法", "入口API", "方法路径"],
           "accepted_aliases": {
@@ -2069,8 +2069,8 @@
             "方法路径": ["方法路径", "上游方法路径", "调用路径"]
           },
           "expected_snapshot": [
-            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.insertConsign", "consign.service.ConsignServiceImpl.insertConsignRecord", "consign.service.ConsignServiceImpl"]},
-            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.updateConsign", "consign.service.ConsignServiceImpl.updateConsignRecord", "consign.service.ConsignServiceImpl.insertConsignRecord", "consign.service.ConsignServiceImpl"]}
+            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.insertConsign", "consign.service.ConsignServiceImpl.insertConsignRecord"]},
+            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.updateConsign", "consign.service.ConsignServiceImpl.updateConsignRecord", "consign.service.ConsignServiceImpl.insertConsignRecord"]}
           ]
         }
       ]
