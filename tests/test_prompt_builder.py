@@ -15,6 +15,46 @@ from text2cypher.domain.models import (
 )
 
 
+def _code_graph_schema() -> GraphSchema:
+    return GraphSchema(
+        nodes=(
+            NodeSchema(
+                "方法",
+                (PropertySchema("方法名"), PropertySchema("全限定名")),
+            ),
+            NodeSchema("类", (PropertySchema("简名"),)),
+            NodeSchema("微服务", (PropertySchema("服务名称"),)),
+            NodeSchema(
+                "API端点",
+                (
+                    PropertySchema("API类型"),
+                    PropertySchema("接口路径"),
+                    PropertySchema("目标微服务"),
+                ),
+            ),
+            NodeSchema("消息交换机", (PropertySchema("交换机名称"),)),
+            NodeSchema("消息队列", (PropertySchema("队列名称"),)),
+        ),
+        relationships=(
+            RelationshipSchema("归属于"),
+            RelationshipSchema("调用", (PropertySchema("调用类型"),)),
+            RelationshipSchema("消息流", (PropertySchema("消息流类型"),)),
+        ),
+        patterns=(
+            RelationshipPattern(("方法",), "调用", ("方法",)),
+            RelationshipPattern(("方法",), "调用", ("API端点",)),
+            RelationshipPattern(("API端点",), "调用", ("API端点",)),
+            RelationshipPattern(("API端点",), "归属于", ("方法",)),
+            RelationshipPattern(("方法",), "归属于", ("类",)),
+            RelationshipPattern(("类",), "归属于", ("微服务",)),
+            RelationshipPattern(("方法",), "消息流", ("消息交换机",)),
+            RelationshipPattern(("消息交换机",), "消息流", ("消息队列",)),
+            RelationshipPattern(("消息队列",), "消息流", ("方法",)),
+            RelationshipPattern(("微服务",), "消息流", ("微服务",)),
+        ),
+    )
+
+
 def test_prompt_includes_question_complete_schema_and_generic_system_rules() -> None:
     schema = GraphSchema(
         nodes=(
@@ -60,55 +100,28 @@ def test_prompt_includes_question_complete_schema_and_generic_system_rules() -> 
 
 
 def test_business_semantics_are_included_only_for_available_properties() -> None:
-    schema = GraphSchema(
-        nodes=(
-            NodeSchema(
-                name="Endpoint",
-                properties=(
-                    PropertySchema("方法名"),
-                    PropertySchema("API类型"),
-                    PropertySchema("目标微服务"),
-                    PropertySchema("服务名称"),
-                ),
-            ),
-        ),
-        relationships=(
-            RelationshipSchema(
-                name="REL",
-                properties=(
-                    PropertySchema("调用类型"),
-                    PropertySchema("消息流类型"),
-                    PropertySchema("交换机名称"),
-                    PropertySchema("队列名称"),
-                ),
-            ),
-        ),
+    prompt = DefaultPromptBuilder().build(
+        _code_graph_schema(),
+        "查询 Sample.run 直接远程访问的下游 API 和目标服务",
     )
 
-    prompt = DefaultPromptBuilder().build(schema, "分析依赖")
-
     assert "可适用的业务语义：" in prompt.user
-    assert "`上游API`" in prompt.user
-    assert "`下游API`" in prompt.user
-    assert "`目标微服务` 表示业务调用目标" in prompt.user
-    assert "`远程调用` 表示代码方法直接访问下游 API" in prompt.user
-    assert "方法到下游 API 的关系不得使用 `跨服务调用`" in prompt.user
-    assert "`跨服务调用`" in prompt.user
-    assert "业务目标服务应优先使用源 API 的 `目标微服务` 属性" in prompt.user
-    assert "DISTINCT 关系计数" in prompt.user
-    assert "`服务间消息依赖`" in prompt.user
-    assert "两端节点类型都提供 `服务名称`" in prompt.user
-    assert "关系属性 `交换机名称`" not in prompt.user
-    assert "关系属性 `队列名称`" not in prompt.user
+    assert "`Class.method`" in prompt.user
+    assert "调用类型='远程调用'" in prompt.user
+    assert "API类型='下游API'" in prompt.user
+    assert "`目标微服务`" in prompt.user
+    assert "关系类型和 API 类型必须同时过滤" in prompt.user
+    assert "MQ 只按" not in prompt.user
+    assert "跨服务映射" not in prompt.user
     assert "可适用的业务语义" not in prompt.system
 
     unrelated_prompt = DefaultPromptBuilder().build(
         GraphSchema(nodes=(NodeSchema(name="City"),)),
         "列出城市",
     )
-    assert "可适用的业务语义：" not in unrelated_prompt.user
     assert "上游API" not in unrelated_prompt.user
     assert "跨服务调用" not in unrelated_prompt.user
+    assert "MQ" not in unrelated_prompt.user
 
 
 def test_relationship_semantics_require_relationship_properties() -> None:
@@ -131,33 +144,7 @@ def test_relationship_semantics_require_relationship_properties() -> None:
 
 
 def test_mq_and_impact_constraints_require_relevant_question_and_patterns() -> None:
-    schema = GraphSchema(
-        nodes=(
-            NodeSchema("方法", (PropertySchema("全限定名"), PropertySchema("方法名"))),
-            NodeSchema("类"),
-            NodeSchema("微服务", (PropertySchema("服务名称"),)),
-            NodeSchema("消息交换机", (PropertySchema("交换机名称"),)),
-            NodeSchema("消息队列", (PropertySchema("队列名称"),)),
-            NodeSchema(
-                "API端点",
-                (PropertySchema("API类型"), PropertySchema("目标微服务")),
-            ),
-        ),
-        relationships=(
-            RelationshipSchema("归属于"),
-            RelationshipSchema("消息流", (PropertySchema("消息流类型"),)),
-            RelationshipSchema("调用", (PropertySchema("调用类型"),)),
-        ),
-        patterns=(
-            RelationshipPattern(("方法",), "归属于", ("类",)),
-            RelationshipPattern(("类",), "归属于", ("微服务",)),
-            RelationshipPattern(("方法",), "消息流", ("消息交换机",)),
-            RelationshipPattern(("消息交换机",), "消息流", ("消息队列",)),
-            RelationshipPattern(("消息队列",), "消息流", ("方法",)),
-            RelationshipPattern(("方法",), "调用", ("方法",)),
-            RelationshipPattern(("方法",), "调用", ("API端点",)),
-        ),
-    )
+    schema = _code_graph_schema()
 
     mq_prompt = DefaultPromptBuilder().build(schema, "谁消费 email 队列中的消息？")
     impact_prompt = DefaultPromptBuilder().build(
@@ -166,13 +153,13 @@ def test_mq_and_impact_constraints_require_relevant_question_and_patterns() -> N
     )
     unrelated_prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
 
-    assert "消息队列再经" in mq_prompt.user
-    assert "不得把消费关系写成方法指向队列" in mq_prompt.user
-    assert "发送服务必须从发布方法" not in mq_prompt.user
+    assert "发布方法-[:消息流" in mq_prompt.user
+    assert "队列-[:消息流" in mq_prompt.user
+    assert "两端服务分别从对应方法" in mq_prompt.user
     assert "[:调用*1..5]->(changed)" in impact_prompt.user
     assert "[:调用*0..5]->(changed)" in impact_prompt.user
-    assert "MQ 关系方向必须" not in unrelated_prompt.user
-    assert "方法变更影响分析必须" not in unrelated_prompt.user
+    assert "MQ 只按" not in unrelated_prompt.user
+    assert "方法变更影响分三种方向" not in unrelated_prompt.user
 
 
 def test_nonaggregate_distinct_rule_is_not_injected_into_statistics() -> None:
@@ -196,7 +183,11 @@ def test_cross_domain_sender_rest_rule_requires_relevant_question() -> None:
             NodeSchema("方法"),
             NodeSchema(
                 "API端点",
-                (PropertySchema("API类型"), PropertySchema("目标微服务")),
+                (
+                    PropertySchema("API类型"),
+                    PropertySchema("接口路径"),
+                    PropertySchema("目标微服务"),
+                ),
             ),
         ),
         relationships=(
@@ -218,9 +209,9 @@ def test_cross_domain_sender_rest_rule_requires_relevant_question() -> None:
     )
     unrelated_prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
 
-    assert "先通过服务间消息依赖确定发送服务" in matrix_prompt.user
-    assert "不得改用 API 之间的跨服务调用" in matrix_prompt.user
-    assert "先通过服务间消息依赖确定发送服务" not in unrelated_prompt.user
+    assert "先由微服务间 `服务间消息依赖` 找到发送服务" in matrix_prompt.user
+    assert "保留发送服务与下游服务逐行配对" in matrix_prompt.user
+    assert "先由微服务间 `服务间消息依赖`" not in unrelated_prompt.user
 
 
 def test_interface_implementation_entity_rule_excludes_counts() -> None:
@@ -250,11 +241,22 @@ def test_interface_implementation_entity_rule_excludes_counts() -> None:
 def test_boundary_application_alias_rule_requires_relevant_question() -> None:
     schema = GraphSchema(
         nodes=(
+            NodeSchema("方法"),
             NodeSchema(
                 "API端点",
-                (PropertySchema("API类型"), PropertySchema("目标微服务")),
+                (
+                    PropertySchema("API类型"),
+                    PropertySchema("接口路径"),
+                    PropertySchema("目标微服务"),
+                ),
             ),
-        )
+        ),
+        relationships=(
+            RelationshipSchema("调用", (PropertySchema("调用类型"),)),
+        ),
+        patterns=(
+            RelationshipPattern(("方法",), "调用", ("API端点",)),
+        ),
     )
 
     boundary_prompt = DefaultPromptBuilder().build(
@@ -271,22 +273,23 @@ def test_partial_class_method_identifier_semantics_require_all_properties() -> N
     method_schema = GraphSchema(
         nodes=(
             NodeSchema(
-                name="CodeUnit",
+                name="方法",
                 properties=(
                     PropertySchema("方法名"),
                     PropertySchema("所属类名"),
                     PropertySchema("全限定名"),
-                    PropertySchema("简名"),
                 ),
             ),
+            NodeSchema("类", (PropertySchema("简名"),)),
         ),
     )
     incomplete_schema = GraphSchema(
         nodes=(
             NodeSchema(
-                name="CodeUnit",
+                name="方法",
                 properties=(PropertySchema("方法名"),),
             ),
+            NodeSchema("类"),
         ),
     )
 
@@ -300,8 +303,8 @@ def test_partial_class_method_identifier_semantics_require_all_properties() -> N
     )
 
     assert "`Class.method`" in method_prompt.user
-    assert "按 `简名 = Class` 定位" in method_prompt.user
-    assert "不得把短类名直接作为 `所属类名`" in method_prompt.user
+    assert "`简名=Class` 定位" in method_prompt.user
+    assert "只有方法名时匹配全部同名节点" in method_prompt.user
     assert "`Class.method`" not in incomplete_prompt.user
 
 

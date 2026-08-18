@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from text2cypher.components.question_decomposition import (
@@ -45,26 +43,26 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "- (:Person)-[:`WORKS-AT`]->(:Company)" in prompt.user
     assert "查询 Alice 的任职公司和同事" in prompt.user
     assert "最多拆成 3 个子问题" in prompt.user
-    assert "不得把只属于一个分句的服务、对象或范围" in prompt.system
-    assert "不得把不同分组维度或不同返回形状合并" in prompt.system
-    assert "按某一维度分布" in prompt.system
-    assert "按另一对象分组计数" in prompt.system
-    assert "必须拆成三个独立子问题" in prompt.system
-    assert "全部反向上游路径" in prompt.system
-    assert "变更对象直接访问的远程下游" in prompt.system
-    assert "变更对象直接远程访问的哪些外部对象" in prompt.system
-    assert "会丢失方向和直接性" in prompt.system
-    assert "Component.action 直接远程访问" in prompt.system
-    assert "哪些外部服务需要回归验证" in prompt.system
-    assert "固定起点沿一条连续路径询问多个位置" in prompt.system
-    assert "重复固定起点和完整路径前缀" in prompt.system
+    assert "只属于一个分句的限定传播给其他意图" in prompt.system
+    assert "不同分组和返回形状不要合并" in prompt.system
+    assert "完整调用链是一个逐行对应的意图" in prompt.system
+    assert "上游为反向、下游为正向" in prompt.system
+    assert "调用链表示最多五跳" in prompt.system
+    assert "完整上游链默认包含入口 API" in prompt.system
+    assert "完整下游链默认包含有序方法路径" in prompt.system
+    assert "变更方法直接远程下游三个意图" in prompt.system
+    assert len(prompt.system) <= 1100
 
 
-def test_decomposition_implementation_has_no_current_schema_names() -> None:
-    source = inspect.getsource(QuestionDecompositionPromptBuilder)
+def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
+    prompt = QuestionDecompositionPromptBuilder().build(
+        _external_schema(),
+        "查询 getAllFood 的完整上游调用链",
+        3,
+    )
 
-    for database_name in ("方法", "类", "微服务", "API端点", "归属于", "调用"):
-        assert database_name not in source
+    assert "方法路径、入口或出口 API、服务必须留在同一子问题" in prompt.system
+    assert "明确只问上游方法、入口 API 或直接下游服务时按原对象处理" in prompt.system
 
 
 @pytest.mark.parametrize(

@@ -98,11 +98,12 @@ def test_router_sends_only_stable_compatible_metadata() -> None:
     assert "MATCH" not in prompt.user
     assert "schema_requirements" not in prompt.user
     assert "Internal" not in prompt.user
-    assert "查询锚点是否一致" in prompt.system
-    assert "关系方向是否一致" in prompt.system
-    assert "返回字段、分组维度和聚合形状是否一致" in prompt.system
+    assert "查询锚点" in prompt.system
+    assert "关系方向" in prompt.system
+    assert "返回字段、分组维度和聚合形状" in prompt.system
     assert "不得仅因共享关键词而优先选择" in prompt.system
-    assert "固定方法直接远程访问的下游服务" in prompt.system
+    assert "完整上游链、完整下游链和服务依赖" in prompt.system
+    assert "选择完整链时不得用只返回其中一列的示例替代" in prompt.system
     assert "同时覆盖起始锚点和最终返回形状" in prompt.system
 
 

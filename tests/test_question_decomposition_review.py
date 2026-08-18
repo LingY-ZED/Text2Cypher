@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from text2cypher.components.question_decomposition_review import (
@@ -21,26 +19,27 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "1. 查询 REST 下游依赖" in prompt.user
     assert "2. 查询 MQ 下游依赖" in prompt.user
     assert "Schema" not in prompt.user
-    assert "完整重复原始问题中的固定对象和筛选条件并独立重算" in prompt.system
-    assert "固定对象上的独立多意图不做此检查" in prompt.system
-    assert "跨意图传播对象、范围和直接性限定" in prompt.system
-    assert "变更对象作为发起方、直接、远程" in prompt.system
-    assert "哪些外部对象需要回归" in prompt.system
-    assert "必须返回 COVERAGE_MISMATCH" in prompt.system
-    assert "哪些外部服务需要回归验证" in prompt.system
-    assert "合并互不兼容的分组和返回形状" in prompt.system
-    assert "按维度分布、按另一对象分组计数和实体明细" in prompt.system
-    assert "优先于其他接受规则的强制拒绝" in prompt.system
-    assert "固定起点沿一条连续路径询问多个位置" in prompt.system
-    assert "重复固定起点和完整路径前缀" in prompt.system
+    assert "固定对象与完整筛选条件可在各项重复并独立重算" in prompt.system
+    assert "没有新增、丢失或跨意图传播限定" in prompt.system
+    assert "完整调用链是一个逐行对应的意图" in prompt.system
+    assert "把同一链的方法、API、服务拆开" in prompt.system
+    assert "无法恢复原始行" in prompt.system
+    assert "返回 COVERAGE_MISMATCH" in prompt.system
+    assert "合并不兼容返回形状" in prompt.system
     assert "RESULT_DEPENDENCY" in prompt.system
+    assert len(prompt.system) <= 1400
 
 
-def test_review_prompt_builder_has_no_current_schema_names() -> None:
-    source = inspect.getsource(QuestionDecompositionReviewPromptBuilder)
+def test_review_prompt_has_abstract_call_chain_semantics_without_graph_schema() -> None:
+    prompt = QuestionDecompositionReviewPromptBuilder().build(
+        "查询 getAllFood 的完整上游调用链",
+        ("查询 getAllFood 的上游方法", "查询 getAllFood 的入口 API"),
+    )
 
-    for database_name in ("方法", "类", "微服务", "API端点", "归属于", "调用"):
-        assert database_name not in source
+    assert "上游反向、下游正向" in prompt.system
+    assert "调用链最多五跳" in prompt.system
+    assert "图谱 Schema：" not in prompt.user
+    assert "关系模式：" not in prompt.user
 
 
 @pytest.mark.parametrize(
