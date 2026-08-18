@@ -167,16 +167,17 @@ def test_default_library_contains_short_focused_cypher() -> None:
     assert "inside_payment.service.InsidePaymentServiceImpl" in catalog
     assert "{简名: 'ConsignServiceImpl'}" in catalog
     assert "food_delivery" in catalog
-    assert "preserve.mq.RabbitSend.send" in catalog
+    assert "展开 food_delivery 的完整消息链" in catalog
 
     examples_by_id = {example.id: example for example in examples}
     mq_chain = examples_by_id["mq-full-message-chain"]
     assert (
-        "(q:消息队列)-[:消息流 {消息流类型:'消费'}]->(c:方法)"
+        "(q:消息队列 {队列名称:'food_delivery'})"
+        "-[:消息流 {消息流类型:'消费'}]->(c:方法)"
         in mq_chain.cypher
     )
-    assert "(p)-[:消息流" in mq_chain.cypher
     assert "(p:方法" in mq_chain.cypher
+    assert "(q:消息队列 {队列名称:'food_delivery'})" in mq_chain.cypher
     assert "(s:微服务)" in mq_chain.cypher
     assert "(r:微服务)" in mq_chain.cypher
     publishers = examples_by_id["mq-publishers-for-queue"]
