@@ -55,6 +55,8 @@ GOLDEN_ROW_COUNTS = {
     "aggregate-service-api-counts": 3,
     "aggregate-service-target-calls": 5,
     "aggregate-interface-implementations": 38,
+    "call-method-full-upstream-chain": 1,
+    "call-method-full-downstream-chain": 8,
 }
 
 GOLDEN_COLUMNS = {
@@ -75,14 +77,23 @@ GOLDEN_COLUMNS = {
     "mq-full-message-chain": (
         "p.全限定名",
         "s.服务名称",
-        "e.交换机名称",
-        "q.队列名称",
-        "c.全限定名",
+        "交换机名称",
+        "队列名称",
+        "消费方法",
         "r.服务名称",
     ),
     "aggregate-service-api-counts": ("请求方式", "API数量"),
     "aggregate-service-target-calls": ("下游服务", "调用关系数"),
     "aggregate-interface-implementations": ("服务名称", "接口实现类数"),
+    "call-method-full-upstream-chain": ("目标方法", "入口API", "方法路径"),
+    "call-method-full-downstream-chain": (
+        "目标方法",
+        "方法路径",
+        "下游API",
+        "下游服务",
+        "目标上游API",
+        "目标入口方法",
+    ),
 }
 
 
@@ -198,7 +209,7 @@ def test_real_neo4j_error_reaches_corrector_as_structured_context() -> None:
 
 
 def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
-    """逐条验证 18 条黄金示例的 Schema、只读性和真实结果语义。"""
+    """逐条验证 20 条黄金示例的 Schema、只读性和真实结果语义。"""
 
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings)
@@ -245,7 +256,7 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
         provider.close()
 
     assert incompatible == []
-    assert len(reports) == 18
+    assert len(reports) == 20
     assert all(report.query_type == "r" for report in reports.values())
     assert set(results) == set(GOLDEN_ROW_COUNTS)
     assert {
@@ -333,10 +344,10 @@ def _assert_golden_result_semantics(
     assert _values(results["mq-publishers-for-queue"], "交换机名称") == {
         "(default)"
     }
-    assert _values(results["mq-full-message-chain"], "e.交换机名称") == {
+    assert _values(results["mq-full-message-chain"], "交换机名称") == {
         "(default)"
     }
-    assert _values(results["mq-full-message-chain"], "q.队列名称") == {
+    assert _values(results["mq-full-message-chain"], "队列名称") == {
         "email",
         "food_delivery",
     }
@@ -347,6 +358,12 @@ def _assert_golden_result_semantics(
         "ts-delivery-service",
         "ts-notification-service",
     }
+    assert _values(
+        results["call-method-full-upstream-chain"], "入口API"
+    ) == {"/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}"}
+    assert _values(
+        results["call-method-full-downstream-chain"], "下游服务"
+    ) == {"ts-order-other-service", "ts-order-service", "ts-payment-service"}
     assert {
         (row["请求方式"], row["API数量"])
         for row in results["aggregate-service-api-counts"].rows

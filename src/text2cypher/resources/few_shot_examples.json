@@ -494,5 +494,85 @@
         }
       ]
     }
+  },
+  {
+    "id": "call-method-full-upstream-chain",
+    "category": "path_query",
+    "question": "查询 FoodServiceImpl.getAllFood 的完整上游调用链，包括入口 API 和有序方法路径。",
+    "cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名: 'getAllFood'})-[:归属于]->(:类 {简名: 'FoodServiceImpl'}), (entry)-[:调用 {调用类型: '接口入口'}]->(api:API端点 {API类型: '上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 目标方法, 入口API, 方法路径",
+    "aliases": ["追踪方法的入口 API 与完整上游方法路径", "查询到达目标方法的有序上游链"],
+    "tags": ["路径查询", "完整上游链", "入口API", "有序方法路径"],
+    "schema_requirements": {
+      "node_labels": ["方法", "类", "API端点"],
+      "relationship_types": ["归属于", "调用"],
+      "node_properties": {
+        "方法": ["方法名", "全限定名"],
+        "类": ["简名"],
+        "API端点": ["API类型", "接口路径"]
+      },
+      "relationship_properties": {"调用": ["调用类型"]},
+      "patterns": [
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "调用",
+          "end_labels": ["方法"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "调用",
+          "end_labels": ["API端点"]
+        }
+      ]
+    }
+  },
+  {
+    "id": "call-method-full-downstream-chain",
+    "category": "path_query",
+    "question": "查询 InsidePaymentServiceImpl.pay 的完整下游调用链，包括方法路径、下游 API、目标服务和目标入口 API。",
+    "cypher": "MATCH path=(target:方法 {方法名: 'pay'})-[:调用*0..5]->(out:方法), (target)-[:归属于]->(:类 {简名: 'InsidePaymentServiceImpl'}), (out)-[:调用 {调用类型: '远程调用'}]->(down:API端点 {API类型: '下游API'}) OPTIONAL MATCH (down)-[:调用 {调用类型: '跨服务调用'}]->(up:API端点 {API类型: '上游API'})-[:归属于]->(entry:方法) RETURN DISTINCT target.全限定名 AS 目标方法, [method IN nodes(path) | method.全限定名] AS 方法路径, down.接口路径 AS 下游API, down.目标微服务 AS 下游服务, up.接口路径 AS 目标上游API, entry.全限定名 AS 目标入口方法 ORDER BY 目标方法, 方法路径, 下游API, 目标上游API",
+    "aliases": ["追踪方法到远程 API 和目标入口的完整下游链", "查询有序下游方法路径与直接跨服务边界"],
+    "tags": ["路径查询", "完整下游链", "跨服务", "有序方法路径", "REST"],
+    "schema_requirements": {
+      "node_labels": ["方法", "类", "API端点"],
+      "relationship_types": ["归属于", "调用"],
+      "node_properties": {
+        "方法": ["方法名", "全限定名"],
+        "类": ["简名"],
+        "API端点": ["API类型", "接口路径", "目标微服务"]
+      },
+      "relationship_properties": {"调用": ["调用类型"]},
+      "patterns": [
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "调用",
+          "end_labels": ["方法"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "调用",
+          "end_labels": ["API端点"]
+        },
+        {
+          "start_labels": ["API端点"],
+          "relationship_type": "调用",
+          "end_labels": ["API端点"]
+        },
+        {
+          "start_labels": ["API端点"],
+          "relationship_type": "归属于",
+          "end_labels": ["方法"]
+        }
+      ]
+    }
   }
 ]

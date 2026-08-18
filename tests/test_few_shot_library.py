@@ -82,13 +82,13 @@ def code_knowledge_schema() -> GraphSchema:
     )
 
 
-def test_default_library_contains_expected_18_example_catalog() -> None:
+def test_default_library_contains_expected_20_example_catalog() -> None:
     examples = JsonFewShotExampleLoader().load()
 
-    assert len(examples) == 18
+    assert len(examples) == 20
     assert Counter(example.category for example in examples) == {
         "simple_query": 3,
-        "path_query": 7,
+        "path_query": 9,
         "impact_analysis": 2,
         "mq_query": 3,
         "aggregate_statistics": 3,
@@ -103,6 +103,8 @@ def test_default_library_contains_expected_18_example_catalog() -> None:
         "path-queue-owner",
         "call-method-downstream-methods",
         "call-method-downstream-services",
+        "call-method-full-upstream-chain",
+        "call-method-full-downstream-chain",
         "call-service-outgoing-rest",
         "impact-upstream-services",
         "impact-entry-apis",
@@ -137,7 +139,7 @@ def test_all_default_examples_match_frozen_code_knowledge_schema(
     assert incompatible == []
 
 
-def test_default_library_contains_only_short_atomic_cypher() -> None:
+def test_default_library_contains_short_focused_cypher() -> None:
     examples = JsonFewShotExampleLoader().load()
     catalog = "\n".join(
         f"{example.question}\n{example.cypher}" for example in examples
@@ -153,16 +155,15 @@ def test_default_library_contains_only_short_atomic_cypher() -> None:
     assert "compound-method-impact" not in catalog
     assert "compound-rest-mq-dependencies" not in catalog
     assert "WHERE" not in cypher_catalog.upper()
-    assert "OPTIONAL MATCH" not in cypher_catalog.upper()
     assert "UNION" not in cypher_catalog.upper()
     assert re.search(r"\bCALL\b", cypher_catalog, re.IGNORECASE) is None
     assert "COLLECT(" not in cypher_catalog.upper()
     assert ";" not in cypher_catalog
     assert "//" not in cypher_catalog
     assert "/*" not in cypher_catalog
-    assert max(lengths) <= 280
-    assert sum(lengths) / len(lengths) <= 180
-    assert sum("[:调用*0..5]" in example.cypher for example in examples) == 1
+    assert max(lengths) <= 480
+    assert sum(lengths) / len(lengths) <= 200
+    assert sum("[:调用*0..5]" in example.cypher for example in examples) == 3
     assert "inside_payment.service.InsidePaymentServiceImpl" in catalog
     assert "{简名: 'ConsignServiceImpl'}" in catalog
     assert "food_delivery" in catalog
@@ -182,3 +183,9 @@ def test_default_library_contains_only_short_atomic_cypher() -> None:
     assert "仅发布方向" in publishers.tags
     downstream = examples_by_id["call-method-downstream-services"]
     assert "直接下游" in downstream.tags
+    upstream_chain = examples_by_id["call-method-full-upstream-chain"]
+    assert "nodes(path)" in upstream_chain.cypher
+    assert "入口API" in upstream_chain.cypher
+    downstream_chain = examples_by_id["call-method-full-downstream-chain"]
+    assert "OPTIONAL MATCH" in downstream_chain.cypher
+    assert "目标上游API" in downstream_chain.cypher
