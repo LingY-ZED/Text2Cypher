@@ -107,7 +107,8 @@ def test_full_downstream_chain_uses_optional_direct_service_boundary() -> None:
     )
 
     assert "沿 `[:调用*0..5]` 正向展开" in rendered
-    assert "`调用类型='远程调用'`" in rendered
+    assert "路径末端方法到 `API类型='下游API'` 的 `远程调用` 必须用 MATCH" in rendered
+    assert "只有后续跨服务映射使用 OPTIONAL MATCH" in rendered
     assert "`API类型='下游API'`" in rendered
     assert "必须返回目标方法" in rendered
     assert "映射缺失时仍保留" in rendered
@@ -180,7 +181,8 @@ def test_simple_class_anchor_uses_short_name_and_separate_service_resources() ->
 
     assert "不含包路径的类名必须用 `类.简名`" in rendered
     assert "不得把短类名作为 `类.全限定名`" in rendered
-    assert "资源自身沿完整资源→方法→类→微服务归属路径" in rendered
+    assert "`(resource)-[:归属于]->(:方法)-[:归属于]->(:类)" in rendered
+    assert "中间类不是题中实现类变量" in rendered
 
 
 def test_direct_mq_consumer_does_not_receive_full_message_path() -> None:
@@ -218,3 +220,21 @@ def test_rest_target_count_requires_grouping_by_downstream_service() -> None:
 
     assert "按下游 API.`目标微服务` 分组" in rendered
     assert "AS 调用关系数" in rendered
+
+
+def test_impact_external_service_is_direct_remote_downstream() -> None:
+    selector = CodeGraphSemanticSelector()
+    features = {feature.value for feature in selector.detect(
+        "若 ConsignServiceImpl.insertConsignRecord 被修改，哪些外部服务需要回归验证？"
+    )}
+    rendered = "\n".join(
+        selector.select(
+            _schema(),
+            "若 ConsignServiceImpl.insertConsignRecord 被修改，"
+            "哪些外部服务需要回归验证？",
+        )
+    )
+
+    assert {"downstream", "direct"} <= features
+    assert "直接远程下游始终以变更方法为调用方" in rendered
+    assert "REST 出口" in rendered

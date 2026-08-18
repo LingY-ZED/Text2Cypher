@@ -51,7 +51,8 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "完整上游链默认包含入口 API" in prompt.system
     assert "完整下游链默认包含有序方法路径" in prompt.system
     assert "三个独立集合，应分别拆分" in prompt.system
-    assert "‘外部服务’也须明确成这一直接远程下游角色" in prompt.system
+    assert "第三个子问题必须原样写明" in prompt.system
+    assert "‘外部服务’也不得输出该泛称" in prompt.system
     assert len(prompt.system) <= 1100
 
 
@@ -64,6 +65,7 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
 
     assert "方法路径、入口或出口 API、服务必须留在同一子问题" in prompt.system
     assert "明确只问上游方法、入口 API 或直接下游服务时按原对象处理" in prompt.system
+    assert "MQ 的发布方法、交换机、队列、消费方法和两端服务" in prompt.system
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,8 @@ class CodeGraphFeature(StrEnum):
 
 CALL_CHAIN_CORRELATION_RULE = (
     "完整调用链是一个逐行对应的意图：方法路径、入口或出口 API、服务必须留在"
-    "同一子问题中；只有明确分别询问互不关联的对象时才可拆分。"
+    "同一子问题中；MQ 的发布方法、交换机、队列、消费方法和两端服务也属于同一"
+    "消息路径，不得拆分。只有明确分别询问互不关联的对象时才可拆分。"
 )
 
 CALL_CHAIN_ROUTING_RULE = (
@@ -83,6 +84,7 @@ class CodeGraphSemanticSelector:
             "访问了",
             "目标服务",
             "依赖哪些",
+            "外部服务",
         ):
             features.add(CodeGraphFeature.DOWNSTREAM)
         if self._contains(
@@ -130,6 +132,13 @@ class CodeGraphSemanticSelector:
             "汇总",
         ):
             features.add(CodeGraphFeature.AGGREGATE)
+
+        if (
+            CodeGraphFeature.DOWNSTREAM in features
+            and CodeGraphFeature.UPSTREAM not in features
+            and self._is_impact_question(normalized)
+        ):
+            features.add(CodeGraphFeature.DIRECT)
 
         if CodeGraphFeature.CHAIN in features:
             if CodeGraphFeature.UPSTREAM in features:
@@ -194,7 +203,8 @@ class CodeGraphSemanticSelector:
                 "MQ 只按发布方法-[:消息流 {消息流类型:'发布'}]->交换机"
                 "-[:消息流 {消息流类型:'路由'}]->队列-[:消息流 "
                 "{消息流类型:'消费'}]->消费方法；两端服务分别从对应方法的"
-                "方法→类→微服务归属链取得，不与 REST 调用链混用。"
+                "方法→类→微服务归属链取得。题面队列名只能绑定 `队列名称`，不得"
+                "当作服务名，也不得用交换机或队列的归属替代两端方法归属。"
             )
         elif (
             self._has_method_calls(schema)
@@ -278,7 +288,8 @@ class CodeGraphSemanticSelector:
         ):
             rules.append(
                 "完整下游链：从目标方法沿 `[:调用*0..5]` 正向展开有序方法路径，"
-                "由路径末端方法经 `调用类型='远程调用'` 到 `API类型='下游API'`；"
+                "路径末端方法到 `API类型='下游API'` 的 `远程调用` 必须用 MATCH，"
+                "不能返回没有下游 API 的空路径；只有后续跨服务映射使用 OPTIONAL MATCH。"
                 "必须返回目标方法，目标服务取下游 API.`目标微服务`。可选再经一个"
                 "`跨服务调用`边界到目标上游 API 及入口方法；映射缺失时仍保留"
                 "已确认的方法链和下游 API。"
@@ -314,9 +325,9 @@ class CodeGraphSemanticSelector:
             normalized
         ) and self._has_ownership(schema):
             rules.append(
-                "查询已绑定服务的公开 API 等服务级资源时，从资源自身沿完整"
-                "资源→方法→类→微服务归属路径回到该服务，不得复用题中其他"
-                "实现类或方法变量限制资源。"
+                "查询已绑定服务的公开 API 等服务级资源时，单独使用"
+                "`(resource)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service)`；"
+                "中间类不是题中实现类变量，不得复用该变量限制服务级资源。"
             )
 
         if self._is_interface_implementation_question(
