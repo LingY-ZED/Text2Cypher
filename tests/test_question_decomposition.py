@@ -66,6 +66,7 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
     assert "方法路径、入口或出口 API、服务必须留在同一子问题" in prompt.system
     assert "明确只问上游方法、入口 API 或直接下游服务时按原对象处理" in prompt.system
     assert "MQ 的发布方法、交换机、队列、消费方法和两端服务" in prompt.system
+    assert "最终由哪个方法消费’必须保留为一个子问题" in prompt.system
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system
 
 

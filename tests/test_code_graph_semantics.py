@@ -90,6 +90,7 @@ def test_full_upstream_chain_rules_keep_anchor_entry_and_order() -> None:
     rendered = "\n".join(rules)
 
     assert "只有方法名时匹配全部同名节点" in rendered
+    assert "后续调用边必须重新从方法变量出发" in rendered
     assert "上游反向、下游正向" in rendered
     assert "入口方法沿 `[:调用*0..5]`" in rendered
     assert "有序方法全限定名列表" in rendered
@@ -218,7 +219,8 @@ def test_full_mq_chain_binds_business_name_to_queue() -> None:
         )
     )
 
-    assert "‘展开 X 的完整消息链’必须用 `q.队列名称=X`" in rendered
+    assert "`(q:消息队列 {队列名称:X})`" in rendered
+    assert "禁止改用 e/q.`所属服务名` 的 WHERE" in rendered
     assert "不得用交换机或队列的归属替代两端方法归属" in rendered
 
 

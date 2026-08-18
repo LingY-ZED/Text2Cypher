@@ -171,7 +171,8 @@ class CodeGraphSemanticSelector:
             rules.append(
                 "方法锚点：`Class.method` 用 `方法名=method` 并经所属类的"
                 "`简名=Class` 定位；只有方法名时匹配全部同名节点，并返回"
-                "`目标方法`全限定名，不猜测唯一实现。"
+                "`目标方法`全限定名，不猜测唯一实现。类归属只用于过滤；后续调用边"
+                "必须重新从方法变量出发，不得从所属类继续连接。"
             )
 
         if self._is_direct_mq_consumer(normalized) and self._has_mq_path(schema):
@@ -204,8 +205,9 @@ class CodeGraphSemanticSelector:
                 "-[:消息流 {消息流类型:'路由'}]->队列-[:消息流 "
                 "{消息流类型:'消费'}]->消费方法；两端服务分别从对应方法的"
                 "方法→类→微服务归属链取得。题面队列名只能绑定 `队列名称`，不得"
-                "当作服务名；‘展开 X 的完整消息链’必须用 `q.队列名称=X`。不得"
-                "用交换机或队列的归属替代两端方法归属。"
+                "当作服务名；‘展开 X 的完整消息链’必须在路径中写"
+                "`(q:消息队列 {队列名称:X})`，禁止改用 e/q.`所属服务名` 的 WHERE。"
+                "不得用交换机或队列的归属替代两端方法归属。"
             )
         elif (
             self._has_method_calls(schema)

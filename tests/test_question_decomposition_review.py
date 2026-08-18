@@ -27,6 +27,7 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "三者是可重复锚点独立重算的集合" in prompt.system
     assert "泛称‘外部服务’，必须拒绝并返回 COVERAGE_MISMATCH" in prompt.system
     assert "MQ 的发布方法、交换机、队列、消费方法和两端服务" in prompt.system
+    assert "必须返回 CORRELATION_LOSS，绝不能 VALID" in prompt.system
     assert "资源候选重复 A 且自行推导 B" in prompt.system
     assert "返回 COVERAGE_MISMATCH" in prompt.system
     assert "合并不兼容返回形状" in prompt.system
