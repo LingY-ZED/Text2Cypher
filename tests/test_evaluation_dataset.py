@@ -106,6 +106,7 @@ def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
     assert "REST下游服务" in matrix.accepted_aliases["下游服务"]
     target_counts = cases["admin-basic-target-call-counts"].intents[0]
     assert "REST下游服务" not in target_counts.accepted_aliases["下游服务"]
+    assert "调用数" in target_counts.accepted_aliases["调用关系数"]
 
     entry = next(
         intent
