@@ -210,6 +210,18 @@ def test_service_mq_dependency_uses_service_level_relationship() -> None:
     assert "不要改用详细消息链" in rendered
 
 
+def test_full_mq_chain_binds_business_name_to_queue() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "展开 food_delivery 的完整消息链",
+        )
+    )
+
+    assert "‘展开 X 的完整消息链’必须用 `q.队列名称=X`" in rendered
+    assert "不得用交换机或队列的归属替代两端方法归属" in rendered
+
+
 def test_rest_target_count_requires_grouping_by_downstream_service() -> None:
     rendered = "\n".join(
         CodeGraphSemanticSelector().select(
@@ -224,9 +236,13 @@ def test_rest_target_count_requires_grouping_by_downstream_service() -> None:
 
 def test_impact_external_service_is_direct_remote_downstream() -> None:
     selector = CodeGraphSemanticSelector()
-    features = {feature.value for feature in selector.detect(
-        "若 ConsignServiceImpl.insertConsignRecord 被修改，哪些外部服务需要回归验证？"
-    )}
+    features = {
+        feature.value
+        for feature in selector.detect(
+            "若 ConsignServiceImpl.insertConsignRecord 被修改，"
+            "哪些外部服务需要回归验证？"
+        )
+    }
     rendered = "\n".join(
         selector.select(
             _schema(),
@@ -236,5 +252,18 @@ def test_impact_external_service_is_direct_remote_downstream() -> None:
     )
 
     assert {"downstream", "direct"} <= features
-    assert "直接远程下游始终以变更方法为调用方" in rendered
+    assert "直接远程下游必须从 `(changed)-[:调用" in rendered
+    assert "绝不能从类节点发出远程调用" in rendered
     assert "REST 出口" in rendered
+
+
+def test_impact_upstream_does_not_receive_downstream_rule() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "修改 Sample.run 后会影响哪些上游方法？",
+        )
+    )
+
+    assert "[:调用*1..5]->(changed)" in rendered
+    assert "直接远程下游" not in rendered

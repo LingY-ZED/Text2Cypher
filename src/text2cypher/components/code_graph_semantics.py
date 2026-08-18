@@ -204,7 +204,8 @@ class CodeGraphSemanticSelector:
                 "-[:消息流 {消息流类型:'路由'}]->队列-[:消息流 "
                 "{消息流类型:'消费'}]->消费方法；两端服务分别从对应方法的"
                 "方法→类→微服务归属链取得。题面队列名只能绑定 `队列名称`，不得"
-                "当作服务名，也不得用交换机或队列的归属替代两端方法归属。"
+                "当作服务名；‘展开 X 的完整消息链’必须用 `q.队列名称=X`。不得"
+                "用交换机或队列的归属替代两端方法归属。"
             )
         elif (
             self._has_method_calls(schema)
@@ -225,12 +226,20 @@ class CodeGraphSemanticSelector:
             rules.append(direction)
 
         if self._is_impact_question(normalized) and self._has_method_calls(schema):
-            rules.append(
-                "方法变更影响分三种方向：全部上游方法使用反向"
-                "`[:调用*1..5]->(changed)`；入口 API 使用反向"
-                "`[:调用*0..5]->(changed)` 后由入口方法连接上游 API；直接远程"
-                "下游始终以变更方法为调用方。"
-            )
+            impact_rules: list[str] = []
+            if self._contains(normalized, "上游方法", "调用方法", "调用方"):
+                impact_rules.append("全部上游方法反向 `[:调用*1..5]->(changed)`")
+            if CodeGraphFeature.ENTRY_API in features:
+                impact_rules.append(
+                    "入口 API 由入口方法反向 `[:调用*0..5]->(changed)` 后取得"
+                )
+            if CodeGraphFeature.DOWNSTREAM in features:
+                impact_rules.append(
+                    "直接远程下游必须从 `(changed)-[:调用 {调用类型:'远程调用'}]`"
+                    "开始；方法的类归属另写匹配分支，绝不能从类节点发出远程调用"
+                )
+            if impact_rules:
+                rules.append("方法变更影响：" + "；".join(impact_rules) + "。")
 
         if self._is_rest_target_count(normalized) and self._has_rest_path(schema):
             rules.append(
@@ -327,7 +336,8 @@ class CodeGraphSemanticSelector:
             rules.append(
                 "查询已绑定服务的公开 API 等服务级资源时，单独使用"
                 "`(resource)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service)`；"
-                "中间类不是题中实现类变量，不得复用该变量限制服务级资源。"
+                "路径必须结束在已绑定 service；中间类不是题中实现类变量，绝不能"
+                "改成 `(resource)...->(impl)->(service)`。"
             )
 
         if self._is_interface_implementation_question(

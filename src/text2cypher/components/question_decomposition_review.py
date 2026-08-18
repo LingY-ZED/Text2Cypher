@@ -40,6 +40,8 @@ class QuestionDecompositionReviewPromptBuilder:
         "方法变更题分别询问全部反向上游方法、可达入口 API、变更方法直接远程下游"
         "服务时，三者是可重复锚点独立重算的集合，不是逐行链，应接受拆分；若把直接"
         "远程下游写成泛称‘外部服务’，必须拒绝并返回 COVERAGE_MISMATCH。\n"
+        "‘从 A 找所属 B，并列出该 B 的资源’若资源候选重复 A 且自行推导 B，则是"
+        "独立重算，应接受；仅写‘该 B/上述 B’才是 RESULT_DEPENDENCY。\n"
         "先找 A 再查每个 A 的 B，或使用‘这些对象/其结果’，返回 RESULT_DEPENDENCY；"
         "省略自身筛选返回 NOT_SELF_CONTAINED；新增、丢失锚点、方向、范围或直接性"
         "返回 COVERAGE_MISMATCH；机械拆字段、记录、分组，或合并不兼容返回形状，"
