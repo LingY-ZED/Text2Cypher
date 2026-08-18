@@ -154,15 +154,16 @@
   {
     "id": "call-method-downstream-methods",
     "category": "path_query",
-    "question": "rebook.service.RebookServiceImpl.rebook 直接调用了哪些方法？",
-    "cypher": "MATCH (caller:方法 {所属类名: 'rebook.service.RebookServiceImpl', 方法名: 'rebook'})-[:调用]->(callee:方法) RETURN DISTINCT callee.全限定名 AS 被调用方法 ORDER BY 被调用方法",
+    "question": "RebookServiceImpl.rebook 直接调用了哪些方法？",
+    "cypher": "MATCH (caller:方法 {方法名: 'rebook'})-[:归属于]->(:类 {简名: 'RebookServiceImpl'}), (caller)-[:调用]->(callee:方法) RETURN DISTINCT callee.全限定名 AS 被调用方法 ORDER BY 被调用方法",
     "aliases": ["查询方法的直接下游方法", "方法下一步调用了谁"],
     "tags": ["路径查询", "方法调用", "直接下游"],
     "schema_requirements": {
-      "node_labels": ["方法"],
-      "relationship_types": ["调用"],
+      "node_labels": ["方法", "类"],
+      "relationship_types": ["调用", "归属于"],
       "node_properties": {
-        "方法": ["所属类名", "方法名", "全限定名"]
+        "方法": ["方法名", "全限定名"],
+        "类": ["简名"]
       },
       "relationship_properties": {},
       "patterns": [
@@ -170,6 +171,11 @@
           "start_labels": ["方法"],
           "relationship_type": "调用",
           "end_labels": ["方法"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
         }
       ]
     }
@@ -177,15 +183,16 @@
   {
     "id": "call-method-downstream-services",
     "category": "path_query",
-    "question": "inside_payment.service.InsidePaymentServiceImpl.pay 会调用哪些下游服务和接口？",
-    "cypher": "MATCH (caller:方法 {所属类名: 'inside_payment.service.InsidePaymentServiceImpl', 方法名: 'pay'})-[:调用 {调用类型: '远程调用'}]->(api:API端点 {API类型: '下游API'}) RETURN DISTINCT api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
+    "question": "InsidePaymentServiceImpl.pay 会直接远程调用哪些下游服务和接口？",
+    "cypher": "MATCH (caller:方法 {方法名: 'pay'})-[:归属于]->(:类 {简名: 'InsidePaymentServiceImpl'}), (caller)-[:调用 {调用类型: '远程调用'}]->(api:API端点 {API类型: '下游API'}) RETURN DISTINCT api.目标微服务 AS 下游服务, api.接口路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
     "aliases": ["查询方法直接访问的远程下游服务", "变更方法直接调用了哪些下游 API"],
     "tags": ["路径查询", "远程调用", "直接下游", "返回服务与接口", "REST"],
     "schema_requirements": {
-      "node_labels": ["方法", "API端点"],
-      "relationship_types": ["调用"],
+      "node_labels": ["方法", "类", "API端点"],
+      "relationship_types": ["调用", "归属于"],
       "node_properties": {
-        "方法": ["所属类名", "方法名"],
+        "方法": ["方法名"],
+        "类": ["简名"],
         "API端点": ["API类型", "目标微服务", "接口路径"]
       },
       "relationship_properties": {"调用": ["调用类型"]},
@@ -194,6 +201,11 @@
           "start_labels": ["方法"],
           "relationship_type": "调用",
           "end_labels": ["API端点"]
+        },
+        {
+          "start_labels": ["方法"],
+          "relationship_type": "归属于",
+          "end_labels": ["类"]
         }
       ]
     }

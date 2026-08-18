@@ -90,6 +90,8 @@ def test_full_upstream_chain_rules_keep_anchor_entry_and_order() -> None:
     rendered = "\n".join(rules)
 
     assert "只有方法名时匹配全部同名节点" in rendered
+    assert "完整方法名用 `方法.全限定名` 精确匹配" in rendered
+    assert "不得把包名前缀猜成服务名" in rendered
     assert "后续调用边必须重新从方法变量出发" in rendered
     assert "上游反向、下游正向" in rendered
     assert "入口方法沿 `[:调用*0..5]`" in rendered

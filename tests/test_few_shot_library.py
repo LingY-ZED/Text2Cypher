@@ -164,7 +164,7 @@ def test_default_library_contains_short_focused_cypher() -> None:
     assert max(lengths) <= 480
     assert sum(lengths) / len(lengths) <= 200
     assert sum("[:调用*0..5]" in example.cypher for example in examples) == 3
-    assert "inside_payment.service.InsidePaymentServiceImpl" in catalog
+    assert "{简名: 'InsidePaymentServiceImpl'}" in catalog
     assert "{简名: 'ConsignServiceImpl'}" in catalog
     assert "food_delivery" in catalog
     assert "展开 food_delivery 的完整消息链" in catalog
@@ -184,6 +184,11 @@ def test_default_library_contains_short_focused_cypher() -> None:
     assert "仅发布方向" in publishers.tags
     downstream = examples_by_id["call-method-downstream-services"]
     assert "直接下游" in downstream.tags
+    assert "所属类名" not in downstream.cypher
+    assert "(caller)-[:调用" in downstream.cypher
+    direct_methods = examples_by_id["call-method-downstream-methods"]
+    assert "所属类名" not in direct_methods.cypher
+    assert "(caller)-[:调用]->(callee:方法)" in direct_methods.cypher
     upstream_chain = examples_by_id["call-method-full-upstream-chain"]
     assert "nodes(path)" in upstream_chain.cypher
     assert "入口API" in upstream_chain.cypher

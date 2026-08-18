@@ -169,8 +169,9 @@ class CodeGraphSemanticSelector:
             )
         elif self._method_anchor_relevant(question) and self._has_method_anchor(schema):
             rules.append(
-                "方法锚点：`Class.method` 用 `方法名=method` 并经所属类的"
-                "`简名=Class` 定位；只有方法名时匹配全部同名节点，并返回"
+                "方法锚点：含两个以上点的完整方法名用 `方法.全限定名` 精确匹配，"
+                "不得把包名前缀猜成服务名；`Class.method` 用 `方法名=method` 并经"
+                "所属类的 `简名=Class` 定位；只有方法名时匹配全部同名节点，并返回"
                 "`目标方法`全限定名，不猜测唯一实现。类归属只用于过滤；后续调用边"
                 "必须重新从方法变量出发，不得从所属类继续连接。"
             )
@@ -239,6 +240,7 @@ class CodeGraphSemanticSelector:
                 impact_rules.append(
                     "直接远程下游必须从 `(changed)-[:调用 {调用类型:'远程调用'}]`"
                     "开始；方法的类归属另写匹配分支，绝不能从类节点发出远程调用"
+                    "；目标微服务必须投影为 `下游服务`，不得改称外部服务或外部对象"
                 )
             if impact_rules:
                 rules.append("方法变更影响：" + "；".join(impact_rules) + "。")
