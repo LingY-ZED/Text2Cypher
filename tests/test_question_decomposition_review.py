@@ -24,6 +24,8 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "完整调用链是一个逐行对应的意图" in prompt.system
     assert "把同一链的方法、API、服务拆开" in prompt.system
     assert "无法恢复原始行" in prompt.system
+    assert "三者是可重复锚点独立重算的集合" in prompt.system
+    assert "泛化为‘外部服务’则返回 COVERAGE_MISMATCH" in prompt.system
     assert "返回 COVERAGE_MISMATCH" in prompt.system
     assert "合并不兼容返回形状" in prompt.system
     assert "RESULT_DEPENDENCY" in prompt.system

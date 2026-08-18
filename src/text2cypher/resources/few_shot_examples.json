@@ -499,7 +499,7 @@
     "id": "call-method-full-upstream-chain",
     "category": "path_query",
     "question": "查询 FoodServiceImpl.getAllFood 的完整上游调用链，包括入口 API 和有序方法路径。",
-    "cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名: 'getAllFood'})-[:归属于]->(:类 {简名: 'FoodServiceImpl'}), (entry)-[:调用 {调用类型: '接口入口'}]->(api:API端点 {API类型: '上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 目标方法, 入口API, 方法路径",
+    "cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名: 'getAllFood'}), (target)-[:归属于]->(:类 {简名: 'FoodServiceImpl'}), (entry)-[:调用 {调用类型: '接口入口'}]->(api:API端点 {API类型: '上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 目标方法, 入口API, 方法路径",
     "aliases": ["追踪方法的入口 API 与完整上游方法路径", "查询到达目标方法的有序上游链"],
     "tags": ["路径查询", "完整上游链", "入口API", "有序方法路径"],
     "schema_requirements": {

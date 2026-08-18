@@ -186,6 +186,8 @@ def test_default_library_contains_short_focused_cypher() -> None:
     upstream_chain = examples_by_id["call-method-full-upstream-chain"]
     assert "nodes(path)" in upstream_chain.cypher
     assert "入口API" in upstream_chain.cypher
+    assert "]->(target:方法" in upstream_chain.cypher
+    assert "), (target)-[:归属于]" in upstream_chain.cypher
     downstream_chain = examples_by_id["call-method-full-downstream-chain"]
     assert "OPTIONAL MATCH" in downstream_chain.cypher
     assert "目标上游API" in downstream_chain.cypher

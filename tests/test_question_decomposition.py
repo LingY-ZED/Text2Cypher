@@ -50,7 +50,8 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "调用链表示最多五跳" in prompt.system
     assert "完整上游链默认包含入口 API" in prompt.system
     assert "完整下游链默认包含有序方法路径" in prompt.system
-    assert "变更方法直接远程下游三个意图" in prompt.system
+    assert "三个独立集合，应分别拆分" in prompt.system
+    assert "‘外部服务’也须明确成这一直接远程下游角色" in prompt.system
     assert len(prompt.system) <= 1100
 
 

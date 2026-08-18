@@ -45,6 +45,9 @@ class CodeGraphSemanticSelector:
     _bare_camel_method = re.compile(
         r"(?<![\w.])[a-z][A-Za-z0-9_$]*[A-Z][\w$]*"
     )
+    _simple_class = re.compile(
+        r"(?<![\w.])[A-Z][A-Za-z0-9_$]*(?:Impl|Controller|Service)(?![\w.])"
+    )
     _service_name = re.compile(
         r"(?<![\w-])ts-[a-z0-9-]+-service(?![\w-])"
     )
@@ -150,14 +153,36 @@ class CodeGraphSemanticSelector:
         service_outgoing_pair = self._is_service_outgoing_pair(normalized)
         rules: list[str] = []
 
-        if self._method_anchor_relevant(question) and self._has_method_anchor(schema):
+        if self._class_anchor_relevant(question) and self._has_class_anchor(schema):
+            rules.append(
+                "类锚点：不含包路径的类名必须用 `类.简名` 匹配，不得把短类名"
+                "作为 `类.全限定名` 的精确值；完整包名才使用全限定名精确匹配。"
+            )
+        elif self._method_anchor_relevant(question) and self._has_method_anchor(schema):
             rules.append(
                 "方法锚点：`Class.method` 用 `方法名=method` 并经所属类的"
                 "`简名=Class` 定位；只有方法名时匹配全部同名节点，并返回"
                 "`目标方法`全限定名，不猜测唯一实现。"
             )
 
-        if self._is_sender_rest_matrix(normalized) and self._has_sender_rest(schema):
+        if self._is_direct_mq_consumer(normalized) and self._has_mq_path(schema):
+            rules.append(
+                "直接查询队列消费者只用 `(queue:消息队列 {队列名称:...})"
+                "-[:消息流 {消息流类型:'消费'}]->(consumer:方法)`；不要引入发布方法"
+                "或交换机，不得把消费方向写成方法指向队列。"
+            )
+        elif self._is_service_mq_dependency(
+            normalized
+        ) and not self._is_sender_rest_matrix(normalized) and self._has_service_mq(
+            schema
+        ):
+            rules.append(
+                "查询通过 MQ 发送或依赖目标服务的服务集合时，使用"
+                "`(sender:微服务)-[:消息流 {消息流类型:'服务间消息依赖'}]"
+                "->(receiver:微服务)`，只按题面绑定目标端；不要改用详细消息链"
+                "推导服务集合。"
+            )
+        elif self._is_sender_rest_matrix(normalized) and self._has_sender_rest(schema):
             rules.append(
                 "先由微服务间 `服务间消息依赖` 找到发送服务，再从每个发送服务"
                 "反向沿类和方法归属路径，经方法的 `远程调用` 到 `下游API`；"
@@ -197,12 +222,19 @@ class CodeGraphSemanticSelector:
                 "下游始终以变更方法为调用方。"
             )
 
+        if self._is_rest_target_count(normalized) and self._has_rest_path(schema):
+            rules.append(
+                "服务的 REST 目标调用数必须按下游 API.`目标微服务` 分组，返回"
+                "`下游服务`和 `count(DISTINCT remote) AS 调用关系数`；不得只返回"
+                "一个不分目标服务的总数。"
+            )
+
         if service_upstream_chain and self._has_rest_path(schema):
             rules.append(
-                "目标为服务的 REST 上游链：调用服务经自身类和调用方法归属链，"
-                "由调用方法的 `远程调用` 指向 `下游API`，且"
-                "`目标微服务` 等于目标服务；需扩展边界时再可选匹配该下游 API"
-                "经 `跨服务调用` 到目标 `上游API` 和入口方法，所有字段保持逐行配对。"
+                "目标为服务的 REST 上游链：目标只绑定在下游 API.`目标微服务`；"
+                "调用服务必须从调用方法→类→微服务归属链取得，绝不能绑定成目标服务。"
+                "调用方法经 `远程调用` 到该下游 API，再可选经 `跨服务调用` 到"
+                "目标上游 API 和入口方法，所有字段保持逐行配对。"
             )
         elif (
             CodeGraphFeature.UPSTREAM in features
@@ -213,8 +245,8 @@ class CodeGraphSemanticSelector:
             rules.append(
                 "完整上游链：入口方法沿 `[:调用*0..5]` 到目标方法，再由入口方法"
                 "经 `调用类型='接口入口'` 到 `API类型='上游API'`；返回目标方法、"
-                "入口 API 和 `nodes(path)` 的有序方法全限定名列表。API 间存在"
-                "跨服务映射时可补充一个直接调用方服务边界，缺失时保留本地链。"
+                "入口 API 和 `nodes(path)` 的有序方法全限定名列表。`path` 必须在"
+                "目标方法结束，目标的类归属另写匹配分支，不得让类节点进入方法路径。"
             )
         elif (
             CodeGraphFeature.ENTRY_API in features
@@ -247,7 +279,7 @@ class CodeGraphSemanticSelector:
             rules.append(
                 "完整下游链：从目标方法沿 `[:调用*0..5]` 正向展开有序方法路径，"
                 "由路径末端方法经 `调用类型='远程调用'` 到 `API类型='下游API'`；"
-                "目标服务取下游 API.`目标微服务`。可选再经一个"
+                "必须返回目标方法，目标服务取下游 API.`目标微服务`。可选再经一个"
                 "`跨服务调用`边界到目标上游 API 及入口方法；映射缺失时仍保留"
                 "已确认的方法链和下游 API。"
             )
@@ -323,6 +355,11 @@ class CodeGraphSemanticSelector:
             or self._contains(normalized, "目标方法名", "指定方法")
         )
 
+    def _class_anchor_relevant(self, question: str) -> bool:
+        return bool(self._simple_class.search(question)) and not bool(
+            self._class_method.search(question)
+        )
+
     def _method_call_direction_relevant(
         self,
         question: str,
@@ -374,6 +411,10 @@ class CodeGraphSemanticSelector:
         method = cls._node_properties(schema, "方法")
         class_node = cls._node_properties(schema, "类")
         return {"方法名", "全限定名"} <= method and "简名" in class_node
+
+    @classmethod
+    def _has_class_anchor(cls, schema: GraphSchema) -> bool:
+        return "简名" in cls._node_properties(schema, "类")
 
     @classmethod
     def _has_method_calls(cls, schema: GraphSchema) -> bool:
@@ -431,6 +472,16 @@ class CodeGraphSemanticSelector:
         )
 
     @classmethod
+    def _has_service_mq(cls, schema: GraphSchema) -> bool:
+        return (
+            "消息流类型" in cls._relationship_properties(schema, "消息流")
+            and cls._has_patterns(
+                schema,
+                RelationshipPattern(("微服务",), "消息流", ("微服务",)),
+            )
+        )
+
+    @classmethod
     def _has_sender_rest(cls, schema: GraphSchema) -> bool:
         return (
             "消息流类型" in cls._relationship_properties(schema, "消息流")
@@ -483,10 +534,33 @@ class CodeGraphSemanticSelector:
         )
 
     @staticmethod
+    def _is_direct_mq_consumer(question: str) -> bool:
+        return (
+            "消费" in question
+            and any(term in question for term in ("队列", "消费方法"))
+            and not any(term in question for term in ("发布", "交换机", "完整", "链"))
+        )
+
+    def _is_service_mq_dependency(self, question: str) -> bool:
+        return (
+            bool(self._service_name.search(question))
+            and any(term in question for term in ("mq", "消息"))
+            and any(term in question for term in ("发送", "依赖"))
+        )
+
+    @staticmethod
     def _is_impact_question(question: str) -> bool:
         return any(
             term in question
             for term in ("修改", "变更", "影响", "回归", "波及")
+        )
+
+    @staticmethod
+    def _is_rest_target_count(question: str) -> bool:
+        return (
+            "rest" in question
+            and "目标" in question
+            and any(term in question for term in ("调用数", "调用数量", "计数"))
         )
 
     @staticmethod

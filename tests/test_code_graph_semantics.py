@@ -93,7 +93,7 @@ def test_full_upstream_chain_rules_keep_anchor_entry_and_order() -> None:
     assert "上游反向、下游正向" in rendered
     assert "入口方法沿 `[:调用*0..5]`" in rendered
     assert "有序方法全限定名列表" in rendered
-    assert "跨服务映射" in rendered
+    assert "`path` 必须在目标方法结束" in rendered
     assert len(rules) <= 5
     assert len(rendered) <= 1000
 
@@ -109,6 +109,7 @@ def test_full_downstream_chain_uses_optional_direct_service_boundary() -> None:
     assert "沿 `[:调用*0..5]` 正向展开" in rendered
     assert "`调用类型='远程调用'`" in rendered
     assert "`API类型='下游API'`" in rendered
+    assert "必须返回目标方法" in rendered
     assert "映射缺失时仍保留" in rendered
     assert "服务边界只展开一层" in rendered
     assert "入口 API：" not in rendered
@@ -147,7 +148,8 @@ def test_service_upstream_chain_uses_service_anchor_and_correlated_rest_shape() 
     )
 
     assert "目标为服务的 REST 上游链" in rendered
-    assert "`目标微服务` 等于目标服务" in rendered
+    assert "目标只绑定在下游 API.`目标微服务`" in rendered
+    assert "绝不能绑定成目标服务" in rendered
     assert "所有字段保持逐行配对" in rendered
     assert "方法锚点" not in rendered
     assert "完整下游链：" not in rendered
@@ -166,3 +168,53 @@ def test_service_outgoing_api_pair_uses_ownership_and_optional_boundary() -> Non
     assert "微服务←类←方法归属链" in rendered
     assert "下游与目标 API 必须逐行配对" in rendered
     assert "入口 API：" not in rendered
+
+
+def test_simple_class_anchor_uses_short_name_and_separate_service_resources() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "从 AdminRouteServiceImpl 出发返回所属服务，并列出该服务的公开 API。",
+        )
+    )
+
+    assert "不含包路径的类名必须用 `类.简名`" in rendered
+    assert "不得把短类名作为 `类.全限定名`" in rendered
+    assert "资源自身沿完整资源→方法→类→微服务归属路径" in rendered
+
+
+def test_direct_mq_consumer_does_not_receive_full_message_path() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "汇总 email 消息的消费方法",
+        )
+    )
+
+    assert "直接查询队列消费者" in rendered
+    assert "不得把消费方向写成方法指向队列" in rendered
+    assert "MQ 只按发布方法" not in rendered
+
+
+def test_service_mq_dependency_uses_service_level_relationship() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "汇总通过 MQ 向 ts-notification-service 发送消息的服务",
+        )
+    )
+
+    assert "服务间消息依赖" in rendered
+    assert "不要改用详细消息链" in rendered
+
+
+def test_rest_target_count_requires_grouping_by_downstream_service() -> None:
+    rendered = "\n".join(
+        CodeGraphSemanticSelector().select(
+            _schema(),
+            "对 ts-admin-basic-info-service 给出 REST 目标调用数",
+        )
+    )
+
+    assert "按下游 API.`目标微服务` 分组" in rendered
+    assert "AS 调用关系数" in rendered

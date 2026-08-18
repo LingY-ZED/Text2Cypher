@@ -153,9 +153,9 @@ def test_mq_and_impact_constraints_require_relevant_question_and_patterns() -> N
     )
     unrelated_prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
 
-    assert "发布方法-[:消息流" in mq_prompt.user
-    assert "队列-[:消息流" in mq_prompt.user
-    assert "两端服务分别从对应方法" in mq_prompt.user
+    assert "直接查询队列消费者" in mq_prompt.user
+    assert "不得把消费方向写成方法指向队列" in mq_prompt.user
+    assert "发布方法-[:消息流" not in mq_prompt.user
     assert "[:调用*1..5]->(changed)" in impact_prompt.user
     assert "[:调用*0..5]->(changed)" in impact_prompt.user
     assert "MQ 只按" not in unrelated_prompt.user
