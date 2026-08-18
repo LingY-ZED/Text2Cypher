@@ -86,7 +86,8 @@ TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
 TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 ```
 
-空路径使用包内 18 条黄金示例；设置外部 JSON 路径可替换示例库。Router 只接收通过
+空路径使用包内 20 条黄金示例，其中包含完整上游和下游调用链；设置外部 JSON 路径可替换
+示例库。Router 只接收通过
 实时 Schema 兼容过滤的候选元数据。设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过
 示例文件加载并恢复 Zero-shot。
 
@@ -189,7 +190,7 @@ ruff check .
 mypy
 ```
 
-完整评测使用 30 道独立黄金问题（简单 10、中等 12、困难 8），默认在
+完整评测 v3 使用 40 道独立黄金问题（简单 10、中等 16、困难 14），默认在
 `error-recovery` 分支的 detached worktree 中真实运行三轮：
 
 ```powershell
@@ -205,10 +206,12 @@ mypy
   -OutputDir tmp\evaluation\manual-run
 ```
 
-脚本会先校验 Neo4j Schema、42 个只读 Oracle 和冻结快照；发现数据漂移时不会调用
+脚本会先校验 Neo4j Schema、52 个只读 Oracle 和冻结快照；发现数据漂移时不会调用
 模型。运行结果、指标、Markdown 报告和 PNG 图表保存在 `tmp/evaluation/`，不会进入
 版本控制。评测报告包含生成率、语法正确率、可执行率、查询正确率、延迟、自然错误恢复、
-四类确定性恢复探针以及自然语言总结的调用数、模板降级率和固定原因分布；答案正文不会保存。
+调用链专项正确率、原 30 题案例级无退化检查、四类确定性恢复探针以及自然语言总结的
+调用数、模板降级率和固定原因分布；答案正文不会保存。已有 30 题历史报告仍按其原始
+数据集版本说明，不用 v3 数量回写。
 
 默认测试不会访问真实数据库。需要执行只读集成测试时：
 
@@ -217,7 +220,7 @@ $env:TEXT2CYPHER_RUN_INTEGRATION="1"
 pytest tests\integration\test_neo4j_readonly.py
 ```
 
-该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 18 条黄金示例逐条执行
+该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 20 条黄金示例逐条执行
 `EXPLAIN` 和真实查询，检查精确列名、非空结果、黄金行数及关键实体；不会写入或修改
 图数据。数据库快照变化后应显式复核并更新黄金结果。
 

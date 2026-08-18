@@ -6,7 +6,7 @@ from evaluation.dataset import load_cases
 from evaluation.regrade import regrade_records
 
 
-def test_historical_regrade_contract_produces_seventy_four_matches() -> None:
+def test_v3_regrade_contract_produces_seventy_four_matches() -> None:
     cases = load_cases()
     records: list[dict[str, object]] = []
     index = 0
@@ -48,15 +48,15 @@ def test_historical_regrade_contract_produces_seventy_four_matches() -> None:
 
     regraded, summary = regrade_records(cases, records)
 
-    assert len(regraded) == 90
+    assert len(regraded) == 120
     assert summary["old_matched"] == 59
     assert summary["new_matched"] == 74
-    assert summary["remaining_failures"] == 16
+    assert summary["remaining_failures"] == 46
     assert summary["flip_count"] == 15
     assert summary["semantic_outcomes"] == {
         "full": 74,
         "partial": 0,
-        "incorrect": 16,
+        "incorrect": 46,
     }
     assert sum(bool(record["semantic_success"]) for record in regraded) == 74
     assert all("semantic_outcome" in record for record in regraded)

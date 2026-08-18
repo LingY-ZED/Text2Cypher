@@ -65,7 +65,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     settings = _evaluation_settings()
-    metadata = _metadata(settings, args.revision, args.revision_sha, args.runs)
+    metadata = _metadata(
+        settings,
+        args.revision,
+        args.revision_sha,
+        args.runs,
+        len(cases),
+    )
     _write_json(output / "metadata.json", metadata)
 
     retry_policy = _retry_policy(settings)
@@ -597,6 +603,7 @@ def _metadata(
     revision: str,
     revision_sha: str,
     runs: int,
+    case_count: int,
 ) -> dict[str, Any]:
     return {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -604,7 +611,7 @@ def _metadata(
         "revision_sha": revision_sha,
         "python": sys.version,
         "runs_per_case": runs,
-        "case_count": 30,
+        "case_count": case_count,
         "model": settings.llm_model,
         "database": settings.neo4j_database,
         "settings": {

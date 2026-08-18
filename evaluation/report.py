@@ -30,8 +30,12 @@ def render_report(
     charts.mkdir(parents=True, exist_ok=True)
     _render_charts(charts, records, metrics)
     diagnostics = metrics["diagnostics"]
+    case_count = metadata.get(
+        "case_count",
+        len({str(record["case_id"]) for record in records}),
+    )
     run_summary = (
-        f"- 题目：30；每题运行：{metadata['runs_per_case']} 次；"
+        f"- 题目：{case_count}；每题运行：{metadata['runs_per_case']} 次；"
         f"总样本：{metrics['sample_count']}"
     )
     raw_regrade = metadata.get("regrade")
@@ -77,6 +81,7 @@ def render_report(
         ("execution_rate", "Cypher 可执行率"),
         ("query_accuracy", "查询正确率"),
         ("decomposition_contract", "拆分契约通过率"),
+        ("call_chain_accuracy", "调用链专项正确率"),
         ("error_recovery_rate", "自然错误恢复成功率"),
     ):
         value = official[key]
@@ -91,6 +96,13 @@ def render_report(
         lines.append(
             f"| {label} | {actual} | {_percent(value['target'])} | {verdict} |"
         )
+    legacy = official["legacy_case_regression"]
+    legacy_verdict = "通过" if legacy["passed"] else "未通过"
+    lines.append(
+        "| 原 30 题案例级无退化 | "
+        f"{legacy['checked_cases'] - len(legacy['violations'])}/"
+        f"{legacy['checked_cases']} | 100.0% | {legacy_verdict} |"
+    )
     p95 = official["p95_response_seconds"]
     average_line = (
         f"| 平均响应时间 | {official['average_response_seconds']:.3f} 秒 | 只报告 | - |"
@@ -442,6 +454,7 @@ def _quality_chart(plt: Any, path: Path, metrics: Mapping[str, Any]) -> None:
         ("执行", official["execution_rate"]),
         ("语义", official["query_accuracy"]),
         ("拆分契约", official["decomposition_contract"]),
+        ("调用链", official["call_chain_accuracy"]),
         ("自然恢复", official["error_recovery_rate"]),
     )
     values = [

@@ -55,7 +55,57 @@ def test_zero_natural_recovery_is_na_and_not_a_false_success() -> None:
     recovery = metrics["official"]["error_recovery_rate"]
     assert recovery["value"] is None
     assert recovery["passed"] is None
+    assert metrics["official"]["call_chain_accuracy"]["passed"] is None
     assert metrics["quality_gate_passed"] is True
+
+
+def test_call_chain_accuracy_is_a_hard_gate_when_cases_are_present() -> None:
+    passed = _record(0)
+    passed["category"] = "call_chain"
+    passed["case_id"] = "chain-pass"
+    failed = _record(1, semantic=False)
+    failed["category"] = "call_chain"
+    failed["case_id"] = "chain-fail"
+
+    metrics = calculate_metrics(
+        [passed, failed],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    gate = metrics["official"]["call_chain_accuracy"]
+    assert gate["count"] == 1
+    assert gate["total"] == 2
+    assert gate["target"] == 1.0
+    assert gate["passed"] is False
+    assert metrics["quality_gate_passed"] is False
+
+
+def test_legacy_case_regression_allows_partial_baseline_but_not_incorrect() -> None:
+    partial = _record(0, semantic=False)
+    partial["case_id"] = "inside-payment-pay-impact"
+    partial["semantic_outcome"] = "partial"
+    partial["intent_verdicts"] = [
+        {"intent_id": "one", "matched": True, "reason": "matched"},
+        {"intent_id": "two", "matched": False, "reason": "missing"},
+    ]
+
+    metrics = calculate_metrics(
+        [partial],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+    assert metrics["official"]["legacy_case_regression"]["passed"] is True
+
+    partial["semantic_outcome"] = "incorrect"
+    partial["intent_verdicts"] = [
+        {"intent_id": "one", "matched": False, "reason": "missing"}
+    ]
+    metrics = calculate_metrics(
+        [partial],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+    legacy = metrics["official"]["legacy_case_regression"]
+    assert legacy["passed"] is False
+    assert legacy["violations"] == ["inside-payment-pay-impact"]
 
 
 def test_decomposition_contract_is_a_hard_gate_with_legacy_default() -> None:

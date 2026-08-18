@@ -16,14 +16,14 @@ from evaluation.models import (
 def test_dataset_has_fixed_size_distribution_and_unique_questions() -> None:
     cases = load_cases()
 
-    assert len(cases) == 30
+    assert len(cases) == 40
     assert Counter(case.difficulty for case in cases) == {
         Difficulty.SIMPLE: 10,
-        Difficulty.MEDIUM: 12,
-        Difficulty.HARD: 8,
+        Difficulty.MEDIUM: 16,
+        Difficulty.HARD: 14,
     }
-    assert len({case.id for case in cases}) == 30
-    assert len({case.question for case in cases}) == 30
+    assert len({case.id for case in cases}) == 40
+    assert len({case.question for case in cases}) == 40
 
 
 def test_every_intent_has_a_readonly_nonempty_frozen_contract() -> None:
@@ -120,6 +120,20 @@ def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
     assert "依赖微服务" in targets.accepted_aliases["下游服务"]
     other_targets = cases["inside-payment-pay-targets"].intents[0]
     assert "依赖微服务" not in other_targets.accepted_aliases["下游服务"]
+
+    call_chain_cases = [
+        case for case in cases.values() if case.category == "call_chain"
+    ]
+    assert len(call_chain_cases) == 10
+    assert all(
+        case.decomposition_contract is DecompositionContract.MUST_PRESERVE
+        for case in call_chain_cases
+    )
+    assert all(
+        len(case.intents) == 1
+        and case.intents[0].comparison_mode is ComparisonMode.ROW_SET
+        for case in call_chain_cases
+    )
 
 
 def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:

@@ -279,6 +279,45 @@ def test_value_normalization_is_never_enabled_implicitly() -> None:
     assert not compare_case(case, (({"声明方法": "first"},),)).matched
 
 
+def test_row_set_preserves_order_inside_method_path_lists() -> None:
+    case = _case(
+        ComparisonMode.ROW_SET,
+        ("目标方法", "方法路径"),
+        (
+            {
+                "目标方法": "sample.Target.run",
+                "方法路径": ["sample.Entry.call", "sample.Target.run"],
+            },
+        ),
+    )
+
+    correct = compare_case(
+        case,
+        (
+            (
+                {
+                    "目标方法": "sample.Target.run",
+                    "方法路径": ["sample.Entry.call", "sample.Target.run"],
+                },
+            ),
+        ),
+    )
+    reversed_path = compare_case(
+        case,
+        (
+            (
+                {
+                    "目标方法": "sample.Target.run",
+                    "方法路径": ["sample.Target.run", "sample.Entry.call"],
+                },
+            ),
+        ),
+    )
+
+    assert correct.matched
+    assert not reversed_path.matched
+
+
 def test_matching_values_do_not_override_an_unrecognized_alias() -> None:
     case = _case(
         ComparisonMode.SCALAR,

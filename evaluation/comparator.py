@@ -193,7 +193,9 @@ def _canonical_value(
 def _freeze(value: Any) -> object:
     if isinstance(value, Mapping):
         return tuple(sorted((str(key), _freeze(item)) for key, item in value.items()))
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, set):
         return tuple(sorted((_freeze(item) for item in value), key=repr))
     try:
         hash(value)

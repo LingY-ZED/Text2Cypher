@@ -19,6 +19,11 @@ RATE_TARGETS = {
 }
 P95_TARGET_SECONDS = 30.0
 RECOVERY_TARGET = 0.80
+CALL_CHAIN_TARGET = 1.0
+LEGACY_PARTIAL_CASES = {
+    "inside-payment-pay-impact",
+    "security-service-three-way",
+}
 
 
 def calculate_metrics(
@@ -45,6 +50,18 @@ def calculate_metrics(
         count = sum(bool(record.get(field, default)) for record in records)
         target = RATE_TARGETS[metric]
         metrics["official"][metric] = _rate(count, total, target)
+
+    call_chain_records = [
+        record for record in records if record.get("category") == "call_chain"
+    ]
+    metrics["official"]["call_chain_accuracy"] = _optional_rate(
+        sum(bool(record.get("semantic_success")) for record in call_chain_records),
+        len(call_chain_records),
+        CALL_CHAIN_TARGET,
+    )
+    metrics["official"]["legacy_case_regression"] = _legacy_case_regression(
+        records
+    )
 
     durations = sorted(float(record["duration_seconds"]) for record in records)
     average = fmean(durations)
@@ -180,6 +197,30 @@ def _nearest_rank(values: Sequence[float], percentile: float) -> float:
         raise ValueError("percentile requires at least one value")
     index = max(0, math.ceil(percentile * len(values)) - 1)
     return sorted(values)[index]
+
+
+def _legacy_case_regression(
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    legacy_records = [
+        record for record in records if record.get("category") != "call_chain"
+    ]
+    violations = sorted(
+        {
+            str(record["case_id"])
+            for record in legacy_records
+            if (
+                _semantic_outcome(record) is SemanticOutcome.INCORRECT
+                if str(record["case_id"]) in LEGACY_PARTIAL_CASES
+                else not bool(record.get("semantic_success"))
+            )
+        }
+    )
+    return {
+        "checked_cases": len({str(record["case_id"]) for record in legacy_records}),
+        "violations": violations,
+        "passed": not violations,
+    }
 
 
 def _group_rates(

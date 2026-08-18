@@ -1,4 +1,4 @@
-"""Loading and validation for the frozen 30-question evaluation dataset."""
+"""Loading and validation for the frozen version-3 evaluation dataset."""
 
 from __future__ import annotations
 
@@ -19,9 +19,11 @@ from evaluation.models import (
 DEFAULT_CASES_PATH = Path(__file__).with_name("cases.json")
 EXPECTED_DIFFICULTIES = {
     Difficulty.SIMPLE: 10,
-    Difficulty.MEDIUM: 12,
-    Difficulty.HARD: 8,
+    Difficulty.MEDIUM: 16,
+    Difficulty.HARD: 14,
 }
+EXPECTED_CASE_COUNT = sum(EXPECTED_DIFFICULTIES.values())
+EXPECTED_VERSION = 3
 
 
 def load_cases(path: Path = DEFAULT_CASES_PATH) -> tuple[EvaluationCase, ...]:
@@ -33,6 +35,10 @@ def load_cases(path: Path = DEFAULT_CASES_PATH) -> tuple[EvaluationCase, ...]:
         raise ValueError("evaluation dataset cannot be loaded") from error
     if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
         raise ValueError("evaluation dataset root must contain a cases list")
+    if payload.get("version") != EXPECTED_VERSION:
+        raise ValueError(
+            f"evaluation dataset version must be {EXPECTED_VERSION}"
+        )
     cases = tuple(_parse_case(item) for item in payload["cases"])
     _validate_suite(cases)
     return cases
@@ -109,8 +115,11 @@ def _parse_intent(value: object) -> EvaluationIntent:
 
 
 def _validate_suite(cases: tuple[EvaluationCase, ...]) -> None:
-    if len(cases) != 30:
-        raise ValueError(f"evaluation dataset must contain 30 cases, got {len(cases)}")
+    if len(cases) != EXPECTED_CASE_COUNT:
+        raise ValueError(
+            "evaluation dataset must contain "
+            f"{EXPECTED_CASE_COUNT} cases, got {len(cases)}"
+        )
     if len({case.id for case in cases}) != len(cases):
         raise ValueError("case ids must be unique")
     if len({case.question for case in cases}) != len(cases):
