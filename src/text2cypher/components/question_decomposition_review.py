@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from text2cypher.components.code_graph_semantics import (
-    CALL_CHAIN_CORRELATION_RULE,
+from text2cypher.components.code_graph_business_rules import (
+    load_code_graph_business_rules,
 )
 from text2cypher.domain.models import (
     ChatPrompt,
@@ -32,16 +32,6 @@ class QuestionDecompositionReviewPromptBuilder:
         "仅当候选同时满足以下条件才接受：每项自包含；保留锚点、方向、直接性、"
         "范围、分组和返回形状；没有新增、丢失或跨意图传播限定；并集完整且不重复；"
         "没有合并不兼容的分组或返回形状。固定对象与完整筛选条件可在各项重复并独立重算。\n"
-        + CALL_CHAIN_CORRELATION_RULE
-        + "\n若原题问‘P 发布的消息经过哪个交换机和队列，最终由哪个方法消费’，"
-        "候选分别查询交换机、队列、消费方法时必须返回 CORRELATION_LOSS，绝不能 VALID。"
-        + "\n调用者指向被调用者，上游反向、下游正向；直接是一跳，调用链最多五跳。"
-        "完整上游链默认含入口 API 和有序方法路径，完整下游链默认含有序方法路径、"
-        "远程 API 和目标服务。若候选把同一链的方法、API、服务拆开，或一对多时"
-        "无法恢复原始行，返回 CORRELATION_LOSS。明确分别询问互不关联的对象除外。\n"
-        "方法变更题分别询问全部反向上游方法、可达入口 API、变更方法直接远程下游"
-        "服务时，三者是可重复锚点独立重算的集合，不是逐行链，应接受拆分；若把直接"
-        "远程下游写成泛称‘外部服务’，必须拒绝并返回 COVERAGE_MISMATCH。\n"
         "‘从 A 找所属 B，并列出该 B 的资源’若资源候选重复 A 且自行推导 B，则是"
         "独立重算，应接受；仅写‘该 B/上述 B’才是 RESULT_DEPENDENCY。\n"
         "先找 A 再查每个 A 的 B，或使用‘这些对象/其结果’，返回 RESULT_DEPENDENCY；"
@@ -78,7 +68,11 @@ class QuestionDecompositionReviewPromptBuilder:
             for index, question in enumerate(normalized_sub_questions, start=1)
         )
         return ChatPrompt(
-            system=self.system_instruction,
+            system=(
+                f"{self.system_instruction}\n\n"
+                "代码知识图谱业务语义：\n"
+                f"{load_code_graph_business_rules()}"
+            ),
             user="\n\n".join(
                 (
                     "原始用户问题：\n" + normalized_original,

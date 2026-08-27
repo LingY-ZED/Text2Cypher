@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from text2cypher.components.code_graph_semantics import (
-    CALL_CHAIN_CORRELATION_RULE,
+from text2cypher.components.code_graph_business_rules import (
+    load_code_graph_business_rules,
 )
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
@@ -28,13 +28,6 @@ class QuestionDecompositionPromptBuilder:
         "每个子问题必须自包含，保留自身意图的实体、方向、直接性、范围、分组"
         "和返回形状；不得把只属于一个分句的限定传播给其他意图，也不得新增限定。\n"
         "子问题不能读取其他子问题结果，也不能靠指代、JOIN、传参或重新配对完成。\n"
-        + CALL_CHAIN_CORRELATION_RULE
-        + "\n例如‘P 发布的消息经过哪个交换机和队列，最终由哪个方法消费’必须"
-        "保留为一个子问题，不能按返回字段拆分。"
-        + "\n调用图中调用者指向被调用者；上游为反向、下游为正向，直接表示一跳，"
-        "调用链表示最多五跳。完整上游链默认包含入口 API 和有序方法路径；完整"
-        "下游链默认包含有序方法路径、远程下游 API 与目标服务，存在时补充一个"
-        "直接跨服务边界。明确只问上游方法、入口 API 或直接下游服务时按原对象处理。\n"
         "同一固定对象上的独立统计、明细或不同依赖可分别重算；不同分组和返回"
         "形状不要合并。方法变更题中‘分别’询问的全部反向上游方法、可达入口 API、"
         "变更方法直接远程调用的下游服务是三个独立集合，应分别拆分并重复方法锚点；"
@@ -77,7 +70,14 @@ class QuestionDecompositionPromptBuilder:
                 '只返回 JSON：\n{"sub_questions":[]}',
             )
         )
-        return ChatPrompt(system=self.system_instruction, user=user)
+        return ChatPrompt(
+            system=(
+                f"{self.system_instruction}\n\n"
+                "代码知识图谱业务语义：\n"
+                f"{load_code_graph_business_rules()}"
+            ),
+            user=user,
+        )
 
 
 class QuestionDecompositionResponseParser:

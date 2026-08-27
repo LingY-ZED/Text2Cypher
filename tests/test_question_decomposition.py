@@ -45,15 +45,17 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "最多拆成 3 个子问题" in prompt.user
     assert "只属于一个分句的限定传播给其他意图" in prompt.system
     assert "不同分组和返回形状不要合并" in prompt.system
-    assert "完整调用链是一个逐行对应的意图" in prompt.system
-    assert "上游为反向、下游为正向" in prompt.system
-    assert "调用链表示最多五跳" in prompt.system
-    assert "完整上游链默认包含入口 API" in prompt.system
-    assert "完整下游链默认包含有序方法路径" in prompt.system
+    assert "代码知识图谱业务语义：" in prompt.system
+    assert "方法-[:调用]->方法" in prompt.system
+    assert "调用链、链路或路径最多展开五跳" in prompt.system
+    assert "完整上游链返回目标方法、入口 API 和有序方法路径" in prompt.system
+    assert (
+        "完整下游链返回目标方法、有序方法路径、远程下游 API 和目标服务"
+        in prompt.system
+    )
     assert "三个独立集合，应分别拆分" in prompt.system
     assert "第三个子问题必须原样写明" in prompt.system
     assert "‘外部服务’也不得输出该泛称" in prompt.system
-    assert len(prompt.system) <= 1100
 
 
 def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
@@ -63,10 +65,9 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
         3,
     )
 
-    assert "方法路径、入口或出口 API、服务必须留在同一子问题" in prompt.system
-    assert "明确只问上游方法、入口 API 或直接下游服务时按原对象处理" in prompt.system
-    assert "MQ 的发布方法、交换机、队列、消费方法和两端服务" in prompt.system
-    assert "最终由哪个方法消费’必须保留为一个子问题" in prompt.system
+    assert "同一调用链或消息路径中的方法、API、服务、交换机、队列" in prompt.system
+    assert "不能拆成无法恢复配对的独立结果" in prompt.system
+    assert "完整消息路径固定为" in prompt.system
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system
 
 

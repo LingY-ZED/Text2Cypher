@@ -21,18 +21,16 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "Schema" not in prompt.user
     assert "固定对象与完整筛选条件可在各项重复并独立重算" in prompt.system
     assert "没有新增、丢失或跨意图传播限定" in prompt.system
-    assert "完整调用链是一个逐行对应的意图" in prompt.system
-    assert "把同一链的方法、API、服务拆开" in prompt.system
-    assert "无法恢复原始行" in prompt.system
-    assert "三者是可重复锚点独立重算的集合" in prompt.system
-    assert "泛称‘外部服务’，必须拒绝并返回 COVERAGE_MISMATCH" in prompt.system
-    assert "MQ 的发布方法、交换机、队列、消费方法和两端服务" in prompt.system
-    assert "必须返回 CORRELATION_LOSS，绝不能 VALID" in prompt.system
+    assert "代码知识图谱业务语义：" in prompt.system
+    assert "同一调用链或消息路径中的方法、API、服务、交换机、队列" in prompt.system
+    assert "不能拆成无法恢复配对的独立结果" in prompt.system
+    assert "方法变更影响分析中" in prompt.system
+    assert "目标服务字段名为 `下游服务`" in prompt.system
+    assert "完整消息路径固定为" in prompt.system
     assert "资源候选重复 A 且自行推导 B" in prompt.system
     assert "返回 COVERAGE_MISMATCH" in prompt.system
     assert "合并不兼容返回形状" in prompt.system
     assert "RESULT_DEPENDENCY" in prompt.system
-    assert len(prompt.system) <= 1400
 
 
 def test_review_prompt_has_abstract_call_chain_semantics_without_graph_schema() -> None:
@@ -41,8 +39,8 @@ def test_review_prompt_has_abstract_call_chain_semantics_without_graph_schema() 
         ("查询 getAllFood 的上游方法", "查询 getAllFood 的入口 API"),
     )
 
-    assert "上游反向、下游正向" in prompt.system
-    assert "调用链最多五跳" in prompt.system
+    assert "上游逆向、下游正向" in prompt.system
+    assert "调用链、链路或路径最多展开五跳" in prompt.system
     assert "图谱 Schema：" not in prompt.user
     assert "关系模式：" not in prompt.user
 

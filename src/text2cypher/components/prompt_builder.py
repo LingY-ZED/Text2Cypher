@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from text2cypher.components.code_graph_semantics import CodeGraphSemanticSelector
+from text2cypher.components.code_graph_business_rules import (
+    load_code_graph_business_rules,
+)
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
 from text2cypher.domain.errors import PromptBuildError
@@ -10,7 +12,7 @@ from text2cypher.domain.models import ChatPrompt, FewShotExample, GraphSchema
 
 
 class DefaultPromptBuilder:
-    """构造动态 Schema、相关业务语义及可选 Few-shot 提示词。"""
+    """构造动态 Schema、共享业务语义及可选 Few-shot 提示词。"""
 
     system_instruction = (
         "你是 Neo4j Cypher 专家。\n"
@@ -34,11 +36,9 @@ class DefaultPromptBuilder:
         self,
         schema_graph_builder: SchemaGraphBuilder | None = None,
         schema_serializer: SchemaSerializer | None = None,
-        semantic_selector: CodeGraphSemanticSelector | None = None,
     ) -> None:
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
         self._schema_serializer = schema_serializer or SchemaSerializer()
-        self._semantic_selector = semantic_selector or CodeGraphSemanticSelector()
 
     def build(
         self,
@@ -52,12 +52,7 @@ class DefaultPromptBuilder:
 
         schema_graph = self._schema_graph_builder.build(schema)
         serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
-        rules = self._semantic_selector.select(schema, normalized_question)
         user_sections = ["图谱 Schema：", serialized_schema]
-        if rules:
-            user_sections.extend(
-                ("可适用的业务语义：", "\n".join(f"- {rule}" for rule in rules))
-            )
         if examples:
             user_sections.append(self._render_examples(examples))
         user_sections.extend(("用户问题：", normalized_question, "只输出 Cypher："))
@@ -72,9 +67,14 @@ class DefaultPromptBuilder:
         cls,
         examples: tuple[FewShotExample, ...],
     ) -> str:
+        instruction = (
+            f"{cls.system_instruction}\n\n"
+            "代码知识图谱业务语义：\n"
+            f"{load_code_graph_business_rules()}"
+        )
         if not examples:
-            return cls.system_instruction
-        return f"{cls.system_instruction}\n{cls.few_shot_system_instruction}"
+            return instruction
+        return f"{instruction}\n\n{cls.few_shot_system_instruction}"
 
     @staticmethod
     def _render_examples(examples: tuple[FewShotExample, ...]) -> str:
