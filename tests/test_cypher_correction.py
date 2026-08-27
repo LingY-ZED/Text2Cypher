@@ -6,12 +6,17 @@ import json
 import pytest
 
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
+from text2cypher.components.code_graph_business_rules import (
+    load_code_graph_business_rules,
+)
 from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
+from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.models import (
     ChatPrompt,
     CypherFailureContext,
     CypherFailureKind,
     CypherFailureSource,
+    GraphSchema,
     LLMResponse,
 )
 
@@ -73,6 +78,17 @@ def test_correction_prompt_reuses_base_context_and_marks_candidate_as_data() -> 
         "source": "neo4j",
     }
     assert prompt.user.endswith("只输出修正后的一条 Cypher：")
+
+
+def test_correction_prompt_inherits_shared_business_rules_from_generator() -> None:
+    base_prompt = DefaultPromptBuilder().build(GraphSchema(), "list nodes")
+    prompt = CypherCorrectionPromptBuilder().build(
+        base_prompt,
+        "MATCH (node) RETURN node",
+        _failure_context(CypherFailureKind.PARSE),
+    )
+
+    assert prompt.system.count(load_code_graph_business_rules()) == 1
 
 
 def test_correction_prompt_rejects_blank_candidate() -> None:
