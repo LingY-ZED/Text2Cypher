@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "cases": [
     {
       "id": "queue-owner-services",
@@ -132,7 +132,7 @@
         {
           "id": "public_apis",
           "label": "服务 API",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-config-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-config-service'\n        RETURN DISTINCT api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式\n        ORDER BY 接口路径, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "接口路径",
@@ -190,7 +190,7 @@
         {
           "id": "owner",
           "label": "API 所属服务",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE api.API类型 = '上游API' AND api.接口路径 = 'api/v1/configservice/configs/{configName}' AND api.请求方式 = 'GET' RETURN DISTINCT service.服务名称 AS 服务名称",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE api.API路径 = 'api/v1/configservice/configs/{configName}'\n          AND api.HTTP方法 = 'GET'\n        RETURN DISTINCT service.服务名称 AS 服务名称",
           "comparison_mode": "value_set",
           "expected_columns": [
             "服务名称"
@@ -201,7 +201,8 @@
               "微服务",
               "所属服务",
               "所属微服务",
-              "目标服务"
+              "目标服务",
+              "微服务名称"
             ]
           },
           "expected_snapshot": [
@@ -222,7 +223,7 @@
         {
           "id": "contract",
           "label": "接口契约",
-          "oracle_cypher": "MATCH (api:API端点) WHERE api.API类型 = '上游API' AND api.接口路径 = '/api/v1/adminrouteservice/adminroute' AND api.请求方式 = 'POST' RETURN api.请求体类型 AS 请求体类型, api.响应类型 AS 响应类型",
+          "oracle_cypher": "MATCH (api:上游API)\n        WHERE api.API路径 = '/api/v1/adminrouteservice/adminroute'\n          AND api.HTTP方法 = 'POST'\n        RETURN api.请求体类型 AS 请求体类型, api.响应类型 AS 响应类型",
           "comparison_mode": "row_set",
           "expected_columns": [
             "请求体类型",
@@ -432,7 +433,7 @@
         {
           "id": "targets",
           "label": "方法下游服务",
-          "oracle_cypher": "MATCH (method:方法)-[remote:调用]->(api:API端点) WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (method:方法)-[:下游调用]->(:下游API)-[:目标服务]->(service:微服务)\n        WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay'\n        RETURN DISTINCT service.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "下游服务"
@@ -444,7 +445,8 @@
               "远程下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -470,7 +472,7 @@
         {
           "id": "targets",
           "label": "服务 REST 下游",
-          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-rebook-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE service.服务名称 = 'ts-rebook-service'\n        RETURN DISTINCT target.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "下游服务"
@@ -482,7 +484,8 @@
               "被依赖微服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -523,7 +526,7 @@
         {
           "id": "callers",
           "label": "REST 上游服务",
-          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE remote.调用类型 = '远程调用' AND api.API类型 = '下游API' AND api.目标微服务 = 'ts-order-other-service' RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE target.服务名称 = 'ts-order-other-service'\n        RETURN DISTINCT caller.服务名称 AS 上游服务\n        ORDER BY 上游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游服务"
@@ -532,7 +535,8 @@
             "上游服务": [
               "上游服务",
               "调用方服务",
-              "来源服务"
+              "来源服务",
+              "调用服务"
             ]
           },
           "expected_snapshot": [
@@ -549,7 +553,13 @@
               "上游服务": "ts-inside-payment-service"
             },
             {
+              "上游服务": "ts-preserve-other-service"
+            },
+            {
               "上游服务": "ts-rebook-service"
+            },
+            {
+              "上游服务": "ts-seat-service"
             },
             {
               "上游服务": "ts-security-service"
@@ -567,7 +577,7 @@
         {
           "id": "entry_apis",
           "label": "入口影响",
-          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -604,7 +614,7 @@
         {
           "id": "publishers",
           "label": "MQ 发布方法",
-          "oracle_cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列) WHERE queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' RETURN DISTINCT publisher.全限定名 AS 发布方法 ORDER BY 发布方法",
+          "oracle_cypher": "MATCH (publisher:方法)-[publish:发布至]->(:消息交换机)-[route:路由至]->(queue:消息队列)\n        WHERE queue.队列名称 = 'food_delivery'\n          AND publish.路由键 = route.路由键\n        RETURN DISTINCT publisher.全限定名 AS 发布方法\n        ORDER BY 发布方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "发布方法"
@@ -620,15 +630,6 @@
           "expected_snapshot": [
             {
               "发布方法": "foodsearch.mq.RabbitSend.send"
-            },
-            {
-              "发布方法": "notification.mq.RabbitSend.send"
-            },
-            {
-              "发布方法": "preserve.mq.RabbitSend.send"
-            },
-            {
-              "发布方法": "preserveOther.mq.RabbitSend.send"
             }
           ]
         }
@@ -643,7 +644,7 @@
         {
           "id": "consumers",
           "label": "MQ 消费方法",
-          "oracle_cypher": "MATCH (queue:消息队列)-[consume:消息流]->(method:方法) WHERE queue.队列名称 = 'email' AND consume.消息流类型 = '消费' RETURN DISTINCT method.全限定名 AS 消费方法 ORDER BY 消费方法",
+          "oracle_cypher": "MATCH (queue:消息队列)-[:消费自]->(method:方法)\n        WHERE queue.队列名称 = 'email'\n        RETURN DISTINCT method.全限定名 AS 消费方法\n        ORDER BY 消费方法",
           "comparison_mode": "value_set",
           "expected_columns": [
             "消费方法"
@@ -674,7 +675,7 @@
         {
           "id": "message_path",
           "label": "MQ 消息路径",
-          "oracle_cypher": "MATCH (publisher:方法)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法) WHERE publisher.全限定名 = 'preserve.mq.RabbitSend.send' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法 ORDER BY 队列名称, 消费方法",
+          "oracle_cypher": "MATCH (publisher:方法)-[publish:发布至]->(exchange:消息交换机)-[route:路由至]->(queue:消息队列)\n              -[:消费自]->(consumer:方法)\n        WHERE publisher.全限定名 = 'preserve.mq.RabbitSend.send'\n          AND publish.路由键 = route.路由键\n        RETURN DISTINCT exchange.交换机名称 AS 交换机名称,\n               queue.队列名称 AS 队列名称,\n               consumer.全限定名 AS 消费方法\n        ORDER BY 队列名称, 消费方法",
           "comparison_mode": "row_set",
           "expected_columns": [
             "交换机名称",
@@ -703,11 +704,6 @@
               "交换机名称": "(default)",
               "队列名称": "email",
               "消费方法": "notification.mq.RabbitReceive.void process"
-            },
-            {
-              "交换机名称": "(default)",
-              "队列名称": "food_delivery",
-              "消费方法": "delivery.mq.RabbitReceive.void process"
             }
           ]
         }
@@ -722,7 +718,7 @@
         {
           "id": "method_counts",
           "label": "HTTP 方法统计",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS API数量 ORDER BY 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-admin-route-service'\n        RETURN api.HTTP方法 AS 请求方式, count(DISTINCT api) AS API数量\n        ORDER BY 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "请求方式",
@@ -923,11 +919,11 @@
               "接口实现类数": 1
             },
             {
-              "服务名称": "ts-travel2-service",
+              "服务名称": "ts-travel-service",
               "接口实现类数": 1
             },
             {
-              "服务名称": "ts-user-service",
+              "服务名称": "ts-travel2-service",
               "接口实现类数": 1
             },
             {
@@ -951,7 +947,7 @@
         {
           "id": "callees",
           "label": "直接代码调用",
-          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(callee:方法) WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT callee.全限定名 AS 被调用方法 ORDER BY 被调用方法",
+          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(callee:方法)\n        WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook'\n          AND rel.调用深度 IN [0, 1]\n        RETURN DISTINCT callee.全限定名 AS 被调用方法\n        ORDER BY 被调用方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "被调用方法"
@@ -990,7 +986,7 @@
         {
           "id": "targets",
           "label": "跨进程目标",
-          "oracle_cypher": "MATCH (method:方法)-[remote:调用]->(api:API端点) WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (method:方法)-[:下游调用]->(:下游API)-[:目标服务]->(service:微服务)\n        WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay'\n        RETURN DISTINCT service.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "下游服务"
@@ -1002,7 +998,8 @@
               "远程下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -1028,7 +1025,7 @@
         {
           "id": "target_counts",
           "label": "下游调用统计",
-          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[remote:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE service.服务名称 = 'ts-admin-basic-info-service'\n        RETURN target.服务名称 AS 下游服务, count(DISTINCT remote) AS 调用关系数\n        ORDER BY 调用关系数 DESC, 下游服务",
           "comparison_mode": "row_set",
           "expected_columns": [
             "下游服务",
@@ -1039,14 +1036,16 @@
               "下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ],
             "调用关系数": [
               "调用关系数",
               "调用数",
               "调用次数",
               "关系数量",
-              "数量"
+              "数量",
+              "REST目标调用数"
             ]
           },
           "expected_snapshot": [
@@ -1084,7 +1083,7 @@
         {
           "id": "upstream_methods",
           "label": "上游方法",
-          "oracle_cypher": "MATCH (upstream:方法)-[rel:调用]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND rel.调用类型 IN ['普通调用', '接口调用', '调用链'] RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (upstream:方法)-[:调用]->(changed:方法)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "value_set",
           "expected_columns": [
             "上游方法"
@@ -1106,7 +1105,7 @@
         {
           "id": "entry_apis",
           "label": "入口 API",
-          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -1136,7 +1135,7 @@
         {
           "id": "downstreams",
           "label": "远程下游",
-          "oracle_cypher": "MATCH (changed:方法)-[remote:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (method:方法)-[:下游调用]->(:下游API)-[:目标服务]->(service:微服务)\n        WHERE method.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND method.方法名 = 'pay'\n        RETURN DISTINCT service.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "下游服务"
@@ -1147,7 +1146,8 @@
               "远程下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -1174,7 +1174,7 @@
         {
           "id": "upstream_methods",
           "label": "调用方法",
-          "oracle_cypher": "MATCH (upstream:方法)-[:调用*1..5]->(changed:方法) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' RETURN DISTINCT upstream.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (upstream:方法)-[:调用]->(changed:方法)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游方法"
@@ -1192,9 +1192,6 @@
               "上游方法": "consign.controller.ConsignController.insertConsign"
             },
             {
-              "上游方法": "consign.controller.ConsignController.updateConsign"
-            },
-            {
               "上游方法": "consign.service.ConsignServiceImpl.updateConsignRecord"
             }
           ]
@@ -1202,7 +1199,7 @@
         {
           "id": "entry_apis",
           "label": "入口端点",
-          "oracle_cypher": "MATCH (entry:方法)-[:调用*0..5]->(changed:方法), (entry)-[entry_rel:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND entry_rel.调用类型 = '接口入口' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 入口接口, api.请求方式 AS 请求方式 ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -1225,17 +1222,13 @@
             {
               "入口接口": "/api/v1/consignservice/consigns",
               "请求方式": "POST"
-            },
-            {
-              "入口接口": "/api/v1/consignservice/consigns",
-              "请求方式": "PUT"
             }
           ]
         },
         {
           "id": "downstreams",
           "label": "外部服务",
-          "oracle_cypher": "MATCH (changed:方法)-[remote:调用]->(api:API端点) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (method:方法)-[:下游调用]->(:下游API)-[:目标服务]->(service:微服务)\n        WHERE method.所属类名 ENDS WITH '.ConsignServiceImpl' AND method.方法名 = 'insertConsignRecord'\n        RETURN DISTINCT service.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "value_set",
           "expected_columns": [
             "下游服务"
@@ -1246,7 +1239,8 @@
               "外部服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -1267,7 +1261,7 @@
         {
           "id": "apis",
           "label": "公开 API",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-notification-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-notification-service'\n        RETURN DISTINCT api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式\n        ORDER BY 接口路径, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "接口路径",
@@ -1321,7 +1315,7 @@
         {
           "id": "senders",
           "label": "MQ 发送服务",
-          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' RETURN DISTINCT sender.服务名称 AS 发送服务 ORDER BY 发送服务",
+          "oracle_cypher": "MATCH (sender:微服务)-[:消息依赖]->(receiver:微服务)\n        WHERE receiver.服务名称 = 'ts-notification-service'\n        RETURN DISTINCT sender.服务名称 AS 发送服务\n        ORDER BY 发送服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "发送服务"
@@ -1330,7 +1324,8 @@
             "发送服务": [
               "发送服务",
               "消息发送服务",
-              "上游服务"
+              "上游服务",
+              "服务名称"
             ]
           },
           "expected_snapshot": [
@@ -1348,7 +1343,7 @@
         {
           "id": "consumers",
           "label": "email 消费方法",
-          "oracle_cypher": "MATCH (queue:消息队列)-[consume:消息流]->(method:方法) WHERE queue.队列名称 = 'email' AND consume.消息流类型 = '消费' RETURN DISTINCT method.全限定名 AS 消费方法 ORDER BY 消费方法",
+          "oracle_cypher": "MATCH (queue:消息队列)-[:消费自]->(method:方法)\n        WHERE queue.队列名称 = 'email'\n        RETURN DISTINCT method.全限定名 AS 消费方法\n        ORDER BY 消费方法",
           "comparison_mode": "value_set",
           "expected_columns": [
             "消费方法"
@@ -1379,7 +1374,7 @@
         {
           "id": "apis",
           "label": "公开 API",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-security-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-security-service'\n        RETURN DISTINCT api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式\n        ORDER BY 接口路径, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "接口路径",
@@ -1401,14 +1396,6 @@
           },
           "expected_snapshot": [
             {
-              "接口路径": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}",
-              "请求方式": "GET"
-            },
-            {
-              "接口路径": "/api/v1/orderservice/order/security/{checkDate}/{accountId}",
-              "请求方式": "GET"
-            },
-            {
               "接口路径": "/api/v1/securityservice/securityConfigs",
               "请求方式": "GET"
             },
@@ -1419,6 +1406,10 @@
             {
               "接口路径": "/api/v1/securityservice/securityConfigs",
               "请求方式": "PUT"
+            },
+            {
+              "接口路径": "/api/v1/securityservice/securityConfigs/{accountId}",
+              "请求方式": "GET"
             },
             {
               "接口路径": "/api/v1/securityservice/securityConfigs/{id}",
@@ -1433,7 +1424,7 @@
         {
           "id": "downstreams",
           "label": "REST 下游",
-          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-security-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT api.目标微服务 AS 下游服务 ORDER BY 下游服务",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE service.服务名称 = 'ts-security-service'\n        RETURN DISTINCT target.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "下游服务"
@@ -1443,7 +1434,8 @@
               "下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -1458,7 +1450,7 @@
         {
           "id": "upstreams",
           "label": "REST 上游",
-          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE remote.调用类型 = '远程调用' AND api.API类型 = '下游API' AND api.目标微服务 = 'ts-security-service' RETURN DISTINCT caller.服务名称 AS 上游服务 ORDER BY 上游服务",
+          "oracle_cypher": "MATCH (caller:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE target.服务名称 = 'ts-security-service'\n        RETURN DISTINCT caller.服务名称 AS 上游服务\n        ORDER BY 上游服务",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游服务"
@@ -1467,7 +1459,8 @@
             "上游服务": [
               "上游服务",
               "调用方服务",
-              "来源服务"
+              "来源服务",
+              "调用服务"
             ]
           },
           "expected_snapshot": [
@@ -1491,7 +1484,7 @@
         {
           "id": "sender_targets",
           "label": "发送方 REST 依赖",
-          "oracle_cypher": "MATCH (sender:微服务)-[flow:消息流]->(receiver:微服务), (sender)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE receiver.服务名称 = 'ts-notification-service' AND flow.消息流类型 = '服务间消息依赖' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN DISTINCT sender.服务名称 AS 发送服务, api.目标微服务 AS 下游服务 ORDER BY 发送服务, 下游服务",
+          "oracle_cypher": "MATCH (sender:微服务)-[:消息依赖]->(:微服务 {服务名称: 'ts-notification-service'}),\n              (sender)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        RETURN DISTINCT sender.服务名称 AS 发送服务, target.服务名称 AS 下游服务\n        ORDER BY 发送服务, 下游服务",
           "comparison_mode": "row_set",
           "expected_columns": [
             "发送服务",
@@ -1508,7 +1501,8 @@
               "目标服务",
               "目的应用",
               "被调用服务",
-              "REST下游服务"
+              "REST下游服务",
+              "目标服务名"
             ]
           },
           "expected_snapshot": [
@@ -1518,7 +1512,23 @@
             },
             {
               "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-basic-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-consign-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
               "下游服务": "ts-contacts-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-food-service"
+            },
+            {
+              "发送服务": "ts-preserve-other-service",
+              "下游服务": "ts-order-other-service"
             },
             {
               "发送服务": "ts-preserve-other-service",
@@ -1542,7 +1552,23 @@
             },
             {
               "发送服务": "ts-preserve-service",
+              "下游服务": "ts-basic-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-consign-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
               "下游服务": "ts-contacts-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-food-service"
+            },
+            {
+              "发送服务": "ts-preserve-service",
+              "下游服务": "ts-order-service"
             },
             {
               "发送服务": "ts-preserve-service",
@@ -1574,7 +1600,7 @@
         {
           "id": "chain",
           "label": "完整消息链",
-          "oracle_cypher": "MATCH (publisher:方法)-[:归属于]->(:类)-[:归属于]->(sender:微服务), (publisher)-[publish:消息流]->(exchange:消息交换机)-[route:消息流]->(queue:消息队列)-[consume:消息流]->(consumer:方法)-[:归属于]->(:类)-[:归属于]->(receiver:微服务) WHERE queue.队列名称 = 'food_delivery' AND publish.消息流类型 = '发布' AND route.消息流类型 = '路由' AND consume.消息流类型 = '消费' RETURN DISTINCT publisher.全限定名 AS 发布方法, sender.服务名称 AS 发送服务, exchange.交换机名称 AS 交换机名称, consumer.全限定名 AS 消费方法, receiver.服务名称 AS 接收服务 ORDER BY 发布方法, 发送服务",
+          "oracle_cypher": "MATCH (publisher:方法)-[:归属于]->(:类)-[:归属于]->(sender:微服务),\n              (publisher)-[publish:发布至]->(exchange:消息交换机)-[route:路由至]->(queue:消息队列)\n              -[:消费自]->(consumer:方法)-[:归属于]->(:类)-[:归属于]->(receiver:微服务)\n        WHERE queue.队列名称 = 'food_delivery'\n          AND publish.路由键 = route.路由键\n        RETURN DISTINCT publisher.全限定名 AS 发布方法,\n               sender.服务名称 AS 发送服务,\n               exchange.交换机名称 AS 交换机名称,\n               consumer.全限定名 AS 消费方法,\n               receiver.服务名称 AS 接收服务\n        ORDER BY 发布方法, 发送服务",
           "comparison_mode": "row_set",
           "expected_columns": [
             "发布方法",
@@ -1615,27 +1641,6 @@
             {
               "发布方法": "foodsearch.mq.RabbitSend.send",
               "发送服务": "ts-food-service",
-              "交换机名称": "(default)",
-              "消费方法": "delivery.mq.RabbitReceive.void process",
-              "接收服务": "ts-delivery-service"
-            },
-            {
-              "发布方法": "notification.mq.RabbitSend.send",
-              "发送服务": "ts-notification-service",
-              "交换机名称": "(default)",
-              "消费方法": "delivery.mq.RabbitReceive.void process",
-              "接收服务": "ts-delivery-service"
-            },
-            {
-              "发布方法": "preserve.mq.RabbitSend.send",
-              "发送服务": "ts-preserve-service",
-              "交换机名称": "(default)",
-              "消费方法": "delivery.mq.RabbitReceive.void process",
-              "接收服务": "ts-delivery-service"
-            },
-            {
-              "发布方法": "preserveOther.mq.RabbitSend.send",
-              "发送服务": "ts-preserve-other-service",
               "交换机名称": "(default)",
               "消费方法": "delivery.mq.RabbitReceive.void process",
               "接收服务": "ts-delivery-service"
@@ -1695,7 +1700,8 @@
               "全限定名",
               "完整方法名",
               "声明方法",
-              "方法"
+              "方法",
+              "方法名"
             ]
           },
           "value_normalizers": {
@@ -1719,7 +1725,7 @@
         {
           "id": "service_apis",
           "label": "服务公开 API",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-route-service' AND api.API类型 = '上游API' RETURN DISTINCT api.接口路径 AS 接口路径, api.请求方式 AS 请求方式 ORDER BY 接口路径, 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-admin-route-service'\n        RETURN DISTINCT api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式\n        ORDER BY 接口路径, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "接口路径",
@@ -1770,7 +1776,7 @@
         {
           "id": "api_counts",
           "label": "API 方法分布",
-          "oracle_cypher": "MATCH (api:API端点)-[:归属于]->(:方法)-[:归属于]->(:类)-[:归属于]->(service:微服务) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND api.API类型 = '上游API' RETURN api.请求方式 AS 请求方式, count(DISTINCT api) AS API数量 ORDER BY 请求方式",
+          "oracle_cypher": "MATCH (method:方法)-[:服务于]->(api:上游API),\n              (method)-[:归属于]->(:类)-[:归属于]->(service:微服务)\n        WHERE service.服务名称 = 'ts-admin-basic-info-service'\n        RETURN api.HTTP方法 AS 请求方式, count(DISTINCT api) AS API数量\n        ORDER BY 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "请求方式",
@@ -1810,7 +1816,7 @@
         {
           "id": "rest_counts",
           "label": "REST 目标统计",
-          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:调用]->(api:API端点) WHERE service.服务名称 = 'ts-admin-basic-info-service' AND remote.调用类型 = '远程调用' AND api.API类型 = '下游API' RETURN api.目标微服务 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
+          "oracle_cypher": "MATCH (service:微服务)<-[:归属于]-(:类)<-[:归属于]-(method:方法)\n              -[remote:下游调用]->(:下游API)-[:目标服务]->(target:微服务)\n        WHERE service.服务名称 = 'ts-admin-basic-info-service'\n        RETURN target.服务名称 AS 下游服务, count(DISTINCT remote) AS 调用关系数\n        ORDER BY 调用关系数 DESC, 下游服务",
           "comparison_mode": "row_set",
           "expected_columns": [
             "下游服务",
@@ -1821,7 +1827,8 @@
               "下游服务",
               "目标服务",
               "目的应用",
-              "被调用服务"
+              "被调用服务",
+              "目标服务名"
             ],
             "调用关系数": [
               "调用关系数",
@@ -1867,6 +1874,7 @@
               "实现类",
               "接口实现类",
               "接口实现类全限定名",
+              "实现类全限定名",
               "类全限定名"
             ]
           },
@@ -1888,24 +1896,43 @@
         {
           "id": "full-upstream-chain",
           "label": "完整上游调用链",
-          "oracle_cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名:'getAllFood'}), (entry)-[:调用 {调用类型:'接口入口'}]->(entry_api:API端点 {API类型:'上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 目标方法, 入口API, 方法路径",
+          "oracle_cypher": "MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              (entry)-[:接口调用]->(target:方法)\n        WHERE target.方法名 = 'getAllFood'\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [entry.全限定名, target.全限定名] AS 方法路径\n        UNION\n        MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              path=(entry)-[:链中下一节点*1..5]->(target:方法)\n        WHERE target.方法名 = 'getAllFood' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [method IN nodes(path) | method.全限定名] AS 方法路径\n        UNION\n        MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              (entry)-[:接口调用]->(first:方法),\n              path=(first)-[:链中下一节点*1..4]->(target:方法)\n        WHERE target.方法名 = 'getAllFood' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [entry.全限定名] + [method IN nodes(path) | method.全限定名] AS 方法路径\n        UNION\n        MATCH (target:方法)-[:服务于]->(entry_api:上游API)\n        WHERE target.方法名 = 'getAllFood'\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [target.全限定名] AS 方法路径",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "入口API", "方法路径"],
+          "expected_columns": [
+            "目标方法",
+            "入口API",
+            "方法路径"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "入口API": ["入口API", "入口接口"],
-            "方法路径": ["方法路径", "上游方法路径", "调用路径"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "入口API": [
+              "入口API",
+              "入口接口",
+              "API路径"
+            ],
+            "方法路径": [
+              "方法路径",
+              "上游方法路径",
+              "调用路径"
+            ]
           },
           "expected_snapshot": [
             {
-              "目标方法": "foodsearch.controller.FoodController.getAllFood",
-              "入口API": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
-              "方法路径": ["foodsearch.controller.FoodController.getAllFood"]
-            },
-            {
               "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
               "入口API": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
-              "方法路径": ["foodsearch.controller.FoodController.getAllFood", "foodsearch.service.FoodServiceImpl.getAllFood"]
+              "方法路径": [
+                "foodsearch.controller.FoodController.getAllFood",
+                "foodsearch.service.FoodServiceImpl.getAllFood"
+              ]
+            },
+            {
+              "目标方法": "foodsearch.controller.FoodController.getAllFood",
+              "入口API": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
+              "方法路径": [
+                "foodsearch.controller.FoodController.getAllFood"
+              ]
             }
           ]
         }
@@ -1921,24 +1948,74 @@
         {
           "id": "full-downstream-chain",
           "label": "完整下游调用链",
-          "oracle_cypher": "MATCH path=(target:方法 {方法名:'getAllFood'})-[:调用*0..5]->(out:方法), (out)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API'}) OPTIONAL MATCH (down)-[:调用 {调用类型:'跨服务调用'}]->(up:API端点 {API类型:'上游API'})-[:归属于]->(target_entry:方法) RETURN DISTINCT target.全限定名 AS 目标方法, [method IN nodes(path) | method.全限定名] AS 方法路径, down.接口路径 AS 下游API, down.目标微服务 AS 下游服务, up.接口路径 AS 目标上游API, target_entry.全限定名 AS 目标入口方法 ORDER BY 目标方法, 方法路径, 下游API, 目标上游API",
+          "oracle_cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API)\n        WHERE target.方法名 = 'getAllFood'\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [target.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法\n        UNION\n        MATCH path=(target:方法)-[:链中下一节点*1..5]->(out:方法)-[:下游调用]->(down:下游API)\n        WHERE target.方法名 = 'getAllFood' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [method IN nodes(path) | method.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "方法路径", "下游API", "下游服务", "目标上游API", "目标入口方法"],
+          "expected_columns": [
+            "目标方法",
+            "方法路径",
+            "下游API",
+            "下游服务",
+            "目标上游API",
+            "目标入口方法"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "方法路径": ["方法路径", "下游方法路径", "调用路径"],
-            "下游API": ["下游API", "远程API"],
-            "下游服务": ["下游服务", "目标服务"],
-            "目标上游API": ["目标上游API", "目标入口API"],
-            "目标入口方法": ["目标入口方法", "入口方法"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "方法路径": [
+              "方法路径",
+              "下游方法路径",
+              "调用路径"
+            ],
+            "下游API": [
+              "下游API",
+              "远程API"
+            ],
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目标服务名"
+            ],
+            "目标上游API": [
+              "目标上游API",
+              "目标入口API"
+            ],
+            "目标入口方法": [
+              "目标入口方法",
+              "入口方法"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "foodsearch.controller.FoodController.getAllFood", "方法路径": ["foodsearch.controller.FoodController.getAllFood", "foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/stationfoodservice/stationfoodstores", "下游服务": "ts-station-food-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "foodsearch.controller.FoodController.getAllFood", "方法路径": ["foodsearch.controller.FoodController.getAllFood", "foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/trainfoodservice/trainfoods/{tripId}", "下游服务": "ts-train-food-service", "目标上游API": "/api/v1/trainfoodservice/trainfoods", "目标入口方法": "trainFood.controller.TrainFoodController.getAllTrainFood"},
-            {"目标方法": "foodsearch.controller.FoodController.getAllFood", "方法路径": ["foodsearch.controller.FoodController.getAllFood", "foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/travelservice/routes/{tripId}", "下游服务": "ts-travel-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "foodsearch.service.FoodServiceImpl.getAllFood", "方法路径": ["foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/stationfoodservice/stationfoodstores", "下游服务": "ts-station-food-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "foodsearch.service.FoodServiceImpl.getAllFood", "方法路径": ["foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/trainfoodservice/trainfoods/{tripId}", "下游服务": "ts-train-food-service", "目标上游API": "/api/v1/trainfoodservice/trainfoods", "目标入口方法": "trainFood.controller.TrainFoodController.getAllTrainFood"},
-            {"目标方法": "foodsearch.service.FoodServiceImpl.getAllFood", "方法路径": ["foodsearch.service.FoodServiceImpl.getAllFood"], "下游API": "/api/v1/travelservice/routes/{tripId}", "下游服务": "ts-travel-service", "目标上游API": null, "目标入口方法": null}
+            {
+              "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+              "方法路径": [
+                "foodsearch.service.FoodServiceImpl.getAllFood"
+              ],
+              "下游API": "/api/v1/trainfoodservice/trainfoods/{tripId}",
+              "下游服务": "ts-train-food-service",
+              "目标上游API": "/api/v1/trainfoodservice/trainfoods/{tripId}",
+              "目标入口方法": "trainFood.controller.TrainFoodController.getTrainFoodOfTrip"
+            },
+            {
+              "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+              "方法路径": [
+                "foodsearch.service.FoodServiceImpl.getAllFood"
+              ],
+              "下游API": "/api/v1/travelservice/routes/{tripId}",
+              "下游服务": "ts-travel-service",
+              "目标上游API": "/api/v1/travelservice/routes/{tripId}",
+              "目标入口方法": "travel.controller.TravelController.getRouteByTripId"
+            },
+            {
+              "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+              "方法路径": [
+                "foodsearch.service.FoodServiceImpl.getAllFood"
+              ],
+              "下游API": "/api/v1/stationfoodservice/stationfoodstores",
+              "下游服务": "ts-station-food-service",
+              "目标上游API": "/api/v1/stationfoodservice/stationfoodstores",
+              "目标入口方法": "food.controller.StationFoodController.getFoodStoresByStationNames"
+            }
           ]
         }
       ]
@@ -1953,15 +2030,27 @@
         {
           "id": "direct-upstream-methods",
           "label": "直接上游方法",
-          "oracle_cypher": "MATCH (caller:方法)-[:调用]->(target:方法 {方法名:'getAllFood'})-[:归属于]->(:类 {简名:'FoodServiceImpl'}) RETURN DISTINCT target.全限定名 AS 目标方法, caller.全限定名 AS 上游方法 ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(target:方法)-[:归属于]->(class:类)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n          AND rel.调用深度 IN [0, 1]\n        RETURN DISTINCT target.全限定名 AS 目标方法, caller.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "上游方法"],
+          "expected_columns": [
+            "目标方法",
+            "上游方法"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "上游方法": ["上游方法", "调用方法", "调用方方法"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "上游方法": [
+              "上游方法",
+              "调用方法",
+              "调用方方法"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "foodsearch.service.FoodServiceImpl.getAllFood", "上游方法": "foodsearch.controller.FoodController.getAllFood"}
+            {
+              "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+              "上游方法": "foodsearch.controller.FoodController.getAllFood"
+            }
           ]
         }
       ]
@@ -1976,17 +2065,41 @@
         {
           "id": "reachable-entry-apis",
           "label": "可达入口 API",
-          "oracle_cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名:'getAllFood'})-[:归属于]->(:类 {简名:'FoodServiceImpl'}), (entry)-[:调用 {调用类型:'接口入口'}]->(api:API端点 {API类型:'上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, entry.全限定名 AS 入口方法, api.接口路径 AS 入口API, api.请求方式 AS 请求方式 ORDER BY 入口API, 入口方法",
+          "oracle_cypher": "MATCH (target:方法)-[:归属于]->(class:类),\n              (entry:方法)-[:服务于]->(api:上游API)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n          AND (\n              entry = target\n              OR EXISTS { MATCH (entry)-[:调用]->(target) }\n          )\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry.全限定名 AS 入口方法,\n               api.API路径 AS 入口API,\n               api.HTTP方法 AS 请求方式\n        ORDER BY 入口API, 入口方法",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "入口方法", "入口API", "请求方式"],
+          "expected_columns": [
+            "目标方法",
+            "入口方法",
+            "入口API",
+            "请求方式"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "入口方法": ["入口方法", "上游方法"],
-            "入口API": ["入口API", "入口接口", "接口路径"],
-            "请求方式": ["请求方式", "HTTP动词"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "入口方法": [
+              "入口方法",
+              "上游方法"
+            ],
+            "入口API": [
+              "入口API",
+              "入口接口",
+              "接口路径",
+              "API路径"
+            ],
+            "请求方式": [
+              "请求方式",
+              "HTTP动词",
+              "HTTP方法"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "foodsearch.service.FoodServiceImpl.getAllFood", "入口方法": "foodsearch.controller.FoodController.getAllFood", "入口API": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}", "请求方式": "GET"}
+            {
+              "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+              "入口方法": "foodsearch.controller.FoodController.getAllFood",
+              "入口API": "/api/v1/foodservice/foods/{date}/{startStation}/{endStation}/{tripId}",
+              "请求方式": "GET"
+            }
           ]
         }
       ]
@@ -2001,18 +2114,45 @@
         {
           "id": "direct-rest-egress",
           "label": "直接 REST 出口",
-          "oracle_cypher": "MATCH (target:方法 {方法名:'pay'})-[:归属于]->(:类 {简名:'InsidePaymentServiceImpl'}), (target)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, down.接口路径 AS 下游API, down.目标微服务 AS 下游服务 ORDER BY 下游服务, 下游API",
+          "oracle_cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API)-[:目标服务]->(service:微服务)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay'\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               down.API路径 AS 下游API,\n               service.服务名称 AS 下游服务\n        ORDER BY 下游服务",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "下游API", "下游服务"],
+          "expected_columns": [
+            "目标方法",
+            "下游API",
+            "下游服务"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法", "调用方法"],
-            "下游API": ["下游API", "接口路径"],
-            "下游服务": ["下游服务", "目标服务"]
+            "目标方法": [
+              "目标方法",
+              "调用方法"
+            ],
+            "下游API": [
+              "下游API",
+              "接口路径",
+              "API路径"
+            ],
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目标服务名"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "下游服务": "ts-order-other-service"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "下游API": "/api/v1/orderservice/order/", "下游服务": "ts-order-service"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "下游API": "/api/v1/paymentservice/payment", "下游服务": "ts-payment-service"}
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "下游服务": "ts-order-other-service"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "下游API": "/api/v1/orderservice/order/",
+              "下游服务": "ts-order-service"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "下游API": "/api/v1/paymentservice/payment",
+              "下游服务": "ts-payment-service"
+            }
           ]
         }
       ]
@@ -2027,26 +2167,74 @@
         {
           "id": "full-downstream-cross-service-chain",
           "label": "完整下游跨服务链",
-          "oracle_cypher": "MATCH path=(target:方法 {方法名:'pay'})-[:调用*0..5]->(out:方法), (target)-[:归属于]->(:类 {简名:'InsidePaymentServiceImpl'}), (out)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API'}) OPTIONAL MATCH (down)-[:调用 {调用类型:'跨服务调用'}]->(up:API端点 {API类型:'上游API'})-[:归属于]->(target_entry:方法) RETURN DISTINCT target.全限定名 AS 目标方法, [method IN nodes(path) | method.全限定名] AS 方法路径, down.接口路径 AS 下游API, down.目标微服务 AS 下游服务, up.接口路径 AS 目标上游API, target_entry.全限定名 AS 目标入口方法 ORDER BY 方法路径, 下游服务, 下游API, 目标上游API",
+          "oracle_cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay'\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [target.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法\n        UNION\n        MATCH path=(target:方法)-[:链中下一节点*1..5]->(out:方法)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [method IN nodes(path) | method.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "方法路径", "下游API", "下游服务", "目标上游API", "目标入口方法"],
+          "expected_columns": [
+            "目标方法",
+            "方法路径",
+            "下游API",
+            "下游服务",
+            "目标上游API",
+            "目标入口方法"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "方法路径": ["方法路径", "下游方法路径", "调用路径"],
-            "下游API": ["下游API", "远程API"],
-            "下游服务": ["下游服务", "目标服务"],
-            "目标上游API": ["目标上游API", "目标入口API"],
-            "目标入口方法": ["目标入口方法", "入口方法"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "方法路径": [
+              "方法路径",
+              "下游方法路径",
+              "调用路径"
+            ],
+            "下游API": [
+              "下游API",
+              "远程API"
+            ],
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目标服务名"
+            ],
+            "目标上游API": [
+              "目标上游API",
+              "目标入口API"
+            ],
+            "目标入口方法": [
+              "目标入口方法",
+              "入口方法"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "下游服务": "ts-order-other-service", "目标上游API": "/api/v1/orderOtherService/orderOther/{travelDate}/{trainNumber}", "目标入口方法": "other.controller.OrderOtherController.calculateSoldTicket"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API": "/api/v1/orderservice/order/", "下游服务": "ts-order-service", "目标上游API": "/api/v1/orderservice/order/security/{checkDate}/{accountId}", "目标入口方法": "security.service.SecurityServiceImpl.getSecurityOrderInfoFromOrder"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API": "/api/v1/orderservice/order/", "下游服务": "ts-order-service", "目标上游API": "/api/v1/orderservice/order/security/{checkDate}/{accountId}", "目标入口方法": "order.controller.OrderController.securityInfoCheck"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API": "/api/v1/paymentservice/payment", "下游服务": "ts-payment-service", "目标上游API": "/api/v1/paymentservice/payment/money", "目标入口方法": "com.trainticket.controller.PaymentController.addMoney"},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API": "/api/v1/orderOtherService/orderOther/status//", "下游服务": "ts-order-other-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/", "下游服务": "ts-order-other-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API": "/api/v1/orderservice/order/status//", "下游服务": "ts-order-service", "目标上游API": null, "目标入口方法": null},
-            {"目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API": "/api/v1/orderservice/order/status/{orderId}/", "下游服务": "ts-order-service", "目标上游API": null, "目标入口方法": null}
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay"
+              ],
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "下游服务": "ts-order-other-service",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.getOrderById"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay"
+              ],
+              "下游API": "/api/v1/orderservice/order/",
+              "下游服务": "ts-order-service",
+              "目标上游API": "/api/v1/orderservice/order/status/{orderId}/{status}",
+              "目标入口方法": "order.controller.OrderController.modifyOrder"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay"
+              ],
+              "下游API": "/api/v1/paymentservice/payment",
+              "下游服务": "ts-payment-service",
+              "目标上游API": "/api/v1/paymentservice/payment",
+              "目标入口方法": "com.trainticket.controller.PaymentController.pay"
+            }
           ]
         }
       ]
@@ -2061,17 +2249,46 @@
         {
           "id": "full-upstream-chain",
           "label": "完整上游调用链",
-          "oracle_cypher": "MATCH path=(entry:方法)-[:调用*0..5]->(target:方法 {方法名:'insertConsignRecord'}), (target)-[:归属于]->(:类 {简名:'ConsignServiceImpl'}), (entry)-[:调用 {调用类型:'接口入口'}]->(entry_api:API端点 {API类型:'上游API'}) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.接口路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 ORDER BY 入口API, 方法路径",
+          "oracle_cypher": "MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              (entry)-[:接口调用]->(target:方法)\n        WHERE target.所属类名 ENDS WITH '.ConsignServiceImpl' AND target.方法名 = 'insertConsignRecord'\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [entry.全限定名, target.全限定名] AS 方法路径\n        UNION\n        MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              path=(entry)-[:链中下一节点*1..5]->(target:方法)\n        WHERE target.所属类名 ENDS WITH '.ConsignServiceImpl' AND target.方法名 = 'insertConsignRecord' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [method IN nodes(path) | method.全限定名] AS 方法路径\n        UNION\n        MATCH (entry:方法)-[:服务于]->(entry_api:上游API),\n              (entry)-[:接口调用]->(first:方法),\n              path=(first)-[:链中下一节点*1..4]->(target:方法)\n        WHERE target.所属类名 ENDS WITH '.ConsignServiceImpl' AND target.方法名 = 'insertConsignRecord' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [entry.全限定名] + [method IN nodes(path) | method.全限定名] AS 方法路径\n        UNION\n        MATCH (target:方法)-[:服务于]->(entry_api:上游API)\n        WHERE target.所属类名 ENDS WITH '.ConsignServiceImpl' AND target.方法名 = 'insertConsignRecord'\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry_api.API路径 AS 入口API,\n               [target.全限定名] AS 方法路径",
           "comparison_mode": "row_set",
-          "expected_columns": ["目标方法", "入口API", "方法路径"],
+          "expected_columns": [
+            "目标方法",
+            "入口API",
+            "方法路径"
+          ],
           "accepted_aliases": {
-            "目标方法": ["目标方法"],
-            "入口API": ["入口API", "入口接口"],
-            "方法路径": ["方法路径", "上游方法路径", "调用路径"]
+            "目标方法": [
+              "目标方法"
+            ],
+            "入口API": [
+              "入口API",
+              "入口接口",
+              "API路径"
+            ],
+            "方法路径": [
+              "方法路径",
+              "上游方法路径",
+              "调用路径"
+            ]
           },
           "expected_snapshot": [
-            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.insertConsign", "consign.service.ConsignServiceImpl.insertConsignRecord"]},
-            {"目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord", "入口API": "/api/v1/consignservice/consigns", "方法路径": ["consign.controller.ConsignController.updateConsign", "consign.service.ConsignServiceImpl.updateConsignRecord", "consign.service.ConsignServiceImpl.insertConsignRecord"]}
+            {
+              "目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord",
+              "入口API": "/api/v1/consignservice/consigns",
+              "方法路径": [
+                "consign.controller.ConsignController.insertConsign",
+                "consign.service.ConsignServiceImpl.insertConsignRecord"
+              ]
+            },
+            {
+              "目标方法": "consign.service.ConsignServiceImpl.insertConsignRecord",
+              "入口API": "/api/v1/consignservice/consigns",
+              "方法路径": [
+                "consign.controller.ConsignController.updateConsign",
+                "consign.service.ConsignServiceImpl.updateConsignRecord",
+                "consign.service.ConsignServiceImpl.insertConsignRecord"
+              ]
+            }
           ]
         }
       ]
@@ -2086,38 +2303,186 @@
         {
           "id": "rest-upstream-cross-service-chain",
           "label": "REST 上游跨服务链",
-          "oracle_cypher": "MATCH (caller_service:微服务)<-[:归属于]-(:类)<-[:归属于]-(caller_method:方法)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API', 目标微服务:'ts-order-other-service'}) OPTIONAL MATCH (down)-[:调用 {调用类型:'跨服务调用'}]->(up:API端点 {API类型:'上游API'})-[:归属于]->(entry:方法) RETURN DISTINCT caller_service.服务名称 AS 调用服务, caller_method.全限定名 AS 调用方法, down.接口路径 AS 下游API, up.接口路径 AS 目标上游API, entry.全限定名 AS 目标入口方法 ORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
+          "oracle_cypher": "MATCH (caller_service:微服务)<-[:归属于]-(:类)<-[:归属于]-(caller_method:方法)\n              -[:下游调用]->(down:下游API)-[:目标服务]->(:微服务 {服务名称: 'ts-order-other-service'})\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (entry:方法)-[:服务于]->(up)\n        RETURN DISTINCT caller_service.服务名称 AS 调用服务,\n               caller_method.全限定名 AS 调用方法,\n               down.API路径 AS 下游API,\n               up.API路径 AS 目标上游API,\n               entry.全限定名 AS 目标入口方法\n        ORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
           "comparison_mode": "row_set",
-          "expected_columns": ["调用服务", "调用方法", "下游API", "目标上游API", "目标入口方法"],
+          "expected_columns": [
+            "调用服务",
+            "调用方法",
+            "下游API",
+            "目标上游API",
+            "目标入口方法"
+          ],
           "accepted_aliases": {
-            "调用服务": ["调用服务", "调用方服务", "上游服务"],
-            "调用方法": ["调用方法", "调用方方法"],
-            "下游API": ["下游API", "调用方下游API"],
-            "目标上游API": ["目标上游API", "目标入口API"],
-            "目标入口方法": ["目标入口方法", "入口方法"]
+            "调用服务": [
+              "调用服务",
+              "调用方服务",
+              "上游服务"
+            ],
+            "调用方法": [
+              "调用方法",
+              "调用方方法"
+            ],
+            "下游API": [
+              "下游API",
+              "调用方下游API"
+            ],
+            "目标上游API": [
+              "目标上游API",
+              "目标入口API"
+            ],
+            "目标入口方法": [
+              "目标入口方法",
+              "入口方法"
+            ]
           },
           "expected_snapshot": [
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.addOrder", "下游API": "/api/v1/orderOtherService/orderOther/admin", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "rebook.service.RebookServiceImpl.createOrder"},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.addOrder", "下游API": "/api/v1/orderOtherService/orderOther/admin", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "preserveOther.service.PreserveOtherServiceImpl.createOrder"},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.addOrder", "下游API": "/api/v1/orderOtherService/orderOther/admin", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "other.controller.OrderOtherController.createNewOrder"},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.deleteOrder", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.getAllOrders", "下游API": "/api/v1/orderOtherService/orderOther", "目标上游API": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}", "目标入口方法": "security.service.SecurityServiceImpl.getSecurityOrderOtherInfoFromOrder"},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.getAllOrders", "下游API": "/api/v1/orderOtherService/orderOther", "目标上游API": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}", "目标入口方法": "other.controller.OrderOtherController.securityInfoCheck"},
-            {"调用服务": "ts-admin-order-service", "调用方法": "adminorder.service.AdminOrderServiceImpl.updateOrder", "下游API": "/api/v1/orderOtherService/orderOther/admin", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-cancel-service", "调用方法": "cancel.service.CancelServiceImpl.cancelFromOtherOrder", "下游API": "/api/v1/orderOtherService/orderOther", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-cancel-service", "调用方法": "cancel.service.CancelServiceImpl.getOrderByIdFromOrderOther", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther/{travelDate}/{trainNumber}", "目标入口方法": "other.controller.OrderOtherController.calculateSoldTicket"},
-            {"调用服务": "ts-execute-service", "调用方法": "execute.serivce.ExecuteServiceImpl.executeOrderOther", "下游API": "/api/v1/orderOtherService/orderOther/status//", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-execute-service", "调用方法": "execute.serivce.ExecuteServiceImpl.executeOrderOther", "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-execute-service", "调用方法": "execute.serivce.ExecuteServiceImpl.getOrderByIdFromOrderOther", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther/{travelDate}/{trainNumber}", "目标入口方法": "other.controller.OrderOtherController.calculateSoldTicket"},
-            {"调用服务": "ts-inside-payment-service", "调用方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther/{travelDate}/{trainNumber}", "目标入口方法": "other.controller.OrderOtherController.calculateSoldTicket"},
-            {"调用服务": "ts-inside-payment-service", "调用方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "下游API": "/api/v1/orderOtherService/orderOther/status//", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-inside-payment-service", "调用方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-rebook-service", "调用方法": "rebook.service.RebookServiceImpl.deleteOrder", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "rebook.service.RebookServiceImpl.createOrder"},
-            {"调用服务": "ts-rebook-service", "调用方法": "rebook.service.RebookServiceImpl.deleteOrder", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "preserveOther.service.PreserveOtherServiceImpl.createOrder"},
-            {"调用服务": "ts-rebook-service", "调用方法": "rebook.service.RebookServiceImpl.deleteOrder", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther", "目标入口方法": "other.controller.OrderOtherController.createNewOrder"},
-            {"调用服务": "ts-rebook-service", "调用方法": "rebook.service.RebookServiceImpl.getOrderByRebookInfo", "下游API": "/api/v1/orderOtherService/orderOther/{orderId}", "目标上游API": "/api/v1/orderOtherService/orderOther/{travelDate}/{trainNumber}", "目标入口方法": "other.controller.OrderOtherController.calculateSoldTicket"},
-            {"调用服务": "ts-rebook-service", "调用方法": "rebook.service.RebookServiceImpl.updateOrder", "下游API": "/api/v1/orderOtherService/orderOther", "目标上游API": null, "目标入口方法": null},
-            {"调用服务": "ts-security-service", "调用方法": "security.service.SecurityServiceImpl.getSecurityOrderOtherInfoFromOrder", "下游API": "/api/v1/orderOtherService/orderOther/security//", "目标上游API": null, "目标入口方法": null}
+            {
+              "调用服务": "ts-admin-order-service",
+              "调用方法": "adminorder.service.AdminOrderServiceImpl.addOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/admin",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/admin",
+              "目标入口方法": "other.controller.OrderOtherController.addcreateNewOrder"
+            },
+            {
+              "调用服务": "ts-admin-order-service",
+              "调用方法": "adminorder.service.AdminOrderServiceImpl.deleteOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.deleteOrder"
+            },
+            {
+              "调用服务": "ts-admin-order-service",
+              "调用方法": "adminorder.service.AdminOrderServiceImpl.getAllOrders",
+              "下游API": "/api/v1/orderOtherService/orderOther",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.findAllOrder"
+            },
+            {
+              "调用服务": "ts-admin-order-service",
+              "调用方法": "adminorder.service.AdminOrderServiceImpl.updateOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/admin",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/admin",
+              "目标入口方法": "other.controller.OrderOtherController.updateOrder"
+            },
+            {
+              "调用服务": "ts-cancel-service",
+              "调用方法": "cancel.service.CancelServiceImpl.cancelFromOtherOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.saveOrderInfo"
+            },
+            {
+              "调用服务": "ts-cancel-service",
+              "调用方法": "cancel.service.CancelServiceImpl.getOrderByIdFromOrderOther",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.getOrderById"
+            },
+            {
+              "调用服务": "ts-execute-service",
+              "调用方法": "execute.serivce.ExecuteServiceImpl.executeOrderOther",
+              "下游API": "/api/v1/orderOtherService/orderOther/status//",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.findAllOrder"
+            },
+            {
+              "调用服务": "ts-execute-service",
+              "调用方法": "execute.serivce.ExecuteServiceImpl.executeOrderOther",
+              "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}",
+              "目标入口方法": "other.controller.OrderOtherController.modifyOrder"
+            },
+            {
+              "调用服务": "ts-execute-service",
+              "调用方法": "execute.serivce.ExecuteServiceImpl.getOrderByIdFromOrderOther",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.getOrderById"
+            },
+            {
+              "调用服务": "ts-inside-payment-service",
+              "调用方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.getOrderById"
+            },
+            {
+              "调用服务": "ts-inside-payment-service",
+              "调用方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus",
+              "下游API": "/api/v1/orderOtherService/orderOther/status//",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.findAllOrder"
+            },
+            {
+              "调用服务": "ts-inside-payment-service",
+              "调用方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus",
+              "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}",
+              "目标入口方法": "other.controller.OrderOtherController.modifyOrder"
+            },
+            {
+              "调用服务": "ts-preserve-other-service",
+              "调用方法": "preserveOther.service.PreserveOtherServiceImpl.createOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.createNewOrder"
+            },
+            {
+              "调用服务": "ts-rebook-service",
+              "调用方法": "rebook.service.RebookServiceImpl.createOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.createNewOrder"
+            },
+            {
+              "调用服务": "ts-rebook-service",
+              "调用方法": "rebook.service.RebookServiceImpl.deleteOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.createNewOrder"
+            },
+            {
+              "调用服务": "ts-rebook-service",
+              "调用方法": "rebook.service.RebookServiceImpl.getOrderByRebookInfo",
+              "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/{orderId}",
+              "目标入口方法": "other.controller.OrderOtherController.getOrderById"
+            },
+            {
+              "调用服务": "ts-rebook-service",
+              "调用方法": "rebook.service.RebookServiceImpl.updateOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.saveOrderInfo"
+            },
+            {
+              "调用服务": "ts-seat-service",
+              "调用方法": "seat.service.SeatServiceImpl.distributeSeat",
+              "下游API": "/api/v1/orderOtherService/orderOther/tickets",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/tickets",
+              "目标入口方法": "other.controller.OrderOtherController.getTicketListByDateAndTripId"
+            },
+            {
+              "调用服务": "ts-seat-service",
+              "调用方法": "seat.service.SeatServiceImpl.getLeftTicketOfInterval",
+              "下游API": "/api/v1/orderOtherService/orderOther/tickets",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/tickets",
+              "目标入口方法": "other.controller.OrderOtherController.getTicketListByDateAndTripId"
+            },
+            {
+              "调用服务": "ts-security-service",
+              "调用方法": "security.service.SecurityServiceImpl.getSecurityOrderOtherInfoFromOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/security//",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.findAllOrder"
+            },
+            {
+              "调用服务": "ts-security-service",
+              "调用方法": "security.service.SecurityServiceImpl.getSecurityOrderOtherInfoFromOrder",
+              "下游API": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/security/{checkDate}/{accountId}",
+              "目标入口方法": "other.controller.OrderOtherController.securityInfoCheck"
+            }
           ]
         }
       ]
@@ -2132,37 +2497,179 @@
         {
           "id": "downstream-upstream-api-pairs",
           "label": "REST API 配对",
-          "oracle_cypher": "MATCH (service:微服务 {服务名称:'ts-admin-basic-info-service'})<-[:归属于]-(:类)<-[:归属于]-(caller:方法)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API'}) OPTIONAL MATCH (down)-[:调用 {调用类型:'跨服务调用'}]->(up:API端点 {API类型:'上游API'})-[:归属于]->(entry:方法) RETURN DISTINCT caller.全限定名 AS 调用方法, down.接口路径 AS 下游API, down.目标微服务 AS 下游服务, up.接口路径 AS 目标上游API, entry.全限定名 AS 目标入口方法 ORDER BY 调用方法, 下游API, 目标上游API",
+          "oracle_cypher": "MATCH (service:微服务 {服务名称: 'ts-admin-basic-info-service'})<-[:归属于]-(:类)<-[:归属于]-(caller:方法)\n              -[:下游调用]->(down:下游API)\n        OPTIONAL MATCH (down)-[:目标服务]->(target:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (entry:方法)-[:服务于]->(up)\n        RETURN DISTINCT caller.全限定名 AS 调用方法,\n               down.API路径 AS 下游API,\n               target.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               entry.全限定名 AS 目标入口方法\n        ORDER BY 调用方法, 下游API, 目标上游API",
           "comparison_mode": "row_set",
-          "expected_columns": ["调用方法", "下游API", "下游服务", "目标上游API", "目标入口方法"],
+          "expected_columns": [
+            "调用方法",
+            "下游API",
+            "下游服务",
+            "目标上游API",
+            "目标入口方法"
+          ],
           "accepted_aliases": {
-            "调用方法": ["调用方法", "调用方方法"],
-            "下游API": ["下游API", "远程API"],
-            "下游服务": ["下游服务", "目标服务"],
-            "目标上游API": ["目标上游API", "目标入口API"],
-            "目标入口方法": ["目标入口方法", "入口方法"]
+            "调用方法": [
+              "调用方法",
+              "调用方方法"
+            ],
+            "下游API": [
+              "下游API",
+              "远程API"
+            ],
+            "下游服务": [
+              "下游服务",
+              "目标服务",
+              "目标服务名"
+            ],
+            "目标上游API": [
+              "目标上游API",
+              "目标入口API"
+            ],
+            "目标入口方法": [
+              "目标入口方法",
+              "入口方法"
+            ]
           },
           "expected_snapshot": [
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addConfig", "下游API": "/api/v1/configservice/configs", "下游服务": "ts-config-service", "目标上游API": "api/v1/configservice/configs", "目标入口方法": "config.controller.ConfigController.createConfig"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addContact", "下游API": "/api/v1/contactservice/contacts/admin", "下游服务": "ts-contacts-service", "目标上游API": "api/v1/contactservice/contacts/admin", "目标入口方法": "contacts.controller.ContactsController.createNewContactsAdmin"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addPrice", "下游API": "/api/v1/priceservice/prices", "下游服务": "ts-price-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addStation", "下游API": "/api/v1/stationservice/stations", "下游服务": "ts-station-service", "目标上游API": "/api/v1/stationservice/stations/namelist", "目标入口方法": "fdse.microservice.controller.StationController.queryForNameBatch"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addTrain", "下游API": "/api/v1/trainservice/trains", "下游服务": "ts-train-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteConfig", "下游API": "/api/v1/configservice/configs/{name}", "下游服务": "ts-config-service", "目标上游API": "api/v1/configservice/configs/{configName}", "目标入口方法": "config.controller.ConfigController.deleteConfig"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteContact", "下游API": "/api/v1/contactservice/contacts/{contactsId}", "下游服务": "ts-contacts-service", "目标上游API": "api/v1/contactservice/contacts/{contactsId}", "目标入口方法": "contacts.controller.ContactsController.deleteContacts"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deletePrice", "下游API": "/api/v1/priceservice/prices/{pricesId}", "下游服务": "ts-price-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteStation", "下游API": "/api/v1/stationservice/stations/{id}", "下游服务": "ts-station-service", "目标上游API": "/api/v1/stationservice/stations/{stationsId}", "目标入口方法": "fdse.microservice.controller.StationController.delete"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteTrain", "下游API": "/api/v1/trainservice/trains/{id}", "下游服务": "ts-train-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllConfigs", "下游API": "/api/v1/configservice/configs", "下游服务": "ts-config-service", "目标上游API": "api/v1/configservice/configs", "目标入口方法": "config.controller.ConfigController.queryAll"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllContacts", "下游API": "/api/v1/contactservice/contacts", "下游服务": "ts-contacts-service", "目标上游API": "api/v1/contactservice/contacts", "目标入口方法": "contacts.controller.ContactsController.getAllContacts"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllPrices", "下游API": "/api/v1/priceservice/prices", "下游服务": "ts-price-service", "目标上游API": "/api/v1/priceservice/prices/welcome", "目标入口方法": "price.controller.PriceController.home"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllStations", "下游API": "/api/v1/stationservice/stations", "下游服务": "ts-station-service", "目标上游API": "/api/v1/stationservice/stations/id/{stationNameForId}", "目标入口方法": "fdse.microservice.controller.StationController.queryForStationId"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllTrains", "下游API": "/api/v1/trainservice/trains", "下游服务": "ts-train-service", "目标上游API": "/api/v1/trainservice/trains/byName/{name}", "目标入口方法": "train.controller.TrainController.retrieveByName"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyConfig", "下游API": "/api/v1/configservice/configs", "下游服务": "ts-config-service", "目标上游API": "api/v1/configservice/configs", "目标入口方法": "config.controller.ConfigController.updateConfig"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyContact", "下游API": "/api/v1/contactservice/contacts", "下游服务": "ts-contacts-service", "目标上游API": "api/v1/contactservice/contacts", "目标入口方法": "contacts.controller.ContactsController.modifyContacts"},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyPrice", "下游API": "/api/v1/priceservice/prices", "下游服务": "ts-price-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyStation", "下游API": "/api/v1/stationservice/stations", "下游服务": "ts-station-service", "目标上游API": null, "目标入口方法": null},
-            {"调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyTrain", "下游API": "/api/v1/trainservice/trains", "下游服务": "ts-train-service", "目标上游API": null, "目标入口方法": null}
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addConfig",
+              "下游API": "/api/v1/configservice/configs",
+              "下游服务": "ts-config-service",
+              "目标上游API": "api/v1/configservice/configs",
+              "目标入口方法": "config.controller.ConfigController.createConfig"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addContact",
+              "下游API": "/api/v1/contactservice/contacts/admin",
+              "下游服务": "ts-contacts-service",
+              "目标上游API": "api/v1/contactservice/contacts/admin",
+              "目标入口方法": "contacts.controller.ContactsController.createNewContactsAdmin"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addPrice",
+              "下游API": "/api/v1/priceservice/prices",
+              "下游服务": "ts-price-service",
+              "目标上游API": "/api/v1/priceservice/prices",
+              "目标入口方法": "price.controller.PriceController.create"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addStation",
+              "下游API": "/api/v1/stationservice/stations",
+              "下游服务": "ts-station-service",
+              "目标上游API": "/api/v1/stationservice/stations",
+              "目标入口方法": "fdse.microservice.controller.StationController.create"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.addTrain",
+              "下游API": "/api/v1/trainservice/trains",
+              "下游服务": "ts-train-service",
+              "目标上游API": "/api/v1/trainservice/trains",
+              "目标入口方法": "train.controller.TrainController.create"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteConfig",
+              "下游API": "/api/v1/configservice/configs/{name}",
+              "下游服务": "ts-config-service",
+              "目标上游API": "api/v1/configservice/configs/{configName}",
+              "目标入口方法": "config.controller.ConfigController.deleteConfig"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteContact",
+              "下游API": "/api/v1/contactservice/contacts/{contactsId}",
+              "下游服务": "ts-contacts-service",
+              "目标上游API": "api/v1/contactservice/contacts/{contactsId}",
+              "目标入口方法": "contacts.controller.ContactsController.deleteContacts"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deletePrice",
+              "下游API": "/api/v1/priceservice/prices/{pricesId}",
+              "下游服务": "ts-price-service",
+              "目标上游API": "/api/v1/priceservice/prices/{pricesId}",
+              "目标入口方法": "price.controller.PriceController.delete"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteStation",
+              "下游API": "/api/v1/stationservice/stations/{id}",
+              "下游服务": "ts-station-service",
+              "目标上游API": "/api/v1/stationservice/stations/{stationsId}",
+              "目标入口方法": "fdse.microservice.controller.StationController.delete"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.deleteTrain",
+              "下游API": "/api/v1/trainservice/trains/{id}",
+              "下游服务": "ts-train-service",
+              "目标上游API": "/api/v1/trainservice/trains/{id}",
+              "目标入口方法": "train.controller.TrainController.delete"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllConfigs",
+              "下游API": "/api/v1/configservice/configs",
+              "下游服务": "ts-config-service",
+              "目标上游API": "api/v1/configservice/configs",
+              "目标入口方法": "config.controller.ConfigController.queryAll"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllContacts",
+              "下游API": "/api/v1/contactservice/contacts",
+              "下游服务": "ts-contacts-service",
+              "目标上游API": "api/v1/contactservice/contacts",
+              "目标入口方法": "contacts.controller.ContactsController.getAllContacts"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllPrices",
+              "下游API": "/api/v1/priceservice/prices",
+              "下游服务": "ts-price-service",
+              "目标上游API": "/api/v1/priceservice/prices",
+              "目标入口方法": "price.controller.PriceController.queryAll"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllStations",
+              "下游API": "/api/v1/stationservice/stations",
+              "下游服务": "ts-station-service",
+              "目标上游API": "/api/v1/stationservice/stations",
+              "目标入口方法": "fdse.microservice.controller.StationController.query"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.getAllTrains",
+              "下游API": "/api/v1/trainservice/trains",
+              "下游服务": "ts-train-service",
+              "目标上游API": "/api/v1/trainservice/trains",
+              "目标入口方法": "train.controller.TrainController.query"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyConfig",
+              "下游API": "/api/v1/configservice/configs",
+              "下游服务": "ts-config-service",
+              "目标上游API": "api/v1/configservice/configs",
+              "目标入口方法": "config.controller.ConfigController.updateConfig"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyContact",
+              "下游API": "/api/v1/contactservice/contacts",
+              "下游服务": "ts-contacts-service",
+              "目标上游API": "api/v1/contactservice/contacts",
+              "目标入口方法": "contacts.controller.ContactsController.modifyContacts"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyPrice",
+              "下游API": "/api/v1/priceservice/prices",
+              "下游服务": "ts-price-service",
+              "目标上游API": "/api/v1/priceservice/prices",
+              "目标入口方法": "price.controller.PriceController.update"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyStation",
+              "下游API": "/api/v1/stationservice/stations",
+              "下游服务": "ts-station-service",
+              "目标上游API": "/api/v1/stationservice/stations",
+              "目标入口方法": "fdse.microservice.controller.StationController.update"
+            },
+            {
+              "调用方法": "adminbasic.service.AdminBasicInfoServiceImpl.modifyTrain",
+              "下游API": "/api/v1/trainservice/trains",
+              "下游服务": "ts-train-service",
+              "目标上游API": "/api/v1/trainservice/trains",
+              "目标入口方法": "train.controller.TrainController.update"
+            }
           ]
         }
       ]
@@ -2177,19 +2684,53 @@
         {
           "id": "rest-upstream-correlations",
           "label": "REST 上游对应关系",
-          "oracle_cypher": "MATCH (caller_service:微服务)<-[:归属于]-(:类)<-[:归属于]-(caller_method:方法)-[:调用 {调用类型:'远程调用'}]->(down:API端点 {API类型:'下游API', 目标微服务:'ts-security-service'}) OPTIONAL MATCH (down)-[:调用 {调用类型:'跨服务调用'}]->(up:API端点 {API类型:'上游API'})-[:归属于]->(entry:方法) RETURN DISTINCT caller_service.服务名称 AS 调用服务, caller_method.全限定名 AS 调用方法, down.接口路径 AS 下游API, up.接口路径 AS 目标上游API, entry.全限定名 AS 目标入口方法 ORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
+          "oracle_cypher": "MATCH (caller_service:微服务)<-[:归属于]-(:类)<-[:归属于]-(caller_method:方法)\n              -[:下游调用]->(down:下游API)-[:目标服务]->(:微服务 {服务名称: 'ts-security-service'})\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (entry:方法)-[:服务于]->(up)\n        RETURN DISTINCT caller_service.服务名称 AS 调用服务,\n               caller_method.全限定名 AS 调用方法,\n               down.API路径 AS 下游API,\n               up.API路径 AS 目标上游API,\n               entry.全限定名 AS 目标入口方法\n        ORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
           "comparison_mode": "row_set",
-          "expected_columns": ["调用服务", "调用方法", "下游API", "目标上游API", "目标入口方法"],
+          "expected_columns": [
+            "调用服务",
+            "调用方法",
+            "下游API",
+            "目标上游API",
+            "目标入口方法"
+          ],
           "accepted_aliases": {
-            "调用服务": ["调用服务", "调用方服务", "上游服务"],
-            "调用方法": ["调用方法", "调用方方法"],
-            "下游API": ["下游API", "调用方下游API"],
-            "目标上游API": ["目标上游API", "目标入口API"],
-            "目标入口方法": ["目标入口方法", "入口方法"]
+            "调用服务": [
+              "调用服务",
+              "调用方服务",
+              "上游服务"
+            ],
+            "调用方法": [
+              "调用方法",
+              "调用方方法"
+            ],
+            "下游API": [
+              "下游API",
+              "调用方下游API"
+            ],
+            "目标上游API": [
+              "目标上游API",
+              "目标入口API"
+            ],
+            "目标入口方法": [
+              "目标入口方法",
+              "入口方法"
+            ]
           },
           "expected_snapshot": [
-            {"调用服务": "ts-preserve-other-service", "调用方法": "preserveOther.service.PreserveOtherServiceImpl.checkSecurity", "下游API": "/api/v1/securityservice/securityConfigs/{accountId}", "目标上游API": "/api/v1/securityservice/securityConfigs", "目标入口方法": "security.controller.SecurityController.findAllSecurityConfig"},
-            {"调用服务": "ts-preserve-service", "调用方法": "preserve.service.PreserveServiceImpl.checkSecurity", "下游API": "/api/v1/securityservice/securityConfigs/{accountId}", "目标上游API": "/api/v1/securityservice/securityConfigs", "目标入口方法": "security.controller.SecurityController.findAllSecurityConfig"}
+            {
+              "调用服务": "ts-preserve-other-service",
+              "调用方法": "preserveOther.service.PreserveOtherServiceImpl.checkSecurity",
+              "下游API": "/api/v1/securityservice/securityConfigs/{accountId}",
+              "目标上游API": "/api/v1/securityservice/securityConfigs/{accountId}",
+              "目标入口方法": "security.controller.SecurityController.check"
+            },
+            {
+              "调用服务": "ts-preserve-service",
+              "调用方法": "preserve.service.PreserveServiceImpl.checkSecurity",
+              "下游API": "/api/v1/securityservice/securityConfigs/{accountId}",
+              "目标上游API": "/api/v1/securityservice/securityConfigs/{accountId}",
+              "目标入口方法": "security.controller.SecurityController.check"
+            }
           ]
         }
       ]

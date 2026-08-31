@@ -38,25 +38,29 @@ pytestmark = pytest.mark.skipif(
 
 GOLDEN_ROW_COUNTS = {
     "simple-list-services": 41,
-    "simple-filter-upstream-apis": 203,
+    "simple-filter-upstream-apis": 255,
     "simple-api-contract": 1,
-    "ownership-service-apis": 6,
+    "ownership-service-apis": 4,
     "path-class-methods": 4,
     "path-interface-implementation": 1,
     "path-queue-owner": 5,
     "call-method-downstream-methods": 4,
     "call-method-downstream-services": 3,
-    "call-service-outgoing-rest": 12,
-    "impact-upstream-services": 6,
+    "call-service-outgoing-rest": 15,
+    "impact-upstream-services": 21,
     "impact-entry-apis": 1,
     "mq-between-services": 1,
-    "mq-publishers-for-queue": 4,
-    "mq-full-message-chain": 4,
+    "mq-publishers-for-queue": 1,
+    "mq-full-message-chain": 1,
     "aggregate-service-api-counts": 3,
     "aggregate-service-target-calls": 5,
     "aggregate-interface-implementations": 38,
-    "call-method-full-upstream-chain": 1,
-    "call-method-full-downstream-chain": 8,
+    "call-method-full-upstream-chain": 2,
+    "call-method-full-downstream-chain": 3,
+    "call-interface-dispatch": 1,
+    "call-ordered-method-path": 1,
+    "api-external-mapping": 3,
+    "mq-publish-call-point": 1,
 }
 
 GOLDEN_COLUMNS = {
@@ -70,8 +74,14 @@ GOLDEN_COLUMNS = {
     "call-method-downstream-methods": ("被调用方法",),
     "call-method-downstream-services": ("下游服务", "接口路径"),
     "call-service-outgoing-rest": ("调用方法", "下游服务"),
-    "impact-upstream-services": ("上游服务",),
-    "impact-entry-apis": ("上游方法", "入口接口", "请求方式"),
+    "impact-upstream-services": (
+        "调用服务",
+        "调用方法",
+        "下游API",
+        "目标上游API",
+        "目标入口方法",
+    ),
+    "impact-entry-apis": ("入口方法", "入口接口", "请求方式"),
     "mq-between-services": ("交换机名称", "队列名称", "路由键"),
     "mq-publishers-for-queue": ("发布方法", "交换机名称"),
     "mq-full-message-chain": (
@@ -84,7 +94,7 @@ GOLDEN_COLUMNS = {
     ),
     "aggregate-service-api-counts": ("请求方式", "API数量"),
     "aggregate-service-target-calls": ("下游服务", "调用关系数"),
-    "aggregate-interface-implementations": ("服务名称", "接口实现类数"),
+    "aggregate-interface-implementations": ("服务名称", "实现类数量"),
     "call-method-full-upstream-chain": ("目标方法", "入口API", "方法路径"),
     "call-method-full-downstream-chain": (
         "目标方法",
@@ -94,6 +104,16 @@ GOLDEN_COLUMNS = {
         "目标上游API",
         "目标入口方法",
     ),
+    "call-interface-dispatch": ("调用方法", "实现方法", "经由接口"),
+    "call-ordered-method-path": ("路径签名", "方法路径"),
+    "api-external-mapping": (
+        "下游API",
+        "下游服务",
+        "目标上游API",
+        "目标入口方法",
+        "匹配类型",
+    ),
+    "mq-publish-call-point": ("发布方法", "源码行号", "路由键", "交换机名称"),
 }
 
 
@@ -124,6 +144,21 @@ def test_real_neo4j_schema_and_readonly_query() -> None:
         provider.close()
 
     assert schema.nodes or schema.relationships or schema.patterns
+    node_names = {node.name for node in schema.nodes}
+    relationship_names = {
+        relationship.name for relationship in schema.relationships
+    }
+    assert {"API端点", "测试用例", "配置文件"}.isdisjoint(node_names)
+    assert {"上游API", "下游API", "方法", "调用点"} <= node_names
+    assert {
+        "服务于",
+        "下游调用",
+        "接口调用",
+        "链中下一节点",
+        "发布至",
+        "路由至",
+        "消费自",
+    } <= relationship_names
     assert report.query_type == "r"
     assert result.rows == ({"数值": 1},)
 
@@ -209,7 +244,7 @@ def test_real_neo4j_error_reaches_corrector_as_structured_context() -> None:
 
 
 def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
-    """逐条验证 20 条黄金示例的 Schema、只读性和真实结果语义。"""
+    """逐条验证 24 条黄金示例的 Schema、只读性和真实结果语义。"""
 
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings)
@@ -231,7 +266,7 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
             driver,
             settings.neo4j_database,
             settings.query_timeout_seconds,
-            max(GOLDEN_ROW_COUNTS.values()),
+            max(GOLDEN_ROW_COUNTS.values()) + 1,
         )
         examples = JsonFewShotExampleLoader().load()
 
@@ -256,7 +291,7 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
         provider.close()
 
     assert incompatible == []
-    assert len(reports) == 20
+    assert len(reports) == 24
     assert all(report.query_type == "r" for report in reports.values())
     assert set(results) == set(GOLDEN_ROW_COUNTS)
     assert {
@@ -322,18 +357,20 @@ def _assert_golden_result_semantics(
         "ts-travel-service",
         "ts-travel2-service",
     }
-    assert _values(results["impact-upstream-services"], "上游服务") == {
+    assert _values(results["impact-upstream-services"], "调用服务") == {
         "ts-admin-order-service",
         "ts-cancel-service",
         "ts-execute-service",
         "ts-inside-payment-service",
+        "ts-preserve-other-service",
         "ts-rebook-service",
+        "ts-seat-service",
         "ts-security-service",
     }
     assert _values(results["impact-entry-apis"], "入口接口") == {
         "/api/v1/consignservice/consigns"
     }
-    assert _values(results["impact-entry-apis"], "上游方法") == {
+    assert _values(results["impact-entry-apis"], "入口方法") == {
         "consign.controller.ConsignController.updateConsign"
     }
     assert _values(results["mq-between-services"], "队列名称") == {
@@ -352,9 +389,6 @@ def _assert_golden_result_semantics(
     }
     assert _values(results["mq-full-message-chain"], "发送服务") == {
         "ts-food-service",
-        "ts-notification-service",
-        "ts-preserve-other-service",
-        "ts-preserve-service",
     }
     assert _values(results["mq-full-message-chain"], "接收服务") == {
         "ts-delivery-service",
@@ -381,11 +415,41 @@ def _assert_golden_result_semantics(
     }
     implementation_counts = results["aggregate-interface-implementations"]
     assert next(
-        row["接口实现类数"]
+        row["实现类数量"]
         for row in implementation_counts.rows
         if row["服务名称"] == "ts-auth-service"
     ) == 2
-    assert max(row["接口实现类数"] for row in implementation_counts.rows) == 2
+    assert max(row["实现类数量"] for row in implementation_counts.rows) == 2
+    assert results["call-interface-dispatch"].rows == (
+        {
+            "调用方法": "foodsearch.controller.FoodController.getAllFood",
+            "实现方法": "foodsearch.service.FoodServiceImpl.getAllFood",
+            "经由接口": "foodsearch.service.FoodService",
+        },
+    )
+    assert _values(results["ownership-service-apis"], "接口路径") == {
+        "/api/v1/adminrouteservice/adminroute",
+        "/api/v1/adminrouteservice/adminroute/{routeId}",
+        "/api/v1/adminrouteservice/welcome",
+    }
+    assert results["call-ordered-method-path"].rows[0]["方法路径"] == [
+        "waitorder.service.Impl.WaitListOrderServiceImpl.triggerThread",
+        "waitorder.utils.PollThread.<init>",
+        "waitorder.utils.PollThread.run",
+        "waitorder.utils.PollThread.doPreserve",
+    ]
+    assert _values(results["api-external-mapping"], "匹配类型") == {
+        "exact",
+        "fuzzy",
+    }
+    assert results["mq-publish-call-point"].rows == (
+        {
+            "发布方法": "preserve.mq.RabbitSend.send",
+            "源码行号": 0,
+            "路由键": "email",
+            "交换机名称": "(default)",
+        },
+    )
 
 
 def _values(result: QueryResult, column: str) -> set[Any]:

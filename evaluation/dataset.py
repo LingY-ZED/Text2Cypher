@@ -1,4 +1,4 @@
-"""Loading and validation for the frozen version-3 evaluation dataset."""
+"""Loading and validation for the frozen version-4 evaluation dataset."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ EXPECTED_DIFFICULTIES = {
     Difficulty.HARD: 14,
 }
 EXPECTED_CASE_COUNT = sum(EXPECTED_DIFFICULTIES.values())
-EXPECTED_VERSION = 3
+EXPECTED_VERSION = 4
 
 
 def load_cases(path: Path = DEFAULT_CASES_PATH) -> tuple[EvaluationCase, ...]:

@@ -22,10 +22,21 @@ def test_loads_complete_business_rules_from_package_resource() -> None:
     rules = load_code_graph_business_rules()
 
     assert rules.startswith("# 代码知识图谱业务语义")
-    assert "方法-[:调用]->方法" in rules
-    assert "调用类型='远程调用'" in rules
-    assert "消息流类型=发布" in rules
+    assert "方法-[:服务于]->上游API" in rules
+    assert "方法-[:下游调用]->下游API" in rules
+    assert "调用深度 IN [0,1]" in rules
+    assert "禁止把短类名当成 `类.全限定名`" in rules
+    assert "禁止拿服务名称与 `方法.全限定名`" in rules
+    assert "直接上游调用者的唯一方向是" in rules
+    assert "可达入口 API 必须先绑定" in rules
+    assert "链中下一节点" in rules
+    assert "完整下游链必须用 `UNION` 分开" in rules
+    assert "发布至.路由键 = 路由至.路由键" in rules
+    assert "count(DISTINCT remote) AS 调用关系数" in rules
+    assert "无论是否出现“分别”二字" in rules
     assert "逐行对应" in rules
+    assert "不得使用旧标签 `API端点`" in rules
+    assert "不得使用旧关系 `消息流`" in rules
 
 
 @pytest.mark.parametrize(

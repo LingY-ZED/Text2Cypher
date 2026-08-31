@@ -43,16 +43,18 @@ class FakeSchemaDriver:
         *,
         visualization_error: Exception | None = None,
         label_failures: int = 0,
+        observed_patterns: list[dict[str, Any]] | None = None,
     ) -> None:
         self.calls: list[str] = []
         self._visualization_error = visualization_error
         self._label_failures = label_failures
+        self._observed_patterns = observed_patterns
 
     def execute_query(self, query: Any, **kwargs: Any) -> FakeResult:
         del kwargs
         query_text = str(query)
         self.calls.append(query_text)
-        if "db.labels" in query_text:
+        if "UNWIND labels(node)" in query_text:
             if self._label_failures:
                 self._label_failures -= 1
                 raise ServiceUnavailable("短暂不可用")
@@ -65,11 +67,26 @@ class FakeSchemaDriver:
                         "propertyName": "服务名称",
                         "propertyTypes": ["STRING"],
                         "mandatory": True,
-                    }
+                    },
+                    {
+                        "nodeLabels": [":`历史空标签`"],
+                        "propertyName": "旧属性",
+                        "propertyTypes": ["STRING"],
+                        "mandatory": False,
+                    },
                 ]
             )
         if "relTypeProperties" in query_text:
-            return FakeResult(records=[])
+            return FakeResult(
+                records=[
+                    {
+                        "relType": ":`历史空关系`",
+                        "propertyName": "旧属性",
+                        "propertyTypes": ["STRING"],
+                        "mandatory": False,
+                    }
+                ]
+            )
         if "schema.visualization" in query_text:
             if self._visualization_error is not None:
                 raise self._visualization_error
@@ -87,6 +104,8 @@ class FakeSchemaDriver:
                 ]
             )
         if "MATCH (start_node)" in query_text:
+            if self._observed_patterns is not None:
+                return FakeResult(records=self._observed_patterns)
             return FakeResult(
                 records=[
                     {
@@ -113,6 +132,10 @@ def test_schema_fetcher_normalizes_and_sorts_schema_from_builtin_procedures() ->
     assert schema.patterns[0].relationship_type == "调用"
     assert schema.patterns[0].end_labels == ("接口",)
     assert any("MATCH (start_node)" in call for call in driver.calls)
+    assert "历史空标签" not in {node.name for node in schema.nodes}
+    assert "历史空关系" not in {
+        relationship.name for relationship in schema.relationships
+    }
 
 
 def test_schema_fetcher_uses_fallback_when_visualization_procedure_fails() -> None:
@@ -146,5 +169,15 @@ def test_schema_fetcher_retries_transient_schema_query() -> None:
     ).fetch()
 
     assert [node.name for node in schema.nodes] == ["微服务", "接口"]
-    assert sum("db.labels" in call for call in driver.calls) == 2
+    assert sum("UNWIND labels(node)" in call for call in driver.calls) == 2
     assert waits == [0.5]
+
+
+def test_schema_fetcher_keeps_successfully_observed_empty_graph_empty() -> None:
+    driver = FakeSchemaDriver(observed_patterns=[])
+
+    schema = Neo4jSchemaFetcher(driver, "neo4j", 5).fetch()
+
+    assert [node.name for node in schema.nodes] == ["微服务", "接口"]
+    assert schema.relationships == ()
+    assert schema.patterns == ()

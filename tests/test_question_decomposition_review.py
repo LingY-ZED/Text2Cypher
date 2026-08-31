@@ -22,11 +22,13 @@ def test_review_prompt_contains_original_and_all_candidates_without_schema() -> 
     assert "固定对象与完整筛选条件可在各项重复并独立重算" in prompt.system
     assert "没有新增、丢失或跨意图传播限定" in prompt.system
     assert "代码知识图谱业务语义：" in prompt.system
-    assert "同一调用链或消息路径中的方法、API、服务、交换机、队列" in prompt.system
-    assert "不能拆成无法恢复配对的独立结果" in prompt.system
-    assert "方法变更影响分析中" in prompt.system
-    assert "目标服务字段名为 `下游服务`" in prompt.system
-    assert "完整消息路径固定为" in prompt.system
+    assert "多列 API、REST、调用链和 MQ 结果表示逐行对应的事实" in prompt.system
+    assert "不得把方法、API、服务、交换机或队列拆成" in prompt.system
+    assert "全部反向上游方法、可达入口 API、变更方法直接远程调用" in prompt.system
+    assert "候选必须恰好拆成三个自包含集合" in prompt.system
+    assert "第三项若仍写泛称" in prompt.system
+    assert "微服务.服务名称 AS 下游服务" in prompt.system
+    assert "详细消息路径固定为" in prompt.system
     assert "资源候选重复 A 且自行推导 B" in prompt.system
     assert "返回 COVERAGE_MISMATCH" in prompt.system
     assert "合并不兼容返回形状" in prompt.system
@@ -39,8 +41,8 @@ def test_review_prompt_has_abstract_call_chain_semantics_without_graph_schema() 
         ("查询 getAllFood 的上游方法", "查询 getAllFood 的入口 API"),
     )
 
-    assert "上游逆向、下游正向" in prompt.system
-    assert "调用链、链路或路径最多展开五跳" in prompt.system
+    assert "直接上游调用者的唯一方向是" in prompt.system
+    assert "禁止对 `调用` 使用可变长度遍历" in prompt.system
     assert "图谱 Schema：" not in prompt.user
     assert "关系模式：" not in prompt.user
 

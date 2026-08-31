@@ -29,7 +29,10 @@ _LOGGER = logging.getLogger(__name__)
 class Neo4jSchemaFetcher:
     """使用 Neo4j 内置过程动态获取并结构化图谱 Schema。"""
 
-    _labels_query = "CALL db.labels() YIELD label RETURN label"
+    _labels_query = (
+        "MATCH (node) UNWIND labels(node) AS label "
+        "RETURN DISTINCT label"
+    )
     _node_properties_query = (
         "CALL db.schema.nodeTypeProperties() "
         "YIELD nodeLabels, propertyName, propertyTypes, mandatory "
@@ -91,7 +94,7 @@ class Neo4jSchemaFetcher:
                 except (DriverError, Neo4jError):
                     patterns = visualization_patterns
                 else:
-                    patterns = observed_patterns or visualization_patterns
+                    patterns = observed_patterns
             return self._build_schema(
                 labels,
                 node_properties,
@@ -198,7 +201,7 @@ class Neo4jSchemaFetcher:
         relationship_properties: dict[str, dict[str, tuple[set[str], bool]]],
         patterns: set[tuple[tuple[str, ...], str, tuple[str, ...]]],
     ) -> GraphSchema:
-        node_names = labels | set(node_properties)
+        node_names = labels
         nodes = tuple(
             NodeSchema(
                 name=name,
@@ -206,7 +209,7 @@ class Neo4jSchemaFetcher:
             )
             for name in sorted(node_names)
         )
-        relationship_names = set(relationship_properties) | {
+        relationship_names = {
             relationship_type
             for _, relationship_type, _ in patterns
         }

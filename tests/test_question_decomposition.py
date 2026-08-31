@@ -46,16 +46,15 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "只属于一个分句的限定传播给其他意图" in prompt.system
     assert "不同分组和返回形状不要合并" in prompt.system
     assert "代码知识图谱业务语义：" in prompt.system
-    assert "方法-[:调用]->方法" in prompt.system
-    assert "调用链、链路或路径最多展开五跳" in prompt.system
-    assert "完整上游链返回目标方法、入口 API 和有序方法路径" in prompt.system
-    assert (
-        "完整下游链返回目标方法、有序方法路径、远程下游 API 和目标服务"
-        in prompt.system
-    )
-    assert "三个独立集合，应分别拆分" in prompt.system
+    assert "方法-[:服务于]->上游API" in prompt.system
+    assert "禁止对 `调用` 使用可变长度遍历" in prompt.system
+    assert "完整入口链可以是目标方法自身" in prompt.system
+    assert "完整下游链必须用 `UNION` 分开" in prompt.system
+    assert "在每个分支完整投影 `目标方法`、`方法路径`、`下游API`" in prompt.system
+    assert "无论有无‘分别’二字，都是三个独立集合" in prompt.system
     assert "第三个子问题必须原样写明" in prompt.system
     assert "‘外部服务’也不得输出该泛称" in prompt.system
+    assert "外部服务绝不是调用该变更方法的上游方法" in prompt.system
 
 
 def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
@@ -65,9 +64,9 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
         3,
     )
 
-    assert "同一调用链或消息路径中的方法、API、服务、交换机、队列" in prompt.system
-    assert "不能拆成无法恢复配对的独立结果" in prompt.system
-    assert "完整消息路径固定为" in prompt.system
+    assert "多列 API、REST、调用链和 MQ 结果表示逐行对应的事实" in prompt.system
+    assert "不得把方法、API、服务、交换机或队列拆成" in prompt.system
+    assert "详细消息路径固定为" in prompt.system
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system
 
 

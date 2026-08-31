@@ -67,6 +67,14 @@ def test_corrected_evaluation_contracts_are_explicit() -> None:
     assert implementation_methods.value_normalizers["方法全限定名"] is (
         ValueNormalizer.QUALIFIED_NAME_TAIL
     )
+    assert "方法名" in implementation_methods.accepted_aliases["方法全限定名"]
+
+    notification_senders = next(
+        intent
+        for intent in cases["notification-api-mq-consumers"].intents
+        if intent.id == "senders"
+    )
+    assert "服务名称" in notification_senders.accepted_aliases["发送服务"]
 
     implementations = next(
         intent
@@ -74,6 +82,7 @@ def test_corrected_evaluation_contracts_are_explicit() -> None:
         if intent.id == "implementations"
     )
     assert "接口实现类全限定名" in implementations.accepted_aliases["实现类"]
+    assert "实现类全限定名" in implementations.accepted_aliases["实现类"]
 
 
 def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
@@ -141,25 +150,29 @@ def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:
     cases = {case.id: case for case in load_cases()}
 
     callers = cases["order-other-rest-callers"].intents[0]
-    assert "远程调用" in callers.oracle_cypher
-    assert "跨服务调用" not in callers.oracle_cypher
+    assert "下游调用" in callers.oracle_cypher
+    assert "目标服务" in callers.oracle_cypher
     assert {row["上游服务"] for row in callers.expected_snapshot} == {
         "ts-admin-order-service",
         "ts-cancel-service",
         "ts-execute-service",
         "ts-inside-payment-service",
+        "ts-preserve-other-service",
         "ts-rebook-service",
+        "ts-seat-service",
         "ts-security-service",
     }
+    assert "调用服务" in callers.accepted_aliases["上游服务"]
 
     impact = next(
         intent
         for intent in cases["consign-insert-impact"].intents
         if intent.id == "upstream_methods"
     )
-    assert "[:调用*1..5]" in impact.oracle_cypher
+    assert "[:调用]->" in impact.oracle_cypher
+    assert "[:调用*" not in impact.oracle_cypher
     assert any(
-        row["上游方法"] == "consign.controller.ConsignController.updateConsign"
+        row["上游方法"] == "consign.controller.ConsignController.insertConsign"
         for row in impact.expected_snapshot
     )
 
@@ -179,8 +192,9 @@ def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:
         for intent in cases["security-service-three-way"].intents
         if intent.id == "upstreams"
     )
-    assert "远程调用" in security_upstreams.oracle_cypher
-    assert "跨服务调用" not in security_upstreams.oracle_cypher
+    assert "下游调用" in security_upstreams.oracle_cypher
+    assert "目标服务" in security_upstreams.oracle_cypher
+    assert "调用服务" in security_upstreams.accepted_aliases["上游服务"]
 
 
 def test_questions_do_not_reuse_the_previous_comparison_set() -> None:
@@ -231,7 +245,9 @@ def test_call_chain_method_paths_do_not_include_class_nodes() -> None:
     cases = {case.id: case for case in load_cases()}
     intent = cases["consign-insert-full-upstream-chain"].intents[0]
 
-    assert "), (target)-[:归属于]" in intent.oracle_cypher
+    assert "[:接口调用]" in intent.oracle_cypher
+    assert "链中下一节点" in intent.oracle_cypher
+    assert "[:调用*" not in intent.oracle_cypher
     assert all(
         path[-1] == "consign.service.ConsignServiceImpl.insertConsignRecord"
         for path in (row["方法路径"] for row in intent.expected_snapshot)

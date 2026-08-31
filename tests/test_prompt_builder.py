@@ -51,8 +51,8 @@ def test_prompt_includes_question_complete_schema_and_shared_rules() -> None:
     assert "不得生成写入、管理或过程调用" in prompt.system
     assert prompt.system.count(rules) == 1
     assert "代码知识图谱业务语义：" in prompt.system
-    assert "方法-[:调用]->方法" in prompt.system
-    assert "消息流类型=发布" in prompt.system
+    assert "方法-[:服务于]->上游API" in prompt.system
+    assert "发布至.路由键 = 路由至.路由键" in prompt.system
     assert "代码知识图谱业务语义：" not in prompt.user
     assert "节点属性：" in prompt.user
     assert "关系属性：" in prompt.user
@@ -76,7 +76,7 @@ def test_business_rules_are_not_gated_by_question_or_schema() -> None:
     assert "API端点" not in prompt.user
     assert "微服务" not in prompt.user
     assert "可适用的业务语义" not in prompt.user
-    assert "当前 Schema 中存在对应标签" in prompt.system
+    assert "当前 Schema 已观察到的结构" in prompt.system
 
 
 def test_prompt_injects_selected_examples_after_schema() -> None:
