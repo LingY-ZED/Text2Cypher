@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.application.few_shot_router import LLMFewShotRouter
+from text2cypher.application.primary_agent import LLMPrimaryAgent
 from text2cypher.application.question_decomposer import LLMQuestionDecomposer
 from text2cypher.application.result_summarizer import LLMResultSummarizer
 from text2cypher.components.cypher_parser import DefaultCypherParser
@@ -15,6 +16,7 @@ from text2cypher.domain.ports import (
     CypherCorrector,
     FewShotRouter,
     LLMClient,
+    PrimaryAgent,
     QuestionDecomposer,
 )
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
@@ -44,7 +46,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             disable_thinking=settings.llm_disable_thinking,
             retry_policy=retry_policy,
         )
-        question_decomposer = _build_question_decomposer(settings, llm_client)
+        primary_agent = _build_primary_agent(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
         cypher_corrector = _build_cypher_corrector(settings, llm_client)
         return Text2CypherPipeline(
@@ -72,7 +74,7 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             ),
             result_formatter=JsonResultFormatter(),
             result_summarizer=_build_result_summarizer(settings, llm_client),
-            question_decomposer=question_decomposer,
+            primary_agent=primary_agent,
             few_shot_router=few_shot_router,
             cypher_corrector=cypher_corrector,
             recover_empty_results=settings.empty_result_correction_enabled,
@@ -85,17 +87,31 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
         raise
 
 
+def _build_primary_agent(
+    settings: Settings,
+    llm_client: LLMClient,
+) -> PrimaryAgent | None:
+    """按配置构造复用主模型客户端的 Primary Agent。"""
+
+    if not settings.primary_agent_enabled:
+        return None
+    return LLMPrimaryAgent(
+        llm_client,
+        max_queries=settings.primary_agent_max_queries,
+    )
+
+
 def _build_question_decomposer(
     settings: Settings,
     llm_client: LLMClient,
 ) -> QuestionDecomposer | None:
-    """按配置构造复用主模型客户端的问题拆分器。"""
+    """为旧调用方保留的 Decomposer 构造兼容函数。"""
 
-    if not settings.question_decomposition_enabled:
+    if not settings.primary_agent_enabled:
         return None
     return LLMQuestionDecomposer(
         llm_client,
-        max_subquestions=settings.question_decomposition_max_subquestions,
+        max_subquestions=settings.primary_agent_max_queries,
     )
 
 

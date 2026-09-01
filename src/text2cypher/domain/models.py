@@ -41,18 +41,6 @@ class CypherFailureSource(StrEnum):
     RESULT = "result"
 
 
-class QuestionDecompositionReviewReason(StrEnum):
-    """问题拆分候选的固定审查结论原因。"""
-
-    VALID = "VALID"
-    RESULT_DEPENDENCY = "RESULT_DEPENDENCY"
-    CORRELATION_LOSS = "CORRELATION_LOSS"
-    NOT_SELF_CONTAINED = "NOT_SELF_CONTAINED"
-    COVERAGE_MISMATCH = "COVERAGE_MISMATCH"
-    MECHANICAL_SPLIT = "MECHANICAL_SPLIT"
-    UNCERTAIN = "UNCERTAIN"
-
-
 class ResultSummaryMode(StrEnum):
     """查询结果自然语言总结的生成方式。"""
 
@@ -91,24 +79,6 @@ class ResultSummary:
             raise ValueError("LLM 总结不能包含降级原因")
         if self.mode is ResultSummaryMode.TEMPLATE and self.fallback_reason is None:
             raise ValueError("模板总结必须包含降级原因")
-
-
-@dataclass(frozen=True, slots=True)
-class QuestionDecompositionReview:
-    """一次只接受或拒绝候选拆分的不可变审查结果。"""
-
-    valid: bool
-    reason: QuestionDecompositionReviewReason
-
-    def __post_init__(self) -> None:
-        if type(self.valid) is not bool:
-            raise TypeError("审查结果 valid 必须是布尔值")
-        if not isinstance(self.reason, QuestionDecompositionReviewReason):
-            raise TypeError("审查原因必须是 QuestionDecompositionReviewReason")
-        if self.valid != (
-            self.reason is QuestionDecompositionReviewReason.VALID
-        ):
-            raise ValueError("审查结果 valid 与 reason 不一致")
 
 
 @dataclass(frozen=True, slots=True)

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     retry_max_delay_seconds: float = 4.0
     cypher_correction_enabled: bool = True
     empty_result_correction_enabled: bool = True
+    primary_agent_enabled: bool = True
+    primary_agent_max_queries: int = 3
     question_decomposition_enabled: bool = True
     question_decomposition_max_subquestions: int = 3
     few_shot_enabled: bool = True
@@ -99,9 +101,12 @@ class Settings(BaseSettings):
             raise ValueError("必须在 1 到 3 之间")
         return value
 
-    @field_validator("question_decomposition_max_subquestions")
+    @field_validator(
+        "primary_agent_max_queries",
+        "question_decomposition_max_subquestions",
+    )
     @classmethod
-    def valid_decomposition_limit(cls, value: int) -> int:
+    def valid_primary_agent_limit(cls, value: int) -> int:
         if not 2 <= value <= 3:
             raise ValueError("必须在 2 到 3 之间")
         return value
@@ -124,6 +129,23 @@ class Settings(BaseSettings):
     def valid_retry_delay_range(self) -> Settings:
         if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
             raise ValueError("最大重试延迟不能小于基础重试延迟")
+        legacy_enabled_supplied = (
+            "question_decomposition_enabled" in self.model_fields_set
+        )
+        primary_enabled_supplied = "primary_agent_enabled" in self.model_fields_set
+        if legacy_enabled_supplied and not primary_enabled_supplied:
+            self.primary_agent_enabled = self.question_decomposition_enabled
+        self.question_decomposition_enabled = self.primary_agent_enabled
+
+        legacy_limit_supplied = (
+            "question_decomposition_max_subquestions" in self.model_fields_set
+        )
+        primary_limit_supplied = "primary_agent_max_queries" in self.model_fields_set
+        if legacy_limit_supplied and not primary_limit_supplied:
+            self.primary_agent_max_queries = (
+                self.question_decomposition_max_subquestions
+            )
+        self.question_decomposition_max_subquestions = self.primary_agent_max_queries
         return self
 
     @field_validator("log_level")

@@ -15,6 +15,7 @@ from text2cypher.domain.models import (
     FewShotSchemaRequirements,
     GraphSchema,
     LLMResponse,
+    PrimaryAgentPlan,
     QueryResult,
     QuestionDecomposition,
     ResultSummary,
@@ -91,6 +92,16 @@ class FakeQuestionDecomposer:
         assert schema == GraphSchema()
         self.calls.append("decomposer")
         return QuestionDecomposition(question, (question,))
+
+
+class FakePrimaryAgent:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def plan(self, question: str) -> PrimaryAgentPlan:
+        assert question == "列出服务"
+        self.calls.append("primary_agent")
+        return PrimaryAgentPlan.fallback(question)
 
 
 class FakeLLMClient:
@@ -229,6 +240,53 @@ def test_pipeline_runs_every_stage_in_order() -> None:
         "executor",
         "formatter",
     ]
+
+
+def test_pipeline_uses_primary_agent_without_passing_schema() -> None:
+    calls: list[str] = []
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=FakePromptBuilder(calls),
+        llm_client=FakeLLMClient(calls),
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=FakeFormatter(calls),
+        primary_agent=FakePrimaryAgent(calls),
+        few_shot_router=FakeFewShotRouter(calls),
+    )
+
+    response = pipeline.run("列出服务")
+
+    assert response.sub_queries[0].question == "列出服务"
+    assert calls == [
+        "schema",
+        "primary_agent",
+        "router",
+        "prompt",
+        "llm",
+        "parser",
+        "validator",
+        "executor",
+        "formatter",
+    ]
+
+
+def test_pipeline_rejects_primary_agent_and_legacy_decomposer_together() -> None:
+    calls: list[str] = []
+
+    with pytest.raises(ValueError, match="不能同时注入"):
+        Text2CypherPipeline(
+            schema_fetcher=FakeSchemaFetcher(calls),
+            prompt_builder=FakePromptBuilder(calls),
+            llm_client=FakeLLMClient(calls),
+            cypher_parser=FakeParser(calls),
+            cypher_validator=FakeValidator(calls),
+            cypher_executor=FakeExecutor(calls),
+            result_formatter=FakeFormatter(calls),
+            primary_agent=FakePrimaryAgent(calls),
+            question_decomposer=FakeQuestionDecomposer(calls),
+        )
 
 
 def test_pipeline_summarizes_after_all_sub_queries_and_before_formatting() -> None:

@@ -11,9 +11,6 @@ from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.question_decomposition import (
     QuestionDecompositionPromptBuilder,
 )
-from text2cypher.components.question_decomposition_review import (
-    QuestionDecompositionReviewPromptBuilder,
-)
 from text2cypher.domain.models import (
     ChatPrompt,
     FewShotExample,
@@ -48,9 +45,6 @@ def test_all_llm_prompt_stages_share_the_complete_rules_once() -> None:
     prompts = (
         DefaultPromptBuilder().build(schema, "list nodes"),
         QuestionDecompositionPromptBuilder().build(schema, "list nodes", 3),
-        QuestionDecompositionReviewPromptBuilder().build(
-            "question", ("first", "second")
-        ),
         LLMFewShotRouter((example,), _NoopLLMClient())._build_router_prompt(
             "question", (example,)
         ),

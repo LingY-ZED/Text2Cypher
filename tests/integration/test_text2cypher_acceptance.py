@@ -11,7 +11,7 @@ import pytest
 from text2cypher.application.bootstrap import build_pipeline
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.pipeline import Text2CypherPipeline
-from text2cypher.application.question_decomposer import LLMQuestionDecomposer
+from text2cypher.application.primary_agent import LLMPrimaryAgent
 from text2cypher.config import Settings
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import Text2CypherResponse
@@ -209,7 +209,7 @@ def test_compound_method_impact_acceptance(
     except LLMGenerationError as error:
         pytest.skip(f"外部模型服务暂不可用：{error}")
 
-    _skip_after_decomposer_transport_failure(caplog)
+    _skip_after_primary_agent_transport_failure(caplog)
     assert response.decomposed is True
     assert len(response.sub_queries) == 2
     assert all(sub_query.result.rows for sub_query in response.sub_queries)
@@ -248,7 +248,7 @@ def test_rest_and_mq_dependencies_are_decomposed_and_executed(
     except LLMGenerationError as error:
         pytest.skip(f"外部模型服务暂不可用：{error}")
 
-    _skip_after_decomposer_transport_failure(caplog)
+    _skip_after_primary_agent_transport_failure(caplog)
     assert response.decomposed is True
     assert len(response.sub_queries) == 2
     assert all(sub_query.result.rows for sub_query in response.sub_queries)
@@ -275,7 +275,7 @@ def test_three_independent_branches_execute_with_golden_facts(
     except LLMGenerationError as error:
         pytest.skip(f"外部模型服务暂不可用：{error}")
 
-    _skip_after_decomposer_transport_failure(caplog)
+    _skip_after_primary_agent_transport_failure(caplog)
     assert response.decomposed is True
     assert len(response.sub_queries) == 3
     assert all(sub_query.result.rows for sub_query in response.sub_queries)
@@ -291,11 +291,10 @@ def test_three_independent_branches_execute_with_golden_facts(
     assert "ts-notification-service" in values
 
 
-def test_decomposer_preserves_qualified_names_paths_and_service_names(
+def test_primary_agent_preserves_qualified_names_paths_and_service_names(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     settings = Settings.from_environment()
-    provider = Neo4jDriverProvider(settings)
     llm_client = OpenAICompatibleLLMClient(
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key.get_secret_value(),
@@ -310,30 +309,21 @@ def test_decomposer_preserves_qualified_names_paths_and_service_names(
         "ts-preserve-service 的 MQ 下游依赖。"
     )
     try:
-        schema = Neo4jSchemaFetcher(
-            provider.driver,
-            settings.neo4j_database,
-            settings.schema_timeout_seconds,
-        ).fetch()
-        decomposition = LLMQuestionDecomposer(llm_client).decompose(
-            question,
-            schema,
-        )
-        _skip_after_decomposer_transport_failure(caplog)
-        combined = "\n".join(decomposition.sub_questions)
-        assert decomposition.decomposed is True
-        assert len(decomposition.sub_questions) == 3
+        plan = LLMPrimaryAgent(llm_client).plan(question)
+        _skip_after_primary_agent_transport_failure(caplog)
+        combined = "\n".join(plan.sub_questions)
+        assert plan.decomposed is True
+        assert len(plan.queries) == 3
         assert "FoodServiceImpl.getAllFood" in combined
         assert "/api/v1/preserveservice/preserve" in combined
         assert "ts-preserve-service" in combined
     finally:
         llm_client.close()
-        provider.close()
 
 
 def test_decomposition_can_be_disabled_with_uniform_response() -> None:
     settings = Settings.from_environment().model_copy(
-        update={"question_decomposition_enabled": False}
+        update={"primary_agent_enabled": False}
     )
     instance = build_pipeline(settings)
     question = (
@@ -371,12 +361,12 @@ def _all_values(response: Text2CypherResponse) -> set[object]:
     return values
 
 
-def _skip_after_decomposer_transport_failure(
+def _skip_after_primary_agent_transport_failure(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     if any(
-        "QuestionDecomposer 失败" in record.message
-        and "LLMGenerationError" in record.message
+        getattr(record, "primary_agent_event", {}).get("reason")
+        == "llm_generation_error"
         for record in caplog.records
     ):
-        pytest.skip("外部 Decomposer 模型服务暂不可用")
+        pytest.skip("外部 Primary Agent 模型服务暂不可用")

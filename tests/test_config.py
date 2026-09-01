@@ -101,11 +101,75 @@ def test_settings_has_production_few_shot_defaults() -> None:
     assert settings.few_shot_library_path is None
 
 
-def test_settings_has_production_decomposition_defaults() -> None:
+def test_settings_has_primary_agent_defaults_and_legacy_aliases() -> None:
     settings = Settings(**_settings_kwargs())
 
+    assert settings.primary_agent_enabled is True
+    assert settings.primary_agent_max_queries == 3
     assert settings.question_decomposition_enabled is True
     assert settings.question_decomposition_max_subquestions == 3
+
+
+def test_legacy_decomposition_settings_map_to_primary_agent() -> None:
+    settings = Settings(
+        **(
+            _settings_kwargs()
+            | {
+                "question_decomposition_enabled": False,
+                "question_decomposition_max_subquestions": 2,
+            }
+        )
+    )
+
+    assert settings.primary_agent_enabled is False
+    assert settings.primary_agent_max_queries == 2
+    assert settings.question_decomposition_enabled is False
+    assert settings.question_decomposition_max_subquestions == 2
+
+
+def test_primary_agent_settings_win_when_new_and_legacy_settings_conflict() -> None:
+    settings = Settings(
+        **(
+            _settings_kwargs()
+            | {
+                "primary_agent_enabled": True,
+                "primary_agent_max_queries": 3,
+                "question_decomposition_enabled": False,
+                "question_decomposition_max_subquestions": 2,
+            }
+        )
+    )
+
+    assert settings.primary_agent_enabled is True
+    assert settings.primary_agent_max_queries == 3
+    assert settings.question_decomposition_enabled is True
+    assert settings.question_decomposition_max_subquestions == 3
+
+
+def test_legacy_environment_variables_map_to_primary_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED", "false")
+    monkeypatch.setenv("TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS", "2")
+
+    settings = Settings(**_settings_kwargs())
+
+    assert settings.primary_agent_enabled is False
+    assert settings.primary_agent_max_queries == 2
+
+
+def test_new_environment_variables_win_over_legacy_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED", "false")
+    monkeypatch.setenv("TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS", "2")
+    monkeypatch.setenv("TEXT2CYPHER_PRIMARY_AGENT_ENABLED", "true")
+    monkeypatch.setenv("TEXT2CYPHER_PRIMARY_AGENT_MAX_QUERIES", "3")
+
+    settings = Settings(**_settings_kwargs())
+
+    assert settings.primary_agent_enabled is True
+    assert settings.primary_agent_max_queries == 3
 
 
 def test_settings_has_natural_language_summary_defaults() -> None:
@@ -124,11 +188,17 @@ def test_settings_rejects_non_positive_summary_character_budget() -> None:
 
 
 @pytest.mark.parametrize("maximum", [1, 4])
-def test_settings_rejects_invalid_decomposition_limit(maximum: int) -> None:
+@pytest.mark.parametrize(
+    "field_name",
+    ["primary_agent_max_queries", "question_decomposition_max_subquestions"],
+)
+def test_settings_rejects_invalid_primary_agent_limit(
+    maximum: int,
+    field_name: str,
+) -> None:
     with pytest.raises(ValidationError, match="必须在 2 到 3 之间"):
         Settings(
-            **_settings_kwargs(),
-            question_decomposition_max_subquestions=maximum,
+            **(_settings_kwargs() | {field_name: maximum}),
         )
 
 

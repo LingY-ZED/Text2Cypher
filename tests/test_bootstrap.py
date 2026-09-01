@@ -7,6 +7,7 @@ import pytest
 from text2cypher.application.bootstrap import (
     _build_cypher_corrector,
     _build_few_shot_router,
+    _build_primary_agent,
     _build_question_decomposer,
     _build_result_summarizer,
 )
@@ -79,45 +80,67 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
     assert len(router_client.prompts) == 1
 
 
-def test_bootstrap_enables_decomposer_with_shared_client() -> None:
-    shared_client = StubLLMClient('{"sub_questions":["列出服务"]}')
-    decomposer = _build_question_decomposer(_settings(), shared_client)
-    assert decomposer is not None
+def test_bootstrap_enables_primary_agent_with_shared_client() -> None:
+    shared_client = StubLLMClient(
+        '{"analysis_summary":"列出服务。","queries":['
+        '{"question":"列出服务","intent":"列出服务",'
+        '"required_information":["服务信息"]}]}'
+    )
+    primary_agent = _build_primary_agent(_settings(), shared_client)
+    assert primary_agent is not None
 
-    decomposition = decomposer.decompose("列出服务", _service_schema())
+    plan = primary_agent.plan("列出服务")
 
-    assert decomposition.sub_questions == ("列出服务",)
+    assert plan.sub_questions == ("列出服务",)
     assert len(shared_client.prompts) == 1
 
 
-def test_bootstrap_reuses_shared_client_for_decomposer_review() -> None:
+def test_bootstrap_primary_agent_has_no_reviewer_call() -> None:
     shared_client = StubLLMClient(
-        '{"sub_questions":["查询 REST 下游","查询 MQ 下游"]}'
+        '{"analysis_summary":"分别查询 REST 和 MQ 下游。","queries":['
+        '{"question":"查询服务的 REST 下游","intent":"定位 REST 下游",'
+        '"required_information":["REST 下游"]},'
+        '{"question":"查询服务的 MQ 下游","intent":"定位 MQ 下游",'
+        '"required_information":["MQ 下游"]}]}'
     )
-    decomposer = _build_question_decomposer(_settings(), shared_client)
-    assert decomposer is not None
+    primary_agent = _build_primary_agent(_settings(), shared_client)
+    assert primary_agent is not None
 
-    decomposition = decomposer.decompose(
+    plan = primary_agent.plan(
         "查询服务的 REST 和 MQ 下游",
-        _service_schema(),
     )
 
-    assert decomposition.sub_questions == (
-        "查询服务的 REST 和 MQ 下游",
+    assert plan.sub_questions == (
+        "查询服务的 REST 下游",
+        "查询服务的 MQ 下游",
     )
-    assert len(shared_client.prompts) == 2
+    assert len(shared_client.prompts) == 1
 
 
-def test_bootstrap_can_disable_decomposer_without_model_call() -> None:
+def test_bootstrap_can_disable_primary_agent_without_model_call() -> None:
     shared_client = StubLLMClient("not-used")
 
-    decomposer = _build_question_decomposer(
-        _settings(question_decomposition_enabled=False),
+    primary_agent = _build_primary_agent(
+        _settings(primary_agent_enabled=False),
         shared_client,
     )
 
-    assert decomposer is None
+    assert primary_agent is None
     assert shared_client.prompts == []
+
+
+def test_bootstrap_legacy_decomposer_builder_remains_available() -> None:
+    shared_client = StubLLMClient(
+        '{"analysis_summary":"列出服务。","queries":['
+        '{"question":"列出服务","intent":"列出服务",'
+        '"required_information":["服务信息"]}]}'
+    )
+    decomposer = _build_question_decomposer(_settings(), shared_client)
+
+    assert decomposer is not None
+    assert decomposer.decompose("列出服务", _service_schema()).sub_questions == (
+        "列出服务",
+    )
 
 
 def test_bootstrap_disabled_preserves_zero_shot_and_skips_library_load(
