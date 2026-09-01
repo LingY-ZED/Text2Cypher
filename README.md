@@ -5,16 +5,15 @@ Text2CypherRetriever 或其他现成的 Text2Cypher 服务；图数据库访问�
 Neo4j Python Driver，模型调用仅使用通用 OpenAI 兼容聊天补全 API。
 
 当前已接通安全的最小闭环：动态获取 Schema、生成 Cypher、解析、只读校验、执行和
-结构化结果输出和自然语言答案，并支持 Schema 感知的问题拆分、LLM Router 动态 Few-shot
+结构化结果输出和自然语言答案，并支持语义驱动的 Primary Agent 规划、LLM Router 动态 Few-shot
 和受控错误恢复。
 
 ## 流程
 
 ```text
 用户自然语言问题
-  → SchemaFetcher
-  → SchemaGraphBuilder
-  → QuestionDecomposer
+  → SchemaFetcher（仅供后续翻译阶段使用）
+  → Primary LLM Agent（只读取问题和抽象业务能力）
   → 对每个独立子问题依次执行：
       FewShotRouter
       → PromptBuilder
@@ -62,19 +61,20 @@ DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 
-问题拆分默认启用。Decomposer 使用完整动态 Schema，将问题规划成一到三个互相独立的
-子问题；失败时回退为原问题，不影响原有单查询能力：
+Primary LLM Agent 默认启用。它只读取原始问题和抽象业务能力，不读取动态物理 Schema，
+不生成 Cypher；它输出简洁分析摘要及一到三个独立的自然语言检索任务。简单问题必须保留
+为原问题单查询，模型失败或计划非法时确定性回退为原问题，不影响既有单查询能力：
 
 ```dotenv
-TEXT2CYPHER_QUESTION_DECOMPOSITION_ENABLED=true
-TEXT2CYPHER_QUESTION_DECOMPOSITION_MAX_SUBQUESTIONS=3
+TEXT2CYPHER_PRIMARY_AGENT_ENABLED=true
+TEXT2CYPHER_PRIMARY_AGENT_MAX_QUERIES=3
 ```
 
-Decomposer、拆分 Reviewer、Few-shot Router、最终 Cypher 生成和结果总结复用同一个模型客户端。
-简单问题在 Few-shot 开启且存在结果时最多调用模型 4 次；候选拆成三个子问题并通过 Reviewer
-时最多调用 9 次；候选被 Reviewer 拒绝时会回退为原问题，最多调用 5 次。关闭拆分后
-仍返回统一的单元素 `sub_queries` 结构，但不会产生 Decomposer 或 Reviewer 模型调用；
-零结果、关闭总结或总结输入超限时不产生总结模型调用。
+Primary Agent、Few-shot Router、最终 Cypher 生成和结果总结复用同一个模型客户端。简单问题
+在 Few-shot 开启且存在结果时最多调用模型 4 次；拆成三个子问题时最多调用 8 次。关闭
+Primary Agent 后仍返回统一的单元素 `sub_queries` 结构，但不会产生规划模型调用；零结果、
+关闭总结或总结输入超限时不产生总结模型调用。旧
+`TEXT2CYPHER_QUESTION_DECOMPOSITION_*` 环境变量仍可用作兼容别名；新变量同时存在时优先。
 
 Few-shot 默认启用。系统先按实时 Schema 过滤候选，再使用与 Cypher 生成共享的模型
 选择最多 3 条相关示例；Router 不可用或返回无效内容时自动回退 Zero-shot：
@@ -210,8 +210,8 @@ mypy
 脚本会先校验 Neo4j Schema、52 个只读 Oracle 和冻结快照；发现数据漂移时不会调用
 模型。运行结果、指标、Markdown 报告和 PNG 图表保存在 `tmp/evaluation/`，不会进入
 版本控制。评测报告包含生成率、语法正确率、可执行率、查询正确率、延迟、自然错误恢复、
-调用链专项正确率、原 30 题案例级无退化检查、四类确定性恢复探针以及自然语言总结的
-调用数、模板降级率和固定原因分布；答案正文不会保存。已有 30 题历史报告仍按其原始
+调用链专项正确率、原 30 题案例级无退化检查、四类确定性恢复探针、Primary Agent 计划与
+回退诊断，以及自然语言总结的调用数、模板降级率和固定原因分布；答案正文不会保存。已有 30 题历史报告仍按其原始
 数据集版本说明，不用 v4 数量回写。
 
 默认测试不会访问真实数据库。需要执行只读集成测试时：

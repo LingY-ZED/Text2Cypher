@@ -8,10 +8,11 @@ import pytest
 
 from evaluation.instrumentation import (
     EvaluationRecorder,
+    RecordingPrimaryAgent,
     RecoveryEventHandler,
     StageLLMClient,
 )
-from text2cypher.domain.models import ChatPrompt, LLMResponse
+from text2cypher.domain.models import ChatPrompt, LLMResponse, PrimaryAgentPlan
 
 
 class _SuccessfulClient:
@@ -34,6 +35,12 @@ class _FailingClient:
 
     def close(self) -> None:
         return None
+
+
+class _PrimaryAgent:
+    def plan(self, question: str) -> PrimaryAgentPlan:
+        assert question == "查询服务"
+        return PrimaryAgentPlan.fallback(question)
 
 
 def test_llm_events_store_metadata_without_prompt_or_response_content() -> None:
@@ -70,7 +77,69 @@ def test_llm_failure_event_does_not_store_exception_response_body() -> None:
     ]
 
 
-def test_reviewer_log_event_is_recorded_without_sensitive_content() -> None:
+def test_recording_primary_agent_keeps_plan_for_evaluation_only() -> None:
+    recorder = EvaluationRecorder()
+
+    plan = RecordingPrimaryAgent(_PrimaryAgent(), recorder).plan("查询服务")
+
+    assert plan.sub_questions == ("查询服务",)
+    assert recorder.events == [
+        {
+            "component": "primary_agent",
+            "stage": "plan_result",
+            "outcome": "succeeded",
+            "decomposed": False,
+            "query_count": 1,
+            "analysis_summary": "使用原始问题执行单次检索",
+            "queries": [
+                {
+                    "query_id": "q1",
+                    "question": "查询服务",
+                    "intent": "回答原始问题",
+                    "required_information": ["回答原始问题所需的图数据"],
+                }
+            ],
+        }
+    ]
+
+
+def test_primary_agent_log_event_is_recorded_without_sensitive_content() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    handler = RecoveryEventHandler(recorder)
+    logger = logging.getLogger("text2cypher.application.primary_agent")
+    logger.addHandler(handler)
+    try:
+        logger.warning(
+            "primary_agent_planning",
+            extra={
+                "primary_agent_event": {
+                    "component": "primary_agent",
+                    "stage": "planning",
+                    "outcome": "fallback",
+                    "query_count": 1,
+                    "decomposed": False,
+                    "reason": "invalid_response",
+                }
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    assert recorder.events == [
+        {
+            "component": "primary_agent",
+            "stage": "planning",
+            "outcome": "fallback",
+            "query_count": 1,
+            "decomposed": False,
+            "reason": "invalid_response",
+        }
+    ]
+
+
+def test_legacy_reviewer_log_event_is_still_readable() -> None:
     import logging
 
     recorder = EvaluationRecorder()

@@ -13,8 +13,8 @@ from text2cypher.domain.models import (
     FewShotExample,
     GraphSchema,
     LLMResponse,
+    PrimaryAgentPlan,
     QueryResult,
-    QuestionDecomposition,
     ValidationReport,
 )
 from text2cypher.domain.ports import (
@@ -23,7 +23,7 @@ from text2cypher.domain.ports import (
     CypherValidator,
     FewShotRouter,
     LLMClient,
-    QuestionDecomposer,
+    PrimaryAgent,
 )
 
 
@@ -119,29 +119,35 @@ class RecordingFewShotRouter:
         return selected
 
 
-class RecordingQuestionDecomposer:
-    """Record the public decomposition result while preserving fallback behavior."""
+class RecordingPrimaryAgent:
+    """Record the internal Primary Agent plan for evaluation-only diagnosis."""
 
     def __init__(
         self,
-        delegate: QuestionDecomposer,
+        delegate: PrimaryAgent,
         recorder: EvaluationRecorder,
     ) -> None:
         self._delegate = delegate
         self._recorder = recorder
 
-    def decompose(
-        self,
-        question: str,
-        schema: GraphSchema,
-    ) -> QuestionDecomposition:
-        result = self._delegate.decompose(question, schema)
+    def plan(self, question: str) -> PrimaryAgentPlan:
+        result = self._delegate.plan(question)
         self._recorder.add(
-            component="decomposer",
-            stage="decomposition",
+            component="primary_agent",
+            stage="plan_result",
             outcome="succeeded",
             decomposed=result.decomposed,
-            sub_question_count=len(result.sub_questions),
+            query_count=len(result.queries),
+            analysis_summary=result.analysis_summary,
+            queries=[
+                {
+                    "query_id": query.query_id,
+                    "question": query.question,
+                    "intent": query.intent,
+                    "required_information": list(query.required_information),
+                }
+                for query in result.queries
+            ],
         )
         return result
 
@@ -277,6 +283,10 @@ class RecoveryEventHandler(logging.Handler):
         self._recorder = recorder
 
     def emit(self, record: logging.LogRecord) -> None:
+        primary_agent_event = getattr(record, "primary_agent_event", None)
+        if isinstance(primary_agent_event, dict):
+            self._recorder.add(**dict(primary_agent_event))
+            return
         review_event = getattr(record, "decomposition_review_event", None)
         if isinstance(review_event, dict):
             self._recorder.add(**dict(review_event))

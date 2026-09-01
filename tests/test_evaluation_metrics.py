@@ -156,6 +156,67 @@ def test_reviewer_calls_and_structured_verdicts_are_counted_separately() -> None
     }
 
 
+def test_primary_agent_plans_and_fallbacks_are_diagnosed_separately() -> None:
+    planned = _record(0)
+    planned["question"] = "查询服务"
+    planned["events"] = [
+        {"component": "llm", "stage": "primary_agent", "outcome": "succeeded"},
+        {
+            "component": "primary_agent",
+            "stage": "planning",
+            "outcome": "planned",
+            "query_count": 1,
+            "decomposed": False,
+            "reason": None,
+        },
+        {
+            "component": "primary_agent",
+            "stage": "plan_result",
+            "outcome": "succeeded",
+            "query_count": 1,
+            "decomposed": False,
+            "queries": [{"question": "查询服务"}],
+        },
+    ]
+    fallback = _record(1)
+    fallback["question"] = "原始问题"
+    fallback["events"] = [
+        {"component": "llm", "stage": "primary_agent", "outcome": "failed"},
+        {
+            "component": "primary_agent",
+            "stage": "planning",
+            "outcome": "fallback",
+            "query_count": 1,
+            "decomposed": False,
+            "reason": "invalid_response",
+        },
+        {
+            "component": "primary_agent",
+            "stage": "plan_result",
+            "outcome": "succeeded",
+            "query_count": 1,
+            "decomposed": False,
+            "queries": [{"question": "原始问题"}],
+        },
+    ]
+
+    metrics = calculate_metrics(
+        [planned, fallback],
+        {"parse": True, "validation": True, "execution": True, "empty": True},
+    )
+
+    assert metrics["diagnostics"]["primary_agent"] == {
+        "calls": 2,
+        "plans": 2,
+        "missing_plans": 0,
+        "consistent": True,
+        "outcomes": {"fallback": 1, "planned": 1},
+        "fallbacks": 1,
+        "query_count_distribution": {"1": 2},
+        "rewritten_single_questions": 0,
+    }
+
+
 def test_summary_calls_and_template_fallbacks_are_counted_separately() -> None:
     llm_generated = _record(0)
     llm_generated["events"] = [

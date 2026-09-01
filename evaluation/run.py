@@ -23,7 +23,7 @@ from evaluation.instrumentation import (
     RecordingCypherParser,
     RecordingCypherValidator,
     RecordingFewShotRouter,
-    RecordingQuestionDecomposer,
+    RecordingPrimaryAgent,
     RecoveryEventHandler,
     StageLLMClient,
 )
@@ -34,7 +34,7 @@ from evaluation.report import render_report
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.pipeline import Text2CypherPipeline
-from text2cypher.application.question_decomposer import LLMQuestionDecomposer
+from text2cypher.application.primary_agent import LLMPrimaryAgent
 from text2cypher.application.result_summarizer import LLMResultSummarizer
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
@@ -125,15 +125,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         recorder = EvaluationRecorder()
         handler = RecoveryEventHandler(recorder)
-        decomposer_logger = logging.getLogger(
-            "text2cypher.application.question_decomposer"
+        primary_agent_logger = logging.getLogger(
+            "text2cypher.application.primary_agent"
         )
         summarizer_logger = logging.getLogger(
             "text2cypher.application.result_summarizer"
         )
-        previous_decomposer_level = decomposer_logger.level
+        previous_primary_agent_level = primary_agent_logger.level
         previous_summarizer_level = summarizer_logger.level
-        decomposer_logger.setLevel(logging.INFO)
+        primary_agent_logger.setLevel(logging.INFO)
         summarizer_logger.setLevel(logging.INFO)
         logging.getLogger().addHandler(handler)
         try:
@@ -153,7 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         finally:
             logging.getLogger().removeHandler(handler)
-            decomposer_logger.setLevel(previous_decomposer_level)
+            primary_agent_logger.setLevel(previous_primary_agent_level)
             summarizer_logger.setLevel(previous_summarizer_level)
             llm_client.close()
     finally:
@@ -171,7 +171,7 @@ def _evaluation_settings() -> Settings:
     return Settings.from_environment().model_copy(
         update={
             "few_shot_enabled": True,
-            "question_decomposition_enabled": True,
+            "primary_agent_enabled": True,
             "cypher_correction_enabled": True,
             "empty_result_correction_enabled": True,
             "natural_language_summary_enabled": True,
@@ -200,11 +200,10 @@ def _build_instrumented_pipeline(
 ) -> Text2CypherPipeline:
     driver = provider.driver
     examples = JsonFewShotExampleLoader(settings.few_shot_library_path).load()
-    question_decomposer = RecordingQuestionDecomposer(
-        LLMQuestionDecomposer(
-            StageLLMClient(llm_client, recorder, "decomposer"),
-            review_llm_client=StageLLMClient(llm_client, recorder, "reviewer"),
-            max_subquestions=settings.question_decomposition_max_subquestions,
+    primary_agent = RecordingPrimaryAgent(
+        LLMPrimaryAgent(
+            StageLLMClient(llm_client, recorder, "primary_agent"),
+            max_queries=settings.primary_agent_max_queries,
         ),
         recorder,
     )
@@ -252,7 +251,7 @@ def _build_instrumented_pipeline(
             enabled=settings.natural_language_summary_enabled,
             max_input_chars=settings.natural_language_summary_max_input_chars,
         ),
-        question_decomposer=question_decomposer,
+        primary_agent=primary_agent,
         few_shot_router=few_shot_router,
         cypher_corrector=LLMCypherCorrector(
             StageLLMClient(llm_client, recorder, "corrector")
@@ -449,7 +448,19 @@ def _case_record(
 
 
 def _expected_query_count(events: Sequence[Mapping[str, Any]]) -> int:
-    decomposition = next(
+    planning_event = next(
+        (
+            event
+            for event in events
+            if event.get("component") == "primary_agent"
+            and event.get("stage") == "plan_result"
+        ),
+        None,
+    )
+    if planning_event is not None:
+        count = planning_event.get("query_count")
+        return int(count) if isinstance(count, int) and count > 0 else 1
+    legacy_event = next(
         (
             event
             for event in events
@@ -458,9 +469,9 @@ def _expected_query_count(events: Sequence[Mapping[str, Any]]) -> int:
         ),
         None,
     )
-    if decomposition is None:
+    if legacy_event is None:
         return 1
-    count = decomposition.get("sub_question_count")
+    count = legacy_event.get("sub_question_count")
     return int(count) if isinstance(count, int) and count > 0 else 1
 
 
@@ -510,16 +521,29 @@ def _decomposition_observation(
         (
             item
             for item in events
-            if item.get("component") == "decomposer"
-            and item.get("stage") == "decomposition"
+            if item.get("component") == "primary_agent"
+            and item.get("stage") == "plan_result"
             and item.get("outcome") == "succeeded"
         ),
         None,
     )
+    count_field = "query_count"
+    if event is None:
+        event = next(
+            (
+                item
+                for item in events
+                if item.get("component") == "decomposer"
+                and item.get("stage") == "decomposition"
+                and item.get("outcome") == "succeeded"
+            ),
+            None,
+        )
+        count_field = "sub_question_count"
     if event is None:
         return None
     decomposed = event.get("decomposed")
-    count = event.get("sub_question_count")
+    count = event.get(count_field)
     if type(decomposed) is not bool or not isinstance(count, int) or count < 1:
         return None
     return decomposed, count
@@ -616,7 +640,8 @@ def _metadata(
         "database": settings.neo4j_database,
         "settings": {
             "few_shot_enabled": settings.few_shot_enabled,
-            "question_decomposition_enabled": settings.question_decomposition_enabled,
+            "primary_agent_enabled": settings.primary_agent_enabled,
+            "primary_agent_max_queries": settings.primary_agent_max_queries,
             "cypher_correction_enabled": settings.cypher_correction_enabled,
             "empty_result_correction_enabled": settings.empty_result_correction_enabled,
             "natural_language_summary_enabled": (

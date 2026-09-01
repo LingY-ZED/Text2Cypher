@@ -102,6 +102,36 @@ def test_json_log_formatter_keeps_decomposition_review_fields_structured() -> No
     assert payload["reason"] == "RESULT_DEPENDENCY"
 
 
+def test_json_log_formatter_keeps_primary_agent_fields_structured() -> None:
+    logger = logging.getLogger("text2cypher.test.primary_agent")
+    record = logger.makeRecord(
+        logger.name,
+        logging.WARNING,
+        "test.py",
+        1,
+        "primary_agent_planning",
+        (),
+        None,
+        extra={
+            "primary_agent_event": {
+                "component": "primary_agent",
+                "stage": "planning",
+                "outcome": "fallback",
+                "query_count": 1,
+                "decomposed": False,
+                "reason": "invalid_response",
+            }
+        },
+    )
+
+    payload = json.loads(JsonLogFormatter().format(record))
+
+    assert payload["component"] == "primary_agent"
+    assert payload["stage"] == "planning"
+    assert payload["query_count"] == 1
+    assert payload["reason"] == "invalid_response"
+
+
 def test_json_log_formatter_keeps_result_summary_fields_structured() -> None:
     logger = logging.getLogger("text2cypher.test.summary")
     record = logger.makeRecord(

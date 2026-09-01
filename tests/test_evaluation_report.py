@@ -34,7 +34,7 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
         "events": [
             {
                 "component": "llm",
-                "stage": "reviewer",
+                "stage": "primary_agent",
                 "outcome": "succeeded",
             },
             {
@@ -50,10 +50,20 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
                 "reason": None,
             },
             {
-                "component": "decomposer",
-                "stage": "review",
-                "outcome": "accepted",
-                "reason": "VALID",
+                "component": "primary_agent",
+                "stage": "planning",
+                "outcome": "planned",
+                "query_count": 1,
+                "decomposed": False,
+                "reason": None,
+            },
+            {
+                "component": "primary_agent",
+                "stage": "plan_result",
+                "outcome": "succeeded",
+                "query_count": 1,
+                "decomposed": False,
+                "queries": [{"question": "question"}],
             },
         ],
     }
@@ -78,9 +88,10 @@ def test_report_contains_metrics_and_five_valid_png_charts(tmp_path: Path) -> No
     assert "Cypher 生成率" in report
     assert "三级语义结果" in report
     assert "Intent 覆盖率" in report
-    assert "Reviewer 调用：1" in report
-    assert "Reviewer 裁决：1" in report
-    assert "Reviewer 观测一致性：一致" in report
+    assert "Primary Agent LLM 调用：1" in report
+    assert "结构化计划：1" in report
+    assert "Primary Agent 观测一致性：一致" in report
+    assert "计划回退：0" in report
     assert "总结 LLM 调用：1" in report
     assert "总结事件：1" in report
     assert "LLM 总结成功：1" in report

@@ -36,11 +36,11 @@ def _case(contract: DecompositionContract) -> EvaluationCase:
 def _event(*, decomposed: bool, count: int) -> list[dict[str, object]]:
     return [
         {
-            "component": "decomposer",
-            "stage": "decomposition",
+            "component": "primary_agent",
+            "stage": "plan_result",
             "outcome": "succeeded",
             "decomposed": decomposed,
-            "sub_question_count": count,
+            "query_count": count,
         }
     ]
 
@@ -67,4 +67,21 @@ def test_contract_rejects_missing_or_inconsistent_observation() -> None:
     assert _decomposition_contract_passed(
         _case(DecompositionContract.ANY),
         [],
+    )
+
+
+def test_contract_still_accepts_legacy_decomposer_observation() -> None:
+    legacy_event = [
+        {
+            "component": "decomposer",
+            "stage": "decomposition",
+            "outcome": "succeeded",
+            "decomposed": True,
+            "sub_question_count": 2,
+        }
+    ]
+
+    assert _decomposition_contract_passed(
+        _case(DecompositionContract.MUST_SPLIT),
+        legacy_event,
     )

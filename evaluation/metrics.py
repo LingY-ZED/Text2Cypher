@@ -136,6 +136,7 @@ def calculate_metrics(
             )
         ),
         "transport_retries": _transport_retries(recovery_events),
+        "primary_agent": _primary_agent(records),
         "decomposition_review": _decomposition_review(records),
         "result_summary": _result_summary(records),
         "decomposition_contract_violations": _decomposition_contract_violations(
@@ -379,6 +380,76 @@ def _decomposition_review(
         "consistent": call_count == verdict_count,
         "outcomes": dict(sorted(outcomes.items())),
         "reasons": dict(sorted(reasons.items())),
+    }
+
+
+def _primary_agent(
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    llm_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "llm"
+        and event.get("stage") == "primary_agent"
+    ]
+    plan_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "primary_agent"
+        and event.get("stage") == "plan_result"
+        and event.get("outcome") == "succeeded"
+    ]
+    outcome_events = [
+        event
+        for record in records
+        for event in record.get("events", ())
+        if isinstance(event, Mapping)
+        and event.get("component") == "primary_agent"
+        and event.get("stage") == "planning"
+    ]
+    query_counts = Counter(
+        str(event.get("query_count"))
+        for event in plan_events
+        if isinstance(event.get("query_count"), int)
+    )
+    rewritten_single_questions = 0
+    for record in records:
+        original_question = record.get("question")
+        if not isinstance(original_question, str):
+            continue
+        for event in record.get("events", ()):
+            if (
+                not isinstance(event, Mapping)
+                or event.get("component") != "primary_agent"
+                or event.get("stage") != "plan_result"
+                or event.get("decomposed") is not False
+            ):
+                continue
+            queries = event.get("queries")
+            if (
+                isinstance(queries, list)
+                and len(queries) == 1
+                and isinstance(queries[0], Mapping)
+                and queries[0].get("question") != original_question
+            ):
+                rewritten_single_questions += 1
+
+    call_count = len(llm_events)
+    plan_count = len(plan_events)
+    outcomes = Counter(str(event.get("outcome")) for event in outcome_events)
+    return {
+        "calls": call_count,
+        "plans": plan_count,
+        "missing_plans": max(0, call_count - plan_count),
+        "consistent": call_count == plan_count,
+        "outcomes": dict(sorted(outcomes.items())),
+        "fallbacks": outcomes["fallback"],
+        "query_count_distribution": dict(sorted(query_counts.items())),
+        "rewritten_single_questions": rewritten_single_questions,
     }
 
 

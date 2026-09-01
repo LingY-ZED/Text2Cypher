@@ -205,29 +205,32 @@ def render_report(
             f"- 确定性恢复探针：{probe_summary}",
             f"- 瞬态重试：`{retry_summary}`",
             "",
-            "## Reviewer 与拆分契约",
+            "## Primary Agent 与拆分契约",
             "",
-            f"- Reviewer 调用：{diagnostics['decomposition_review']['calls']}",
-            f"- Reviewer 裁决：{diagnostics['decomposition_review']['verdicts']}",
-            "- Reviewer 观测一致性："
+            f"- Primary Agent LLM 调用：{diagnostics['primary_agent']['calls']}",
+            f"- 结构化计划：{diagnostics['primary_agent']['plans']}",
+            "- Primary Agent 观测一致性："
             + (
                 "一致"
-                if diagnostics["decomposition_review"]["consistent"]
+                if diagnostics["primary_agent"]["consistent"]
                 else "不一致（缺少 "
-                f"{diagnostics['decomposition_review']['missing_verdicts']} 条裁决）"
+                f"{diagnostics['primary_agent']['missing_plans']} 条计划）"
             ),
-            "- Reviewer 结果：`"
+            "- 规划结果：`"
             + json.dumps(
-                diagnostics["decomposition_review"]["outcomes"],
+                diagnostics["primary_agent"]["outcomes"],
                 ensure_ascii=False,
             )
             + "`",
-            "- Reviewer 原因码：`"
+            f"- 计划回退：{diagnostics['primary_agent']['fallbacks']}",
+            "- 查询数量分布：`"
             + json.dumps(
-                diagnostics["decomposition_review"]["reasons"],
+                diagnostics["primary_agent"]["query_count_distribution"],
                 ensure_ascii=False,
             )
             + "`",
+            "- 简单问题被改写："
+            f"{diagnostics['primary_agent']['rewritten_single_questions']}",
             "",
             "## 自然语言总结",
             "",
