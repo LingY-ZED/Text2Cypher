@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "cases": [
     {
       "id": "queue-owner-services",
@@ -577,7 +577,7 @@
         {
           "id": "entry_apis",
           "label": "入口影响",
-          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用*1..]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -947,7 +947,7 @@
         {
           "id": "callees",
           "label": "直接代码调用",
-          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(callee:方法)\n        WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook'\n          AND rel.调用深度 IN [0, 1]\n        RETURN DISTINCT callee.全限定名 AS 被调用方法\n        ORDER BY 被调用方法",
+          "oracle_cypher": "MATCH (caller:方法)-[:调用]->(callee:方法)\n        WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook'\n        RETURN DISTINCT callee.全限定名 AS 被调用方法\n        ORDER BY 被调用方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "被调用方法"
@@ -1083,7 +1083,7 @@
         {
           "id": "upstream_methods",
           "label": "上游方法",
-          "oracle_cypher": "MATCH (upstream:方法)-[:调用]->(changed:方法)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (changed:方法), (upstream:方法)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n          AND upstream <> changed\n          AND EXISTS { MATCH (upstream)-[:调用*1..]->(changed) }\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "value_set",
           "expected_columns": [
             "上游方法"
@@ -1105,7 +1105,7 @@
         {
           "id": "entry_apis",
           "label": "入口 API",
-          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND changed.方法名 = 'pay'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用*1..]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -1174,7 +1174,7 @@
         {
           "id": "upstream_methods",
           "label": "调用方法",
-          "oracle_cypher": "MATCH (upstream:方法)-[:调用]->(changed:方法)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (changed:方法), (upstream:方法)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n          AND upstream <> changed\n          AND EXISTS { MATCH (upstream)-[:调用*1..]->(changed) }\n        RETURN DISTINCT upstream.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "collected_set",
           "expected_columns": [
             "上游方法"
@@ -1192,6 +1192,9 @@
               "上游方法": "consign.controller.ConsignController.insertConsign"
             },
             {
+              "上游方法": "consign.controller.ConsignController.updateConsign"
+            },
+            {
               "上游方法": "consign.service.ConsignServiceImpl.updateConsignRecord"
             }
           ]
@@ -1199,7 +1202,7 @@
         {
           "id": "entry_apis",
           "label": "入口端点",
-          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
+          "oracle_cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API)\n        WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'insertConsignRecord'\n          AND (\n              entry = changed\n              OR EXISTS { MATCH (entry)-[:调用*1..]->(changed) }\n          )\n        RETURN DISTINCT api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式\n        ORDER BY 入口接口, 请求方式",
           "comparison_mode": "row_set",
           "expected_columns": [
             "入口接口",
@@ -1222,6 +1225,10 @@
             {
               "入口接口": "/api/v1/consignservice/consigns",
               "请求方式": "POST"
+            },
+            {
+              "入口接口": "/api/v1/consignservice/consigns",
+              "请求方式": "PUT"
             }
           ]
         },
@@ -2030,7 +2037,7 @@
         {
           "id": "direct-upstream-methods",
           "label": "直接上游方法",
-          "oracle_cypher": "MATCH (caller:方法)-[rel:调用]->(target:方法)-[:归属于]->(class:类)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n          AND rel.调用深度 IN [0, 1]\n        RETURN DISTINCT target.全限定名 AS 目标方法, caller.全限定名 AS 上游方法\n        ORDER BY 上游方法",
+          "oracle_cypher": "MATCH (caller:方法)-[:调用]->(target:方法)-[:归属于]->(class:类)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n        RETURN DISTINCT target.全限定名 AS 目标方法, caller.全限定名 AS 上游方法\n        ORDER BY 上游方法",
           "comparison_mode": "row_set",
           "expected_columns": [
             "目标方法",
@@ -2065,7 +2072,7 @@
         {
           "id": "reachable-entry-apis",
           "label": "可达入口 API",
-          "oracle_cypher": "MATCH (target:方法)-[:归属于]->(class:类),\n              (entry:方法)-[:服务于]->(api:上游API)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n          AND (\n              entry = target\n              OR EXISTS { MATCH (entry)-[:调用]->(target) }\n          )\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry.全限定名 AS 入口方法,\n               api.API路径 AS 入口API,\n               api.HTTP方法 AS 请求方式\n        ORDER BY 入口API, 入口方法",
+          "oracle_cypher": "MATCH (target:方法)-[:归属于]->(class:类),\n              (entry:方法)-[:服务于]->(api:上游API)\n        WHERE target.方法名 = 'getAllFood'\n          AND class.简名 = 'FoodServiceImpl'\n          AND (\n              entry = target\n              OR EXISTS { MATCH (entry)-[:调用*1..]->(target) }\n          )\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               entry.全限定名 AS 入口方法,\n               api.API路径 AS 入口API,\n               api.HTTP方法 AS 请求方式\n        ORDER BY 入口API, 入口方法",
           "comparison_mode": "row_set",
           "expected_columns": [
             "目标方法",
@@ -2167,7 +2174,7 @@
         {
           "id": "full-downstream-cross-service-chain",
           "label": "完整下游跨服务链",
-          "oracle_cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay'\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [target.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法\n        UNION\n        MATCH path=(target:方法)-[:链中下一节点*1..5]->(out:方法)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay' AND\n        ALL(\n            rel IN relationships(path)\n            WHERE rel.路径签名 = relationships(path)[0].路径签名\n        )\n        AND (\n            size(relationships(path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(path)) - 1)\n                WHERE relationships(path)[index].位置索引\n                    = relationships(path)[index - 1].位置索引 + 1\n            )\n        )\n\n\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [method IN nodes(path) | method.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法",
+          "oracle_cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay'\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [target.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法\n        UNION\n        MATCH method_path=(target:方法)-[:链中下一节点*1..5]->(out:方法)\n        MATCH (out)-[:下游调用]->(down:下游API)\n        WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay' AND\n        ALL(\n            rel IN relationships(method_path)\n            WHERE rel.路径签名 = relationships(method_path)[0].路径签名\n        )\n        AND (\n            size(relationships(method_path)) = 1\n            OR ALL(\n                index IN range(1, size(relationships(method_path)) - 1)\n                WHERE relationships(method_path)[index].位置索引\n                    = relationships(method_path)[index - 1].位置索引 + 1\n            )\n        )\n        OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务)\n        OPTIONAL MATCH (down)-[:外部调用]->(up:上游API)\n        OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up)\n        RETURN DISTINCT target.全限定名 AS 目标方法,\n               [method IN nodes(method_path) | method.全限定名] AS 方法路径,\n               down.API路径 AS 下游API,\n               target_service.服务名称 AS 下游服务,\n               up.API路径 AS 目标上游API,\n               target_entry.全限定名 AS 目标入口方法",
           "comparison_mode": "row_set",
           "expected_columns": [
             "目标方法",
@@ -2234,6 +2241,50 @@
               "下游服务": "ts-payment-service",
               "目标上游API": "/api/v1/paymentservice/payment",
               "目标入口方法": "com.trainticket.controller.PaymentController.pay"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay",
+                "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"
+              ],
+              "下游API": "/api/v1/orderOtherService/orderOther/status//",
+              "下游服务": "ts-order-other-service",
+              "目标上游API": "/api/v1/orderOtherService/orderOther",
+              "目标入口方法": "other.controller.OrderOtherController.findAllOrder"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay",
+                "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"
+              ],
+              "下游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/",
+              "下游服务": "ts-order-other-service",
+              "目标上游API": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}",
+              "目标入口方法": "other.controller.OrderOtherController.modifyOrder"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay",
+                "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"
+              ],
+              "下游API": "/api/v1/orderservice/order/status//",
+              "下游服务": "ts-order-service",
+              "目标上游API": "/api/v1/orderservice/order",
+              "目标入口方法": "order.controller.OrderController.findAllOrder"
+            },
+            {
+              "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
+              "方法路径": [
+                "inside_payment.service.InsidePaymentServiceImpl.pay",
+                "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"
+              ],
+              "下游API": "/api/v1/orderservice/order/status/{orderId}/",
+              "下游服务": "ts-order-service",
+              "目标上游API": "/api/v1/orderservice/order/status/{orderId}/{status}",
+              "目标入口方法": "order.controller.OrderController.modifyOrder"
             }
           ]
         }

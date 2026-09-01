@@ -47,7 +47,8 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "不同分组和返回形状不要合并" in prompt.system
     assert "代码知识图谱业务语义：" in prompt.system
     assert "方法-[:服务于]->上游API" in prompt.system
-    assert "禁止对 `调用` 使用可变长度遍历" in prompt.system
+    assert "不得再用 `调用深度` 判断是否直接" in prompt.system
+    assert "只有查询可达集合时才对 `调用` 使用可变长度遍历" in prompt.system
     assert "完整入口链可以是目标方法自身" in prompt.system
     assert "完整下游链必须用 `UNION` 分开" in prompt.system
     assert "在每个分支完整投影 `目标方法`、`方法路径`、`下游API`" in prompt.system

@@ -6,7 +6,7 @@ from evaluation.dataset import load_cases
 from evaluation.regrade import regrade_records
 
 
-def test_v4_regrade_contract_produces_seventy_four_matches() -> None:
+def test_v5_regrade_contract_produces_seventy_four_matches() -> None:
     cases = load_cases()
     records: list[dict[str, object]] = []
     index = 0

@@ -1,4 +1,4 @@
-"""Tests for the frozen Week 4 evaluation dataset."""
+"""Tests for the frozen version-5 evaluation dataset."""
 
 from __future__ import annotations
 
@@ -169,12 +169,24 @@ def test_rest_mq_and_impact_oracles_follow_current_semantics() -> None:
         for intent in cases["consign-insert-impact"].intents
         if intent.id == "upstream_methods"
     )
-    assert "[:调用]->" in impact.oracle_cypher
-    assert "[:调用*" not in impact.oracle_cypher
-    assert any(
-        row["上游方法"] == "consign.controller.ConsignController.insertConsign"
-        for row in impact.expected_snapshot
+    assert "[:调用*1..]" in impact.oracle_cypher
+    assert "调用深度" not in impact.oracle_cypher
+    assert {row["上游方法"] for row in impact.expected_snapshot} == {
+        "consign.controller.ConsignController.insertConsign",
+        "consign.controller.ConsignController.updateConsign",
+        "consign.service.ConsignServiceImpl.updateConsignRecord",
+    }
+
+    entry_impact = next(
+        intent
+        for intent in cases["consign-insert-impact"].intents
+        if intent.id == "entry_apis"
     )
+    assert "[:调用*1..]" in entry_impact.oracle_cypher
+    assert {row["请求方式"] for row in entry_impact.expected_snapshot} == {
+        "POST",
+        "PUT",
+    }
 
     senders = next(
         intent
@@ -252,3 +264,12 @@ def test_call_chain_method_paths_do_not_include_class_nodes() -> None:
         path[-1] == "consign.service.ConsignServiceImpl.insertConsignRecord"
         for path in (row["方法路径"] for row in intent.expected_snapshot)
     )
+
+    downstream = cases["inside-payment-pay-full-downstream-chain"].intents[0]
+    assert "MATCH method_path=" in downstream.oracle_cypher
+    method_path_clause = downstream.oracle_cypher.split(
+        "MATCH method_path=",
+        maxsplit=1,
+    )[1].split("MATCH (out)", maxsplit=1)[0]
+    assert "下游调用" not in method_path_clause
+    assert len(downstream.expected_snapshot) == 7

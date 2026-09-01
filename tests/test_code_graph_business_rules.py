@@ -24,11 +24,13 @@ def test_loads_complete_business_rules_from_package_resource() -> None:
     assert rules.startswith("# 代码知识图谱业务语义")
     assert "方法-[:服务于]->上游API" in rules
     assert "方法-[:下游调用]->下游API" in rules
-    assert "调用深度 IN [0,1]" in rules
+    assert "不得再用 `调用深度` 判断是否直接" in rules
+    assert "length(path) AS 调用距离" in rules
     assert "禁止把短类名当成 `类.全限定名`" in rules
     assert "禁止拿服务名称与 `方法.全限定名`" in rules
     assert "直接上游调用者的唯一方向是" in rules
     assert "可达入口 API 必须先绑定" in rules
+    assert "[:调用*1..]->(target)" in rules
     assert "链中下一节点" in rules
     assert "完整下游链必须用 `UNION` 分开" in rules
     assert "发布至.路由键 = 路由至.路由键" in rules
