@@ -21,6 +21,10 @@ def test_primary_agent_prompt_is_schema_free_and_uses_capabilities_once() -> Non
     assert "Schema" not in prompt.user
     assert "不要生成 Cypher" in prompt.system
     assert "未绑定指代" in prompt.system
+    assert "不得按返回列机械拆分" in prompt.system
+    assert "哪些方法调用 X" in prompt.system
+    assert "不得自行添加原问题没有的直接、间接、可达性" in prompt.system
+    assert "按每个对象给出度量" in prompt.system
 
 
 @pytest.mark.parametrize(

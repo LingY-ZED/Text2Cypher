@@ -25,6 +25,11 @@ def test_loads_abstract_semantic_capabilities_from_package_resource() -> None:
     assert "API 入口" in capabilities
     assert "消息发布方" in capabilities
     assert "有序调用路径" in capabilities
+    assert "不要按返回列、属性或关系端点机械拆分" in capabilities
+    assert "分组维度与其聚合值" in capabilities
+    assert "哪些方法调用 X" in capabilities
+    assert "不得扩大或缩小原问题的范围" in capabilities
+    assert "按每个对象给出度量" in capabilities
     assert "方法-[:服务于]->上游API" not in capabilities
     assert "MATCH" not in capabilities
 
