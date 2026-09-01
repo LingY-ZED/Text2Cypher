@@ -7,7 +7,8 @@ import pytest
 
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
 from text2cypher.components.code_graph_business_rules import (
-    load_code_graph_business_rules,
+    BusinessRuleModule,
+    load_code_graph_business_rule_module,
 )
 from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
@@ -80,7 +81,7 @@ def test_correction_prompt_reuses_base_context_and_marks_candidate_as_data() -> 
     assert prompt.user.endswith("只输出修正后的一条 Cypher：")
 
 
-def test_correction_prompt_inherits_shared_business_rules_from_generator() -> None:
+def test_correction_prompt_inherits_selected_business_rules_from_generator() -> None:
     base_prompt = DefaultPromptBuilder().build(GraphSchema(), "list nodes")
     prompt = CypherCorrectionPromptBuilder().build(
         base_prompt,
@@ -88,7 +89,10 @@ def test_correction_prompt_inherits_shared_business_rules_from_generator() -> No
         _failure_context(CypherFailureKind.PARSE),
     )
 
-    assert prompt.system.count(load_code_graph_business_rules()) == 1
+    assert prompt.system.count(
+        load_code_graph_business_rule_module(BusinessRuleModule.CORE)
+    ) == 1
+    assert "详细消息路径固定为" not in prompt.system
 
 
 def test_correction_prompt_rejects_blank_candidate() -> None:

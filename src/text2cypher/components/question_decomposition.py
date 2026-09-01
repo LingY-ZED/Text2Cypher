@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from text2cypher.components.code_graph_business_rules import (
-    load_code_graph_business_rules,
+from text2cypher.components.primary_agent_semantic_capabilities import (
+    load_primary_agent_semantic_capabilities,
 )
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
@@ -76,8 +76,8 @@ class QuestionDecompositionPromptBuilder:
         return ChatPrompt(
             system=(
                 f"{self.system_instruction}\n\n"
-                "代码知识图谱业务语义：\n"
-                f"{load_code_graph_business_rules()}"
+                "代码知识图谱可检索业务能力：\n"
+                f"{load_primary_agent_semantic_capabilities()}"
             ),
             user=user,
         )

@@ -7,8 +7,12 @@ import logging
 import re
 from collections.abc import Iterable
 
-from text2cypher.components.code_graph_business_rules import (
-    load_code_graph_business_rules,
+from text2cypher.components.code_graph_business_rule_routing import (
+    render_few_shot_routing_rules,
+)
+from text2cypher.components.code_graph_business_rule_selector import (
+    BusinessRulePromptStage,
+    CodeGraphBusinessRuleSelector,
 )
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
@@ -41,14 +45,6 @@ class LLMFewShotRouter:
         "分组维度和聚合形状；4. 业务类别。\n"
         "方向或返回形状冲突的示例不得仅因共享关键词而优先选择；不能确认方向"
         "或形状一致时，应少选或不选。\n"
-        "直接上游方法、入口 API、完整上游链、完整下游链、方法直接远程出口和"
-        "服务级依赖是不同形状；选择完整链时不得用只返回其中一列的示例替代。\n"
-        "直接上游方法只选择调用者指向目标、返回调用者的方法示例，不能选择目标"
-        "指向被调用者的直接下游示例；完整上游链和完整下游链必须优先选择各自的"
-        "完整链示例。\n"
-        "方法变更拆分后按当前子问题的返回对象路由：全部上游方法选反向调用，"
-        "可达入口 API 选入口追踪，变更方法直接远程下游服务选方法直接出口；"
-        "不得因共有的‘影响/回归’字样改选其他方向。\n"
         "若问题先通过一种关系确定对象，再要求查询每个对象的另一类关联，候选应"
         "同时覆盖起始锚点和最终返回形状；不得只因第一段关键词选择同类别但缺少"
         "第二段返回形状的示例。\n"
@@ -65,6 +61,7 @@ class LLMFewShotRouter:
         max_chars: int = 3500,
         compatibility_filter: FewShotSchemaCompatibilityFilter | None = None,
         schema_graph_builder: SchemaGraphBuilder | None = None,
+        rule_selector: CodeGraphBusinessRuleSelector | None = None,
     ) -> None:
         if not 1 <= top_k <= 3:
             raise ValueError("top_k 必须在 1 到 3 之间")
@@ -83,6 +80,7 @@ class LLMFewShotRouter:
             compatibility_filter or FewShotSchemaCompatibilityFilter()
         )
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
+        self._rule_selector = rule_selector or CodeGraphBusinessRuleSelector()
 
     def route(
         self,
@@ -144,6 +142,11 @@ class LLMFewShotRouter:
         candidates: tuple[FewShotExample, ...],
     ) -> ChatPrompt:
         query_shape = resolve_query_shape(question)
+        rule_modules = self._rule_selector.select(
+            question,
+            stage=BusinessRulePromptStage.FEW_SHOT_ROUTER,
+            query_shape=query_shape,
+        )
         metadata = [
             {
                 "id": example.id,
@@ -169,7 +172,7 @@ class LLMFewShotRouter:
             system=(
                 f"{self.system_instruction}\n\n"
                 "代码知识图谱业务语义：\n"
-                f"{load_code_graph_business_rules()}"
+                f"{render_few_shot_routing_rules(rule_modules)}"
             ),
             user=user,
         )

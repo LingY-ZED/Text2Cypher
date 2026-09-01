@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from text2cypher.components.code_graph_business_rules import (
-    load_code_graph_business_rules,
+    BusinessRuleModule,
+    load_code_graph_business_rule_module,
 )
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.errors import PromptBuildError
@@ -18,7 +19,7 @@ from text2cypher.domain.models import (
 )
 
 
-def test_prompt_includes_question_complete_schema_and_shared_rules() -> None:
+def test_prompt_includes_question_complete_schema_and_selected_rules() -> None:
     schema = GraphSchema(
         nodes=(
             NodeSchema(
@@ -45,14 +46,18 @@ def test_prompt_includes_question_complete_schema_and_shared_rules() -> None:
     )
 
     prompt = DefaultPromptBuilder().build(schema, "列出所有微服务")
-    rules = load_code_graph_business_rules()
+    core = load_code_graph_business_rule_module(BusinessRuleModule.CORE)
+    anchor = load_code_graph_business_rule_module(
+        BusinessRuleModule.ANCHOR_OWNERSHIP
+    )
 
     assert "只能使用提供的图谱 Schema" in prompt.system
     assert "不得生成写入、管理或过程调用" in prompt.system
-    assert prompt.system.count(rules) == 1
+    assert prompt.system.count(core) == 1
+    assert prompt.system.count(anchor) == 1
     assert "代码知识图谱业务语义：" in prompt.system
-    assert "方法-[:服务于]->上游API" in prompt.system
-    assert "发布至.路由键 = 路由至.路由键" in prompt.system
+    assert "方法-[:服务于]->上游API" not in prompt.system
+    assert "发布至.路由键 = 路由至.路由键" not in prompt.system
     assert "代码知识图谱业务语义：" not in prompt.user
     assert "节点属性：" in prompt.user
     assert "关系属性：" in prompt.user
@@ -63,16 +68,16 @@ def test_prompt_includes_question_complete_schema_and_shared_rules() -> None:
     assert prompt.user.endswith("只输出 Cypher：")
 
 
-def test_business_rules_are_not_gated_by_question_or_schema() -> None:
+def test_unknown_scene_injects_only_core_rules() -> None:
     prompt = DefaultPromptBuilder().build(
         GraphSchema(nodes=(NodeSchema(name="City"),)),
         "用另一种说法描述城市列表",
     )
-    rules = load_code_graph_business_rules()
+    core = load_code_graph_business_rule_module(BusinessRuleModule.CORE)
 
-    assert rules in prompt.system
-    assert "上游入口" in prompt.system
-    assert "完整消息路径" in prompt.system
+    assert prompt.system.count(core) == 1
+    assert "上游入口固定为" not in prompt.system
+    assert "详细消息路径固定为" not in prompt.system
     assert "API端点" not in prompt.user
     assert "微服务" not in prompt.user
     assert "可适用的业务语义" not in prompt.user
@@ -110,7 +115,9 @@ def test_prompt_injects_selected_examples_after_schema() -> None:
     assert "关系方向若与当前关系模式冲突" in prompt.system
     assert "不得拼接多个示例的关系模式" in prompt.system
     assert "不得为了验证结果增加当前问题未要求的关系" in prompt.system
-    assert prompt.system.count(load_code_graph_business_rules()) == 1
+    assert prompt.system.count(
+        load_code_graph_business_rule_module(BusinessRuleModule.CORE)
+    ) == 1
 
 
 def test_prompt_changes_with_dynamic_schema_without_changing_rules() -> None:

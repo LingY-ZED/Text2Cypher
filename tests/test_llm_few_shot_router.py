@@ -105,10 +105,10 @@ def test_router_sends_only_stable_compatible_metadata() -> None:
     assert "关系方向" in prompt.system
     assert "返回字段、分组维度和聚合形状" in prompt.system
     assert "不得仅因共享关键词而优先选择" in prompt.system
-    assert "完整上游链、完整下游链" in prompt.system
-    assert "变更方法直接远程下游服务选方法直接出口" in prompt.system
-    assert "选择完整链时不得用只返回其中一列的示例替代" in prompt.system
     assert "同时覆盖起始锚点和最终返回形状" in prompt.system
+    assert "# 代码知识图谱业务语义：路由核心" in prompt.system
+    assert "# 代码知识图谱业务语义：路由有序路径" not in prompt.system
+    assert "方法-[:下游调用]->下游API" not in prompt.system
 
 
 @pytest.mark.parametrize(

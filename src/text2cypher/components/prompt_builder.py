@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from text2cypher.components.code_graph_business_rule_selector import (
+    BusinessRulePromptStage,
+    CodeGraphBusinessRuleSelector,
+)
 from text2cypher.components.code_graph_business_rules import (
-    load_code_graph_business_rules,
+    BusinessRuleModule,
+    load_code_graph_business_rule_modules,
 )
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
@@ -36,9 +41,12 @@ class DefaultPromptBuilder:
         self,
         schema_graph_builder: SchemaGraphBuilder | None = None,
         schema_serializer: SchemaSerializer | None = None,
+        *,
+        rule_selector: CodeGraphBusinessRuleSelector | None = None,
     ) -> None:
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
         self._schema_serializer = schema_serializer or SchemaSerializer()
+        self._rule_selector = rule_selector or CodeGraphBusinessRuleSelector()
 
     def build(
         self,
@@ -50,6 +58,11 @@ class DefaultPromptBuilder:
         if not normalized_question:
             raise PromptBuildError("问题不能为空")
 
+        rule_modules = self._rule_selector.select(
+            normalized_question,
+            stage=BusinessRulePromptStage.CYPHER_TRANSLATOR,
+            examples=examples,
+        )
         schema_graph = self._schema_graph_builder.build(schema)
         serialized_schema = self._schema_serializer.serialize(schema, schema_graph)
         user_sections = ["图谱 Schema：", serialized_schema]
@@ -58,23 +71,23 @@ class DefaultPromptBuilder:
         user_sections.extend(("用户问题：", normalized_question, "只输出 Cypher："))
 
         return ChatPrompt(
-            system=self._system_instruction(examples),
+            system=self._system_instruction(examples, rule_modules),
             user="\n\n".join(user_sections),
         )
 
-    @classmethod
     def _system_instruction(
-        cls,
+        self,
         examples: tuple[FewShotExample, ...],
+        rule_modules: tuple[BusinessRuleModule, ...],
     ) -> str:
         instruction = (
-            f"{cls.system_instruction}\n\n"
+            f"{self.system_instruction}\n\n"
             "代码知识图谱业务语义：\n"
-            f"{load_code_graph_business_rules()}"
+            f"{load_code_graph_business_rule_modules(rule_modules)}"
         )
         if not examples:
             return instruction
-        return f"{instruction}\n\n{cls.few_shot_system_instruction}"
+        return f"{instruction}\n\n{self.few_shot_system_instruction}"
 
     @staticmethod
     def _render_examples(examples: tuple[FewShotExample, ...]) -> str:
