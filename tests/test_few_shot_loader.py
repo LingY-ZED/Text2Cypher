@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from text2cypher.domain.errors import FewShotLibraryError
+from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 
 
@@ -56,6 +57,7 @@ def test_loader_builds_immutable_domain_examples(tmp_path: Path) -> None:
     assert example.schema_requirements.patterns[0].start_labels == ("A",)
     assert example.schema_requirements.patterns[0].relationship_type == "R"
     assert example.schema_requirements.patterns[0].end_labels == ("B",)
+    assert example.query_shape is QueryShape.GENERAL
     with pytest.raises(TypeError):
         example.schema_requirements.node_properties["A"] = ("other",)  # type: ignore[index]
     with pytest.raises(FrozenInstanceError):
@@ -73,6 +75,27 @@ def test_loader_allows_call_as_relationship_variable_name(
     examples = JsonFewShotExampleLoader(library_path).load()
 
     assert examples[0].cypher == payload["cypher"]
+
+
+def test_loader_reads_explicit_query_shape(tmp_path: Path) -> None:
+    library_path = tmp_path / "examples.json"
+    payload = _example_payload()
+    payload["query_shape"] = "upstream_reachability"
+    _write_library(library_path, [payload])
+
+    examples = JsonFewShotExampleLoader(library_path).load()
+
+    assert examples[0].query_shape is QueryShape.UPSTREAM_REACHABILITY
+
+
+def test_loader_rejects_unknown_query_shape(tmp_path: Path) -> None:
+    library_path = tmp_path / "examples.json"
+    payload = _example_payload()
+    payload["query_shape"] = "unknown"
+    _write_library(library_path, [payload])
+
+    with pytest.raises(FewShotLibraryError, match="不在允许范围内"):
+        JsonFewShotExampleLoader(library_path).load()
 
 
 def test_loader_rejects_duplicate_ids(tmp_path: Path) -> None:

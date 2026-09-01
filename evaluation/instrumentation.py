@@ -25,6 +25,7 @@ from text2cypher.domain.ports import (
     LLMClient,
     PrimaryAgent,
 )
+from text2cypher.domain.query_shapes import resolve_query_shape
 
 
 @dataclass(slots=True)
@@ -113,6 +114,7 @@ class RecordingFewShotRouter:
             stage="selection",
             outcome="succeeded",
             question=question,
+            effective_query_shape=resolve_query_shape(question).value,
             selected_ids=[example.id for example in selected],
             query_index=self._recorder.current_query_index + 1,
         )

@@ -145,6 +145,15 @@ def test_prompt_rejects_blank_question() -> None:
         DefaultPromptBuilder().build(GraphSchema(), "   ")
 
 
+def test_prompt_does_not_include_primary_agent_internal_contract_fields() -> None:
+    prompt = DefaultPromptBuilder().build(GraphSchema(), "查询服务")
+
+    assert "query_shape" not in prompt.user
+    assert "requested_fields" not in prompt.user
+    assert "查询形状：" not in prompt.user
+    assert "请求字段：" not in prompt.user
+
+
 def _few_shot_example(
     identifier: str,
     question: str,

@@ -15,8 +15,13 @@ from text2cypher.components.few_shot_schema_filter import (
 )
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.errors import LLMGenerationError
-from text2cypher.domain.models import ChatPrompt, FewShotExample, GraphSchema
+from text2cypher.domain.models import (
+    ChatPrompt,
+    FewShotExample,
+    GraphSchema,
+)
 from text2cypher.domain.ports import LLMClient
+from text2cypher.domain.query_shapes import resolve_query_shape
 
 _LOGGER = logging.getLogger(__name__)
 _JSON_FENCE = re.compile(
@@ -87,6 +92,7 @@ class LLMFewShotRouter:
         normalized_question = question.strip()
         if not normalized_question:
             return ()
+        query_shape = resolve_query_shape(normalized_question)
 
         schema_graph = self._schema_graph_builder.build(schema)
         compatible = tuple(
@@ -97,6 +103,11 @@ class LLMFewShotRouter:
                 schema,
                 schema_graph,
             )
+        )
+        compatible = tuple(
+            example
+            for example in compatible
+            if example.query_shape is query_shape
         )
         if not compatible:
             return ()
@@ -132,6 +143,7 @@ class LLMFewShotRouter:
         question: str,
         candidates: tuple[FewShotExample, ...],
     ) -> ChatPrompt:
+        query_shape = resolve_query_shape(question)
         metadata = [
             {
                 "id": example.id,
@@ -139,12 +151,14 @@ class LLMFewShotRouter:
                 "question": example.question,
                 "aliases": example.aliases,
                 "tags": example.tags,
+                "query_shape": example.query_shape.value,
             }
             for example in candidates
         ]
         user = "\n\n".join(
             (
                 f"最多选择 {self._top_k} 条候选。",
+                "查询形状：\n" + query_shape.value,
                 "用户问题：\n" + question,
                 "兼容候选元数据：\n"
                 + json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),

@@ -14,8 +14,9 @@ from text2cypher.domain.models import (
     FewShotSchemaRequirements,
     RelationshipPattern,
 )
+from text2cypher.domain.query_shapes import QueryShape
 
-_EXAMPLE_KEYS = {
+_REQUIRED_EXAMPLE_KEYS = {
     "id",
     "category",
     "question",
@@ -24,6 +25,7 @@ _EXAMPLE_KEYS = {
     "tags",
     "schema_requirements",
 }
+_OPTIONAL_EXAMPLE_KEYS = {"query_shape"}
 _REQUIREMENT_KEYS = {
     "node_labels",
     "relationship_types",
@@ -84,13 +86,28 @@ class JsonFewShotExampleLoader:
     @classmethod
     def _parse_example(cls, value: Any, index: int) -> FewShotExample:
         data = cls._object(value, f"示例 {index}")
-        cls._exact_keys(data, _EXAMPLE_KEYS, f"示例 {index}")
+        if (
+            not _REQUIRED_EXAMPLE_KEYS.issubset(data)
+            or not set(data).issubset(
+                _REQUIRED_EXAMPLE_KEYS | _OPTIONAL_EXAMPLE_KEYS
+            )
+        ):
+            raise FewShotLibraryError(f"示例 {index} 字段集合不合法")
         cypher = cls._text(data, "cypher", f"示例 {index}")
         cls._validate_cypher(cypher)
         requirements = cls._parse_requirements(
             data["schema_requirements"],
             index,
         )
+        raw_query_shape = data.get("query_shape", QueryShape.GENERAL.value)
+        if not isinstance(raw_query_shape, str) or not raw_query_shape.strip():
+            raise FewShotLibraryError(f"示例 {index}.query_shape 必须是非空文本")
+        try:
+            query_shape = QueryShape(raw_query_shape.strip())
+        except ValueError:
+            raise FewShotLibraryError(
+                f"示例 {index}.query_shape 不在允许范围内"
+            ) from None
         try:
             return FewShotExample(
                 id=cls._text(data, "id", f"示例 {index}"),
@@ -108,8 +125,9 @@ class JsonFewShotExampleLoader:
                     require_values=True,
                 ),
                 schema_requirements=requirements,
+                query_shape=query_shape,
             )
-        except ValueError:
+        except (TypeError, ValueError):
             raise FewShotLibraryError("Few-shot 示例字段不合法") from None
 
     @classmethod

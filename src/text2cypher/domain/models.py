@@ -8,6 +8,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
+from text2cypher.domain.query_shapes import QueryShape
+
 
 def _require_text(value: str, field_name: str) -> str:
     normalized = value.strip()
@@ -323,6 +325,7 @@ class FewShotExample:
     aliases: tuple[str, ...]
     tags: tuple[str, ...]
     schema_requirements: FewShotSchemaRequirements
+    query_shape: QueryShape = QueryShape.GENERAL
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", _require_text(self.id, "示例 ID"))
@@ -349,6 +352,8 @@ class FewShotExample:
         if not tags:
             raise ValueError("示例标签不能为空")
         object.__setattr__(self, "tags", tags)
+        if not isinstance(self.query_shape, QueryShape):
+            raise TypeError("示例查询形状必须是 QueryShape")
 
 
 @dataclass(frozen=True, slots=True)

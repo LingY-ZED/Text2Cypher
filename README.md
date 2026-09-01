@@ -86,8 +86,8 @@ TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
 TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 ```
 
-空路径使用包内 24 条黄金示例，其中包含接口分派、有序方法路径、完整上游和下游调用链、
-REST 外部映射及 MQ 调用点；设置外部 JSON 路径可替换
+空路径使用包内 28 条黄金示例，其中包含普通/直接上游、接口分派、有序方法路径、完整上游和下游调用链、
+方法级直接 REST 出口、服务级 REST 外部映射及 MQ 调用点；设置外部 JSON 路径可替换
 示例库。Router 只接收通过
 实时 Schema 兼容过滤的候选元数据。设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过
 示例文件加载并恢复 Zero-shot。
@@ -221,7 +221,7 @@ $env:TEXT2CYPHER_RUN_INTEGRATION="1"
 pytest tests\integration\test_neo4j_readonly.py
 ```
 
-该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 24 条黄金示例逐条执行
+该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 28 条黄金示例逐条执行
 `EXPLAIN` 和真实查询，检查精确列名、非空结果、黄金行数及关键实体；不会写入或修改
 图数据。数据库快照变化后应显式复核并更新黄金结果。
 

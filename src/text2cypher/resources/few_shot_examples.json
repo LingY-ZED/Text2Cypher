@@ -2,8 +2,9 @@
   {
     "id": "simple-list-services",
     "category": "simple_query",
+    "query_shape": "general",
     "question": "系统中有哪些微服务？",
-    "cypher": "MATCH (service:微服务) RETURN service.服务名称 AS 服务名称 ORDER BY 服务名称",
+    "cypher": "MATCH (service:微服务)\nRETURN DISTINCT service.服务名称 AS 服务名称\nORDER BY 服务名称",
     "aliases": [
       "查看图谱包含的服务列表",
       "查询全部微服务名称"
@@ -30,8 +31,9 @@
   {
     "id": "simple-filter-upstream-apis",
     "category": "simple_query",
+    "query_shape": "general",
     "question": "查询所有对外暴露的上游 API 路径和请求方式。",
-    "cypher": "MATCH (api:上游API) RETURN api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式 ORDER BY 接口路径, 请求方式",
+    "cypher": "MATCH (api:上游API)\nRETURN DISTINCT\n  api.API路径 AS 接口路径,\n  api.HTTP方法 AS 请求方式\nORDER BY 接口路径, 请求方式",
     "aliases": [
       "列出全部入口 API",
       "哪些接口是对外提供的上游 API"
@@ -60,8 +62,9 @@
   {
     "id": "simple-api-contract",
     "category": "simple_query",
+    "query_shape": "general",
     "question": "POST /api/v1/adminrouteservice/adminroute 使用什么请求体和响应类型？",
-    "cypher": "MATCH (api:上游API {API路径: '/api/v1/adminrouteservice/adminroute', HTTP方法: 'POST'}) RETURN api.请求体类型 AS 请求体类型, api.响应类型 AS 响应类型",
+    "cypher": "MATCH (api:上游API {\n  API路径: '/api/v1/adminrouteservice/adminroute',\n  HTTP方法: 'POST'\n})\nRETURN DISTINCT\n  api.请求体类型 AS 请求体类型,\n  api.响应类型 AS 响应类型\nORDER BY 请求体类型, 响应类型",
     "aliases": [
       "查询指定 API 的请求与响应数据类型",
       "查看接口契约类型"
@@ -92,8 +95,9 @@
   {
     "id": "ownership-service-apis",
     "category": "path_query",
+    "query_shape": "general",
     "question": "从 AdminRouteServiceImpl 找到所属微服务，并列出该服务全部公开 API 和请求方式。",
-    "cypher": "MATCH (anchor:类 {简名: 'AdminRouteServiceImpl'})-[:归属于]->(service:微服务) MATCH (service)<-[:归属于]-(:类)<-[:归属于]-(method:方法)-[:服务于]->(api:上游API) RETURN DISTINCT api.API路径 AS 接口路径, api.HTTP方法 AS 请求方式 ORDER BY 接口路径, 请求方式",
+    "cypher": "MATCH (anchorClass:类 {简名: 'AdminRouteServiceImpl'})\n  -[:归属于]->(service:微服务)\nMATCH (service)<-[:归属于]-(serviceClass:类)\n  <-[:归属于]-(serviceMethod:方法)\n  -[:服务于]->(api:上游API)\nRETURN DISTINCT\n  api.API路径 AS 接口路径,\n  api.HTTP方法 AS 请求方式\nORDER BY 接口路径, 请求方式",
     "aliases": [
       "查询某个服务对外提供的 API",
       "从类推导所属服务后查询服务的全部上游接口"
@@ -163,8 +167,9 @@
   {
     "id": "path-class-methods",
     "category": "path_query",
+    "query_shape": "general",
     "question": "consignprice.service.ConsignPriceServiceImpl 定义了哪些方法及签名？",
-    "cypher": "MATCH (method:方法)-[:归属于]->(class:类 {全限定名: 'consignprice.service.ConsignPriceServiceImpl'}) RETURN method.方法名 AS 方法名, method.方法签名 AS 方法签名 ORDER BY 方法名, 方法签名",
+    "cypher": "MATCH (method:方法)-[:归属于]->(anchorClass:类 {\n  全限定名: 'consignprice.service.ConsignPriceServiceImpl'\n})\nRETURN DISTINCT\n  method.方法名 AS 方法名,\n  method.方法签名 AS 方法签名\nORDER BY 方法名, 方法签名",
     "aliases": [
       "列出指定类声明的方法",
       "查看类中的方法和签名"
@@ -209,8 +214,9 @@
   {
     "id": "path-interface-implementation",
     "category": "path_query",
+    "query_shape": "general",
     "question": "auth.service.impl.TokenServiceImpl 实现了哪个接口？",
-    "cypher": "MATCH (implementation:类 {全限定名: 'auth.service.impl.TokenServiceImpl'})-[:接口实现]->(interface:类) RETURN interface.全限定名 AS 接口全限定名",
+    "cypher": "MATCH (anchorClass:类 {\n  全限定名: 'auth.service.impl.TokenServiceImpl'\n})-[:接口实现]->(interfaceClass:类)\nRETURN DISTINCT interfaceClass.全限定名 AS 接口全限定名\nORDER BY 接口全限定名",
     "aliases": [
       "查询实现类对应的接口",
       "查看类的接口实现关系"
@@ -250,8 +256,9 @@
   {
     "id": "path-queue-owner",
     "category": "path_query",
+    "query_shape": "general",
     "question": "列出所有消息队列及其所属微服务。",
-    "cypher": "MATCH (queue:消息队列)-[:归属于]->(service:微服务) RETURN queue.队列名称 AS 队列名称, service.服务名称 AS 服务名称 ORDER BY 队列名称, 服务名称",
+    "cypher": "MATCH (queue:消息队列)-[:归属于]->(service:微服务)\nRETURN DISTINCT\n  queue.队列名称 AS 队列名称,\n  service.服务名称 AS 服务名称\nORDER BY 队列名称, 服务名称",
     "aliases": [
       "查询队列归属的服务",
       "列出消息队列和所属微服务"
@@ -294,8 +301,9 @@
   {
     "id": "call-method-downstream-methods",
     "category": "path_query",
+    "query_shape": "general",
     "question": "RebookServiceImpl.rebook 直接调用了哪些方法？",
-    "cypher": "MATCH (caller:方法)-[call:调用]->(callee:方法) WHERE caller.所属类名 ENDS WITH '.RebookServiceImpl' AND caller.方法名 = 'rebook' AND call.调用深度 IN [0, 1] RETURN DISTINCT callee.全限定名 AS 被调用方法 ORDER BY 被调用方法",
+    "cypher": "MATCH (callerMethod:方法)-[call:调用]->(calledMethod:方法)\nWHERE\n  callerMethod.所属类名 ENDS WITH '.RebookServiceImpl' AND\n  callerMethod.方法名 = 'rebook' AND\n  call.调用深度 IN [0, 1]\nRETURN DISTINCT calledMethod.全限定名 AS 被调用方法\nORDER BY 被调用方法",
     "aliases": [
       "查询方法的直接下游方法",
       "方法下一步调用了谁"
@@ -340,8 +348,9 @@
   {
     "id": "call-method-downstream-services",
     "category": "path_query",
+    "query_shape": "general",
     "question": "InsidePaymentServiceImpl.pay 会直接远程调用哪些下游服务和接口？",
-    "cypher": "MATCH (caller:方法)-[:下游调用]->(api:下游API)-[:目标服务]->(service:微服务) WHERE caller.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND caller.方法名 = 'pay' RETURN DISTINCT service.服务名称 AS 下游服务, api.API路径 AS 接口路径 ORDER BY 下游服务, 接口路径",
+    "cypher": "MATCH (sourceMethod:方法)-[:下游调用]->(downstreamApi:下游API)\n  -[:目标服务]->(targetService:微服务)\nWHERE\n  sourceMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  sourceMethod.方法名 = 'pay'\nRETURN DISTINCT\n  targetService.服务名称 AS 下游服务,\n  downstreamApi.API路径 AS 接口路径\nORDER BY 下游服务, 接口路径",
     "aliases": [
       "查询方法直接访问的远程下游服务",
       "变更方法直接调用了哪些下游 API"
@@ -401,8 +410,9 @@
   {
     "id": "call-service-outgoing-rest",
     "category": "path_query",
+    "query_shape": "general",
     "question": "ts-rebook-service 通过 REST 调用了哪些下游服务，调用方法是什么？",
-    "cypher": "MATCH (source:微服务 {服务名称: 'ts-rebook-service'})<-[:归属于]-(:类)<-[:归属于]-(method:方法)-[:下游调用]->(:下游API)-[:目标服务]->(target:微服务) RETURN DISTINCT method.全限定名 AS 调用方法, target.服务名称 AS 下游服务 ORDER BY 下游服务, 调用方法",
+    "cypher": "MATCH (sourceService:微服务 {服务名称: 'ts-rebook-service'})\n  <-[:归属于]-(sourceClass:类)\n  <-[:归属于]-(sourceMethod:方法)\n  -[:下游调用]->(downstreamApi:下游API)\n  -[:目标服务]->(targetService:微服务)\nRETURN DISTINCT\n  sourceMethod.全限定名 AS 调用方法,\n  targetService.服务名称 AS 下游服务\nORDER BY 下游服务, 调用方法",
     "aliases": [
       "查询服务发起的 REST 依赖",
       "服务依赖哪些下游服务"
@@ -477,8 +487,9 @@
   {
     "id": "impact-upstream-services",
     "category": "impact_analysis",
+    "query_shape": "general",
     "question": "查询到达 ts-order-other-service 的调用服务、调用方法、下游 API、目标上游 API 和目标入口方法，保持完整对应。",
-    "cypher": "MATCH (caller_service:微服务)<-[:归属于]-(:类)<-[:归属于]-(caller_method:方法)-[:下游调用]->(down:下游API)-[:目标服务]->(:微服务 {服务名称: 'ts-order-other-service'}) OPTIONAL MATCH (down)-[:外部调用]->(up:上游API) OPTIONAL MATCH (entry:方法)-[:服务于]->(up) RETURN DISTINCT caller_service.服务名称 AS 调用服务, caller_method.全限定名 AS 调用方法, down.API路径 AS 下游API, up.API路径 AS 目标上游API, entry.全限定名 AS 目标入口方法 ORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
+    "cypher": "MATCH (callerService:微服务)<-[:归属于]-(callerClass:类)\n  <-[:归属于]-(callerMethod:方法)\n  -[:下游调用]->(downstreamApi:下游API)\n  -[:目标服务]->(targetService:微服务 {\n    服务名称: 'ts-order-other-service'\n  })\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  callerService.服务名称 AS 调用服务,\n  callerMethod.全限定名 AS 调用方法,\n  downstreamApi.API路径 AS 下游API,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法\nORDER BY 调用服务, 调用方法, 下游API, 目标上游API",
     "aliases": [
       "反向查询目标服务的 REST 调用方与完整入口映射",
       "查询目标服务的调用服务、方法和 API 逐行对应关系"
@@ -581,8 +592,9 @@
   {
     "id": "impact-entry-apis",
     "category": "impact_analysis",
+    "query_shape": "general",
     "question": "修改 ConsignServiceImpl.updateConsignRecord 会影响哪些入口方法和 API？",
-    "cypher": "MATCH (changed:方法), (entry:方法)-[:服务于]->(api:上游API) WHERE changed.所属类名 ENDS WITH '.ConsignServiceImpl' AND changed.方法名 = 'updateConsignRecord' AND (entry = changed OR EXISTS { MATCH (entry)-[reach:调用]->(changed) WHERE reach.调用深度 <= 5 }) RETURN DISTINCT entry.全限定名 AS 入口方法, api.API路径 AS 入口接口, api.HTTP方法 AS 请求方式 ORDER BY 入口接口, 入口方法",
+    "cypher": "MATCH (anchorMethod:方法)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.ConsignServiceImpl' AND\n  anchorMethod.方法名 = 'updateConsignRecord'\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nWHERE\n  entryMethod = anchorMethod OR\n  EXISTS {\n    MATCH (entryMethod)-[reach:调用]->(anchorMethod)\n    WHERE reach.调用深度 <= 5\n  }\nRETURN DISTINCT\n  entryMethod.全限定名 AS 入口方法,\n  entryApi.API路径 AS 入口接口,\n  entryApi.HTTP方法 AS 请求方式\nORDER BY 入口接口, 入口方法",
     "aliases": [
       "查询直接上游调用方法",
       "查询可达入口 API 和入口方法"
@@ -644,8 +656,9 @@
   {
     "id": "mq-between-services",
     "category": "mq_query",
+    "query_shape": "general",
     "question": "ts-preserve-service 与 ts-notification-service 之间通过哪些 MQ 通道通信？",
-    "cypher": "MATCH (sender:微服务 {服务名称: 'ts-preserve-service'})-[dependency:消息依赖]->(receiver:微服务 {服务名称: 'ts-notification-service'}) RETURN dependency.交换机名称 AS 交换机名称, dependency.队列名称 AS 队列名称, dependency.路由键 AS 路由键",
+    "cypher": "MATCH (senderService:微服务 {\n  服务名称: 'ts-preserve-service'\n})-[dependency:消息依赖]->(receiverService:微服务 {\n  服务名称: 'ts-notification-service'\n})\nRETURN DISTINCT\n  dependency.交换机名称 AS 交换机名称,\n  dependency.队列名称 AS 队列名称,\n  dependency.路由键 AS 路由键\nORDER BY 交换机名称, 队列名称, 路由键",
     "aliases": [
       "查询两个服务之间的消息依赖",
       "服务之间通过哪些 MQ 通道通信"
@@ -690,8 +703,9 @@
   {
     "id": "mq-publishers-for-queue",
     "category": "mq_query",
+    "query_shape": "general",
     "question": "哪些发布方法经交换机向 food_delivery 队列发送消息？",
-    "cypher": "MATCH (publisher:方法)-[publish:发布至]->(exchange:消息交换机)-[route:路由至]->(queue:消息队列 {队列名称: 'food_delivery'}) WHERE publish.路由键 = route.路由键 RETURN DISTINCT publisher.全限定名 AS 发布方法, exchange.交换机名称 AS 交换机名称 ORDER BY 发布方法",
+    "cypher": "MATCH (publisherMethod:方法)-[publish:发布至]->(exchange:消息交换机)\n  -[route:路由至]->(queue:消息队列 {队列名称: 'food_delivery'})\nWHERE publish.路由键 = route.路由键\nRETURN DISTINCT\n  publisherMethod.全限定名 AS 发布方法,\n  exchange.交换机名称 AS 交换机名称\nORDER BY 发布方法, 交换机名称",
     "aliases": [
       "沿方法到交换机再到队列查询发布方",
       "谁经发布和路由向指定队列发送消息"
@@ -756,8 +770,9 @@
   {
     "id": "mq-full-message-chain",
     "category": "mq_query",
+    "query_shape": "general",
     "question": "展开 food_delivery 的完整消息链，返回发布方法、发送服务、交换机、队列、消费方法和接收服务。",
-    "cypher": "MATCH (publisher:方法)-[publish:发布至]->(exchange:消息交换机)-[route:路由至]->(queue:消息队列 {队列名称: 'food_delivery'})-[:消费自]->(consumer:方法), (publisher)-[:归属于]->(:类)-[:归属于]->(sender:微服务), (consumer)-[:归属于]->(:类)-[:归属于]->(receiver:微服务) WHERE publish.路由键 = route.路由键 RETURN DISTINCT publisher.全限定名 AS 发布方法, sender.服务名称 AS 发送服务, exchange.交换机名称 AS 交换机名称, queue.队列名称 AS 队列名称, consumer.全限定名 AS 消费方法, receiver.服务名称 AS 接收服务",
+    "cypher": "MATCH (publisherMethod:方法)-[publish:发布至]->(exchange:消息交换机)\n  -[route:路由至]->(queue:消息队列 {队列名称: 'food_delivery'})\n  -[:消费自]->(consumerMethod:方法)\nMATCH (publisherMethod)-[:归属于]->(publisherClass:类)\n  -[:归属于]->(senderService:微服务)\nMATCH (consumerMethod)-[:归属于]->(consumerClass:类)\n  -[:归属于]->(receiverService:微服务)\nWHERE publish.路由键 = route.路由键\nRETURN DISTINCT\n  publisherMethod.全限定名 AS 发布方法,\n  senderService.服务名称 AS 发送服务,\n  exchange.交换机名称 AS 交换机名称,\n  queue.队列名称 AS 队列名称,\n  consumerMethod.全限定名 AS 消费方法,\n  receiverService.服务名称 AS 接收服务\nORDER BY 发布方法, 消费方法",
     "aliases": [
       "追踪指定队列的发布方法到交换机再到消费方法的完整 MQ 链路",
       "查询消息路径以及发布和消费方法所属服务"
@@ -857,8 +872,9 @@
   {
     "id": "aggregate-service-api-counts",
     "category": "aggregate_statistics",
+    "query_shape": "general",
     "question": "按请求方式统计 ts-admin-route-service 对外 API 数量。",
-    "cypher": "MATCH (service:微服务 {服务名称: 'ts-admin-route-service'})<-[:归属于]-(:类)<-[:归属于]-(method:方法)-[:服务于]->(api:上游API) RETURN api.HTTP方法 AS 请求方式, count(DISTINCT api) AS API数量 ORDER BY 请求方式",
+    "cypher": "MATCH (service:微服务 {服务名称: 'ts-admin-route-service'})\n  <-[:归属于]-(serviceClass:类)\n  <-[:归属于]-(serviceMethod:方法)\n  -[:服务于]->(api:上游API)\nRETURN\n  api.HTTP方法 AS 请求方式,\n  count(DISTINCT api) AS API数量\nORDER BY 请求方式",
     "aliases": [
       "按请求方式汇总服务 API",
       "统计服务不同 HTTP 方法的接口数"
@@ -923,8 +939,9 @@
   {
     "id": "aggregate-service-target-calls",
     "category": "aggregate_statistics",
+    "query_shape": "general",
     "question": "按下游服务统计 ts-admin-basic-info-service 的 REST 调用关系数。",
-    "cypher": "MATCH (source:微服务 {服务名称: 'ts-admin-basic-info-service'})<-[:归属于]-(:类)<-[:归属于]-(:方法)-[remote:下游调用]->(:下游API)-[:目标服务]->(target:微服务) RETURN target.服务名称 AS 下游服务, count(DISTINCT remote) AS 调用关系数 ORDER BY 调用关系数 DESC, 下游服务",
+    "cypher": "MATCH (sourceService:微服务 {\n  服务名称: 'ts-admin-basic-info-service'\n})<-[:归属于]-(sourceClass:类)\n  <-[:归属于]-(sourceMethod:方法)\n  -[remote:下游调用]->(downstreamApi:下游API)\n  -[:目标服务]->(targetService:微服务)\nRETURN\n  targetService.服务名称 AS 下游服务,\n  count(DISTINCT remote) AS 调用关系数\nORDER BY 调用关系数 DESC, 下游服务",
     "aliases": [
       "按目标服务统计远程调用",
       "汇总服务的 REST 下游调用关系"
@@ -996,8 +1013,9 @@
   {
     "id": "aggregate-interface-implementations",
     "category": "aggregate_statistics",
+    "query_shape": "general",
     "question": "按微服务统计接口实现类数量。",
-    "cypher": "MATCH (implementation:类)-[:接口实现]->(:类), (implementation)-[:归属于]->(service:微服务) RETURN service.服务名称 AS 服务名称, count(DISTINCT implementation) AS 实现类数量 ORDER BY 实现类数量 DESC, 服务名称",
+    "cypher": "MATCH (implementationClass:类)-[:接口实现]->(interfaceClass:类)\nMATCH (implementationClass)-[:归属于]->(service:微服务)\nRETURN\n  service.服务名称 AS 服务名称,\n  count(DISTINCT implementationClass) AS 实现类数量\nORDER BY 实现类数量 DESC, 服务名称",
     "aliases": [
       "统计各服务的接口实现类",
       "按服务汇总实现类数量"
@@ -1046,10 +1064,105 @@
     }
   },
   {
+    "id": "call-method-upstream-reachability",
+    "category": "path_query",
+    "query_shape": "upstream_reachability",
+    "question": "查询 getTickets 的上游调用链。",
+    "cypher": "MATCH (upstreamMethod:方法)-[reach:调用]->(targetMethod:方法)\nWHERE targetMethod.方法名 = 'getTickets'\nRETURN DISTINCT\n  targetMethod.全限定名 AS 目标方法,\n  upstreamMethod.全限定名 AS 上游方法,\n  reach.调用深度 AS 调用深度\nORDER BY 目标方法, 调用深度, 上游方法",
+    "aliases": [
+      "查询目标方法的所有上游可达方法",
+      "列出调用目标方法的上游方法和深度"
+    ],
+    "tags": [
+      "路径查询",
+      "上游调用链",
+      "可达集合",
+      "调用深度"
+    ],
+    "schema_requirements": {
+      "node_labels": [
+        "方法"
+      ],
+      "relationship_types": [
+        "调用"
+      ],
+      "node_properties": {
+        "方法": [
+          "方法名",
+          "全限定名"
+        ]
+      },
+      "relationship_properties": {
+        "调用": [
+          "调用深度"
+        ]
+      },
+      "patterns": [
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "调用",
+          "end_labels": [
+            "方法"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "call-method-direct-upstream",
+    "category": "path_query",
+    "query_shape": "direct_upstream",
+    "question": "哪些方法直接调用 FoodServiceImpl.getAllFood？",
+    "cypher": "MATCH (upstreamMethod:方法)-[directCall:调用]->(targetMethod:方法)\nWHERE\n  targetMethod.所属类名 ENDS WITH '.FoodServiceImpl' AND\n  targetMethod.方法名 = 'getAllFood' AND\n  directCall.调用深度 IN [0, 1]\nRETURN DISTINCT\n  targetMethod.全限定名 AS 目标方法,\n  upstreamMethod.全限定名 AS 上游方法\nORDER BY 目标方法, 上游方法",
+    "aliases": [
+      "查询目标方法的直接上游方法",
+      "哪些方法直接调用指定方法"
+    ],
+    "tags": [
+      "路径查询",
+      "直接上游",
+      "调用者"
+    ],
+    "schema_requirements": {
+      "node_labels": [
+        "方法"
+      ],
+      "relationship_types": [
+        "调用"
+      ],
+      "node_properties": {
+        "方法": [
+          "所属类名",
+          "方法名",
+          "全限定名"
+        ]
+      },
+      "relationship_properties": {
+        "调用": [
+          "调用深度"
+        ]
+      },
+      "patterns": [
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "调用",
+          "end_labels": [
+            "方法"
+          ]
+        }
+      ]
+    }
+  },
+  {
     "id": "call-method-full-upstream-chain",
     "category": "path_query",
+    "query_shape": "full_entry_chain",
     "question": "查询 FoodServiceImpl.getAllFood 的完整上游调用链，包括入口 API 和有序方法路径。",
-    "cypher": "MATCH (entry:方法)-[:服务于]->(entry_api:上游API), (entry)-[:接口调用]->(target:方法) WHERE target.方法名 = 'getAllFood' RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.API路径 AS 入口API, [entry.全限定名, target.全限定名] AS 方法路径 UNION MATCH (entry:方法)-[:服务于]->(entry_api:上游API), path=(entry)-[:链中下一节点*1..5]->(target:方法) WHERE target.方法名 = 'getAllFood' AND ALL( rel IN relationships(path) WHERE rel.路径签名 = relationships(path)[0].路径签名 ) AND ( size(relationships(path)) = 1 OR ALL( index IN range(1, size(relationships(path)) - 1) WHERE relationships(path)[index].位置索引 = relationships(path)[index - 1].位置索引 + 1 ) ) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.API路径 AS 入口API, [method IN nodes(path) | method.全限定名] AS 方法路径 UNION MATCH (entry:方法)-[:服务于]->(entry_api:上游API), (entry)-[:接口调用]->(first:方法), path=(first)-[:链中下一节点*1..4]->(target:方法) WHERE target.方法名 = 'getAllFood' AND ALL( rel IN relationships(path) WHERE rel.路径签名 = relationships(path)[0].路径签名 ) AND ( size(relationships(path)) = 1 OR ALL( index IN range(1, size(relationships(path)) - 1) WHERE relationships(path)[index].位置索引 = relationships(path)[index - 1].位置索引 + 1 ) ) RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.API路径 AS 入口API, [entry.全限定名] + [method IN nodes(path) | method.全限定名] AS 方法路径 UNION MATCH (target:方法)-[:服务于]->(entry_api:上游API) WHERE target.方法名 = 'getAllFood' RETURN DISTINCT target.全限定名 AS 目标方法, entry_api.API路径 AS 入口API, [target.全限定名] AS 方法路径",
+    "cypher": "MATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(anchorMethod:方法)\nWHERE anchorMethod.方法名 = 'getAllFood'\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名, anchorMethod.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH path = (entryMethod)-[:链中下一节点*1..5]->(anchorMethod:方法)\nWHERE\n  anchorMethod.方法名 = 'getAllFood' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [method IN nodes(path) | method.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(firstMethod:方法)\nMATCH path = (firstMethod)-[:链中下一节点*1..4]->(anchorMethod:方法)\nWHERE\n  anchorMethod.方法名 = 'getAllFood' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名] + [method IN nodes(path) | method.全限定名]\n    AS 方法路径\n\nUNION\n\nMATCH (anchorMethod:方法)-[:服务于]->(entryApi:上游API)\nWHERE anchorMethod.方法名 = 'getAllFood'\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [anchorMethod.全限定名] AS 方法路径",
     "aliases": [
       "追踪方法的入口 API 与完整上游方法路径",
       "查询到达目标方法的有序上游链"
@@ -1119,8 +1232,9 @@
   {
     "id": "call-method-full-downstream-chain",
     "category": "path_query",
+    "query_shape": "full_downstream_chain",
     "question": "查询 InsidePaymentServiceImpl.pay 的完整下游调用链，包括方法路径、下游 API、目标服务和目标入口 API。",
-    "cypher": "MATCH (target:方法)-[:下游调用]->(down:下游API) WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay' OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务) OPTIONAL MATCH (down)-[:外部调用]->(up:上游API) OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up) RETURN DISTINCT target.全限定名 AS 目标方法, [target.全限定名] AS 方法路径, down.API路径 AS 下游API, target_service.服务名称 AS 下游服务, up.API路径 AS 目标上游API, target_entry.全限定名 AS 目标入口方法 UNION MATCH path=(target:方法)-[:链中下一节点*1..5]->(out:方法)-[:下游调用]->(down:下游API) WHERE target.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND target.方法名 = 'pay' AND ALL( rel IN relationships(path) WHERE rel.路径签名 = relationships(path)[0].路径签名 ) AND ( size(relationships(path)) = 1 OR ALL( index IN range(1, size(relationships(path)) - 1) WHERE relationships(path)[index].位置索引 = relationships(path)[index - 1].位置索引 + 1 ) ) OPTIONAL MATCH (down)-[:目标服务]->(target_service:微服务) OPTIONAL MATCH (down)-[:外部调用]->(up:上游API) OPTIONAL MATCH (target_entry:方法)-[:服务于]->(up) RETURN DISTINCT target.全限定名 AS 目标方法, [method IN nodes(path) | method.全限定名] AS 方法路径, down.API路径 AS 下游API, target_service.服务名称 AS 下游服务, up.API路径 AS 目标上游API, target_entry.全限定名 AS 目标入口方法",
+    "cypher": "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  anchorMethod.方法名 = 'pay'\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [anchorMethod.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法\n\nUNION\n\nMATCH path = (anchorMethod:方法)-[:链中下一节点*1..5]->(outboundMethod:方法)\n  -[:下游调用]->(downstreamApi:下游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  anchorMethod.方法名 = 'pay' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [method IN nodes(path) | method.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法",
     "aliases": [
       "追踪方法到远程 API 和目标入口的完整下游链",
       "查询有序下游方法路径与直接跨服务边界"
@@ -1220,8 +1334,9 @@
   {
     "id": "call-interface-dispatch",
     "category": "path_query",
+    "query_shape": "general",
     "question": "FoodController.getAllFood 经哪个接口调用了哪个实现方法？",
-    "cypher": "MATCH (caller:方法)-[dispatch:接口调用]->(implementation:方法) WHERE caller.所属类名 ENDS WITH '.FoodController' AND caller.方法名 = 'getAllFood' RETURN DISTINCT caller.全限定名 AS 调用方法, implementation.全限定名 AS 实现方法, dispatch.经由接口 AS 经由接口",
+    "cypher": "MATCH (callerMethod:方法)-[dispatch:接口调用]->(implementationMethod:方法)\nWHERE\n  callerMethod.所属类名 ENDS WITH '.FoodController' AND\n  callerMethod.方法名 = 'getAllFood'\nRETURN DISTINCT\n  callerMethod.全限定名 AS 调用方法,\n  implementationMethod.全限定名 AS 实现方法,\n  dispatch.经由接口 AS 经由接口\nORDER BY 调用方法, 实现方法, 经由接口",
     "aliases": [
       "查询 Controller 到实现方法的接口分派",
       "接口调用经过哪个接口"
@@ -1267,8 +1382,9 @@
   {
     "id": "call-ordered-method-path",
     "category": "path_query",
+    "query_shape": "ordered_method_path",
     "question": "查询 WaitListOrderServiceImpl.triggerThread 到 PollThread.doPreserve 的有序方法路径。",
-    "cypher": "MATCH path=(start:方法)-[:链中下一节点*1..5]->(target:方法) WHERE start.所属类名 ENDS WITH '.WaitListOrderServiceImpl' AND start.方法名 = 'triggerThread' AND target.所属类名 ENDS WITH '.PollThread' AND target.方法名 = 'doPreserve' AND ALL(rel IN relationships(path) WHERE rel.路径签名 = relationships(path)[0].路径签名) AND (size(relationships(path)) = 1 OR ALL(index IN range(1, size(relationships(path)) - 1) WHERE relationships(path)[index].位置索引 = relationships(path)[index - 1].位置索引 + 1)) RETURN DISTINCT relationships(path)[0].路径签名 AS 路径签名, [method IN nodes(path) | method.全限定名] AS 方法路径",
+    "cypher": "MATCH path = (startMethod:方法)-[:链中下一节点*1..5]->(endMethod:方法)\nWHERE\n  startMethod.所属类名 ENDS WITH '.WaitListOrderServiceImpl' AND\n  startMethod.方法名 = 'triggerThread' AND\n  endMethod.所属类名 ENDS WITH '.PollThread' AND\n  endMethod.方法名 = 'doPreserve' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  relationships(path)[0].路径签名 AS 路径签名,\n  [method IN nodes(path) | method.全限定名] AS 方法路径",
     "aliases": [
       "按路径签名恢复普通调用链",
       "查询连续位置索引对应的方法顺序"
@@ -1315,8 +1431,9 @@
   {
     "id": "api-external-mapping",
     "category": "path_query",
+    "query_shape": "general",
     "question": "列出 InsidePaymentServiceImpl.pay 的下游 API、目标服务、目标上游 API、入口方法和映射类型。",
-    "cypher": "MATCH (caller:方法)-[:下游调用]->(down:下游API) WHERE caller.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND caller.方法名 = 'pay' OPTIONAL MATCH (down)-[:目标服务]->(service:微服务) OPTIONAL MATCH (down)-[mapping:外部调用]->(up:上游API) OPTIONAL MATCH (entry:方法)-[:服务于]->(up) RETURN DISTINCT down.API路径 AS 下游API, service.服务名称 AS 下游服务, up.API路径 AS 目标上游API, entry.全限定名 AS 目标入口方法, mapping.匹配类型 AS 匹配类型 ORDER BY 下游API, 目标上游API",
+    "cypher": "MATCH (sourceMethod:方法)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  sourceMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  sourceMethod.方法名 = 'pay'\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[mapping:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法,\n  mapping.匹配类型 AS 匹配类型\nORDER BY 下游API, 目标上游API",
     "aliases": [
       "查询 REST 出口和目标入口的完整映射",
       "保留缺失跨服务映射的下游 API"
@@ -1403,10 +1520,177 @@
     }
   },
   {
+    "id": "call-method-direct-rest-egress",
+    "category": "path_query",
+    "query_shape": "direct_rest_egress",
+    "question": "InsidePaymentServiceImpl.pay 直接调用哪些下游 API 和目标服务？同时返回目标方法。",
+    "cypher": "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  anchorMethod.方法名 = 'pay'\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务\nORDER BY 目标方法, 下游API, 下游服务",
+    "aliases": [
+      "查询目标方法的直接 REST 出口和目标服务",
+      "返回锚定方法、下游 API 与下游服务"
+    ],
+    "tags": [
+      "路径查询",
+      "直接REST出口",
+      "目标方法",
+      "逐行对应"
+    ],
+    "schema_requirements": {
+      "node_labels": [
+        "方法",
+        "下游API",
+        "微服务"
+      ],
+      "relationship_types": [
+        "下游调用",
+        "目标服务"
+      ],
+      "node_properties": {
+        "方法": [
+          "所属类名",
+          "方法名",
+          "全限定名"
+        ],
+        "下游API": [
+          "API路径"
+        ],
+        "微服务": [
+          "服务名称"
+        ]
+      },
+      "relationship_properties": {},
+      "patterns": [
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "下游调用",
+          "end_labels": [
+            "下游API"
+          ]
+        },
+        {
+          "start_labels": [
+            "下游API"
+          ],
+          "relationship_type": "目标服务",
+          "end_labels": [
+            "微服务"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "service-rest-external-mapping",
+    "category": "path_query",
+    "query_shape": "general",
+    "question": "列出 ts-admin-basic-info-service 远程调用的下游 API，并保持调用方法、目标服务、目标上游 API 和目标入口方法的完整配对。",
+    "cypher": "MATCH (callerMethod:方法)-[:归属于]->(callerClass:类)-[:归属于]->(sourceService:微服务 {服务名称: 'ts-admin-basic-info-service'})\nMATCH (callerMethod)-[:下游调用]->(downstreamApi:下游API)\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  callerMethod.全限定名 AS 调用方法,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 目标服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法\nORDER BY 调用方法, 下游API, 目标上游API, 目标入口方法",
+    "aliases": [
+      "查询服务级 REST 出口与目标入口完整映射",
+      "保持调用方法、下游 API 和目标入口逐行配对"
+    ],
+    "tags": [
+      "路径查询",
+      "服务REST出口",
+      "外部调用",
+      "逐行对应"
+    ],
+    "schema_requirements": {
+      "node_labels": [
+        "方法",
+        "类",
+        "微服务",
+        "下游API",
+        "上游API"
+      ],
+      "relationship_types": [
+        "归属于",
+        "下游调用",
+        "目标服务",
+        "外部调用",
+        "服务于"
+      ],
+      "node_properties": {
+        "方法": [
+          "全限定名"
+        ],
+        "微服务": [
+          "服务名称"
+        ],
+        "下游API": [
+          "API路径"
+        ],
+        "上游API": [
+          "API路径"
+        ]
+      },
+      "relationship_properties": {},
+      "patterns": [
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "归属于",
+          "end_labels": [
+            "类"
+          ]
+        },
+        {
+          "start_labels": [
+            "类"
+          ],
+          "relationship_type": "归属于",
+          "end_labels": [
+            "微服务"
+          ]
+        },
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "下游调用",
+          "end_labels": [
+            "下游API"
+          ]
+        },
+        {
+          "start_labels": [
+            "下游API"
+          ],
+          "relationship_type": "目标服务",
+          "end_labels": [
+            "微服务"
+          ]
+        },
+        {
+          "start_labels": [
+            "下游API"
+          ],
+          "relationship_type": "外部调用",
+          "end_labels": [
+            "上游API"
+          ]
+        },
+        {
+          "start_labels": [
+            "方法"
+          ],
+          "relationship_type": "服务于",
+          "end_labels": [
+            "上游API"
+          ]
+        }
+      ]
+    }
+  },
+  {
     "id": "mq-publish-call-point",
     "category": "mq_query",
+    "query_shape": "general",
     "question": "preserve.mq.RabbitSend.send 在哪个调用点使用什么路由键发布到哪个交换机？",
-    "cypher": "MATCH (publisher:方法 {全限定名: 'preserve.mq.RabbitSend.send'})-[publish:发布至]->(exchange:消息交换机), (point:调用点)-[:归属于]->(publisher) WHERE publish.调用点标识 = point.语句文本 RETURN DISTINCT publisher.全限定名 AS 发布方法, point.源码行号 AS 源码行号, publish.路由键 AS 路由键, exchange.交换机名称 AS 交换机名称",
+    "cypher": "MATCH (publisherMethod:方法 {\n  全限定名: 'preserve.mq.RabbitSend.send'\n})-[publish:发布至]->(exchange:消息交换机)\nMATCH (callPoint:调用点)-[:归属于]->(publisherMethod)\nWHERE publish.调用点标识 = callPoint.语句文本\nRETURN DISTINCT\n  publisherMethod.全限定名 AS 发布方法,\n  callPoint.源码行号 AS 源码行号,\n  publish.路由键 AS 路由键,\n  exchange.交换机名称 AS 交换机名称\nORDER BY 发布方法, 源码行号, 路由键, 交换机名称",
     "aliases": [
       "查询 MQ 发布语句对应的调用点",
       "返回发布方法、调用点、路由键和交换机"

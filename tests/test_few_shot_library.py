@@ -5,9 +5,11 @@ from collections import Counter
 
 import pytest
 
+from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
+from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.models import (
     GraphSchema,
@@ -16,6 +18,7 @@ from text2cypher.domain.models import (
     RelationshipPattern,
     RelationshipSchema,
 )
+from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 
 
@@ -98,13 +101,13 @@ def code_knowledge_schema() -> GraphSchema:
     )
 
 
-def test_default_library_contains_expected_24_example_catalog() -> None:
+def test_default_library_contains_expected_28_example_catalog() -> None:
     examples = JsonFewShotExampleLoader().load()
 
-    assert len(examples) == 24
+    assert len(examples) == 28
     assert Counter(example.category for example in examples) == {
         "simple_query": 3,
-        "path_query": 12,
+        "path_query": 16,
         "impact_analysis": 2,
         "mq_query": 4,
         "aggregate_statistics": 3,
@@ -119,6 +122,9 @@ def test_default_library_contains_expected_24_example_catalog() -> None:
         "path-queue-owner",
         "call-method-downstream-methods",
         "call-method-downstream-services",
+        "call-method-upstream-reachability",
+        "call-method-direct-upstream",
+        "call-method-direct-rest-egress",
         "call-method-full-upstream-chain",
         "call-method-full-downstream-chain",
         "call-service-outgoing-rest",
@@ -133,10 +139,23 @@ def test_default_library_contains_expected_24_example_catalog() -> None:
         "call-interface-dispatch",
         "call-ordered-method-path",
         "api-external-mapping",
+        "service-rest-external-mapping",
         "mq-publish-call-point",
     }
     assert all(len(example.aliases) == 2 for example in examples)
     assert all(3 <= len(example.tags) <= 5 for example in examples)
+    assert {
+        example.id: example.query_shape
+        for example in examples
+        if example.query_shape is not QueryShape.GENERAL
+    } == {
+        "call-method-upstream-reachability": QueryShape.UPSTREAM_REACHABILITY,
+        "call-method-direct-upstream": QueryShape.DIRECT_UPSTREAM,
+        "call-method-full-upstream-chain": QueryShape.FULL_ENTRY_CHAIN,
+        "call-method-full-downstream-chain": QueryShape.FULL_DOWNSTREAM_CHAIN,
+        "call-ordered-method-path": QueryShape.ORDERED_METHOD_PATH,
+        "call-method-direct-rest-egress": QueryShape.DIRECT_REST_EGRESS,
+    }
 
 
 def test_all_default_examples_match_frozen_code_knowledge_schema(
@@ -191,18 +210,26 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     direct_methods = examples_by_id["call-method-downstream-methods"]
     assert "调用深度 IN [0, 1]" in direct_methods.cypher
     assert "所属类名" in direct_methods.cypher
+    upstream_reachability = examples_by_id["call-method-upstream-reachability"]
+    assert upstream_reachability.cypher.count("MATCH") == 1
+    assert "reach.调用深度 AS 调用深度" in upstream_reachability.cypher
+    assert "UNION" not in upstream_reachability.cypher
+    direct_upstream = examples_by_id["call-method-direct-upstream"]
+    assert "directCall.调用深度 IN [0, 1]" in direct_upstream.cypher
+    direct_rest = examples_by_id["call-method-direct-rest-egress"]
+    assert "anchorMethod.全限定名 AS 目标方法" in direct_rest.cypher
+    assert "外部调用" not in direct_rest.cypher
 
     service_apis = examples_by_id["ownership-service-apis"]
-    assert "(anchor:类 {简名:" in service_apis.cypher
+    assert "(anchorClass:类 {简名:" in service_apis.cypher
     assert service_apis.cypher.count("MATCH") == 2
-    assert "(service)<-[:归属于]-(:类)<-[:归属于]-(method:方法)" in (
-        service_apis.cypher
-    )
+    assert "(service)<-[:归属于]-(serviceClass:类)" in service_apis.cypher
+    assert "<-[:归属于]-(serviceMethod:方法)" in service_apis.cypher
 
     mq_publishers = examples_by_id["mq-publishers-for-queue"]
     assert "publish.路由键 = route.路由键" in mq_publishers.cypher
     mq_chain = examples_by_id["mq-full-message-chain"]
-    assert "-[:消费自]->(consumer:方法)" in mq_chain.cypher
+    assert "-[:消费自]->(consumerMethod:方法)" in mq_chain.cypher
     assert "publish.路由键 = route.路由键" in mq_chain.cypher
 
     upstream_chain = examples_by_id["call-method-full-upstream-chain"]
@@ -219,9 +246,115 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     external_mapping = examples_by_id["api-external-mapping"]
     assert "mapping.匹配类型 AS 匹配类型" in external_mapping.cypher
     assert external_mapping.cypher.count("OPTIONAL MATCH") == 3
+    service_mapping = examples_by_id["service-rest-external-mapping"]
+    assert "callerMethod.全限定名 AS 调用方法" in service_mapping.cypher
+    assert service_mapping.cypher.count("OPTIONAL MATCH") == 3
     upstream_rest = examples_by_id["impact-upstream-services"]
-    assert "caller_service.服务名称 AS 调用服务" in upstream_rest.cypher
-    assert "caller_method.全限定名 AS 调用方法" in upstream_rest.cypher
-    assert "entry.全限定名 AS 目标入口方法" in upstream_rest.cypher
+    assert "callerService.服务名称 AS 调用服务" in upstream_rest.cypher
+    assert "callerMethod.全限定名 AS 调用方法" in upstream_rest.cypher
+    assert "targetEntryMethod.全限定名 AS 目标入口方法" in upstream_rest.cypher
     call_point = examples_by_id["mq-publish-call-point"]
-    assert "publish.调用点标识 = point.语句文本" in call_point.cypher
+    assert "publish.调用点标识 = callPoint.语句文本" in call_point.cypher
+
+
+def test_default_library_uses_readable_cypher_style_and_role_variables() -> None:
+    examples = JsonFewShotExampleLoader().load()
+    examples_by_id = {example.id: example for example in examples}
+
+    for example in examples:
+        lines = example.cypher.splitlines()
+
+        assert len(lines) >= 3
+        assert all(line == line.rstrip() for line in lines)
+        assert re.search(
+            r"(?m)^(?:MATCH|OPTIONAL MATCH|WHERE|RETURN|ORDER BY|UNION)\b",
+            example.cypher,
+        )
+        assert re.search(r"\S[ \t]+WHERE\b", example.cypher) is None
+        assert re.search(r"\S[ \t]+RETURN\b", example.cypher) is None
+        assert re.search(r"\S[ \t]+ORDER BY\b", example.cypher) is None
+        assert re.search(r"\S[ \t]+UNION\b", example.cypher) is None
+        assert not re.search(
+            r"\b(?:caller_|target_|entry_|source_)\w*",
+            example.cypher,
+        )
+        if example.category != "aggregate_statistics":
+            assert "RETURN DISTINCT" in example.cypher
+
+    direct_calls = examples_by_id["call-method-downstream-methods"]
+    assert "callerMethod" in direct_calls.cypher
+    assert "calledMethod" in direct_calls.cypher
+
+    downstream_chain = examples_by_id["call-method-full-downstream-chain"]
+    assert "anchorMethod" in downstream_chain.cypher
+    assert "targetEntryMethod" in downstream_chain.cypher
+    assert "(target:方法)" not in downstream_chain.cypher
+    assert downstream_chain.cypher.count("UNION") == 1
+
+    upstream_chain = examples_by_id["call-method-full-upstream-chain"]
+    assert upstream_chain.cypher.count("UNION") == 3
+    assert "pathRelationship" in upstream_chain.cypher
+    assert "\n  EXISTS {" in examples_by_id["impact-entry-apis"].cypher
+
+
+def test_default_library_preserves_multiline_cypher_in_generation_prompt() -> None:
+    example = next(
+        item
+        for item in JsonFewShotExampleLoader().load()
+        if item.id == "impact-entry-apis"
+    )
+
+    prompt = DefaultPromptBuilder().build(
+        GraphSchema(),
+        "当前问题",
+        (example,),
+    )
+
+    assert example.cypher in prompt.user
+    assert "\n  EXISTS {\n    MATCH" in prompt.user
+    assert "\nRETURN DISTINCT\n" in prompt.user
+
+
+@pytest.mark.parametrize(
+    "identifiers",
+    [
+        (
+            "call-method-downstream-services",
+            "call-method-full-downstream-chain",
+            "api-external-mapping",
+        ),
+        (
+            "call-method-full-upstream-chain",
+            "call-interface-dispatch",
+            "call-ordered-method-path",
+        ),
+        (
+            "mq-publishers-for-queue",
+            "mq-full-message-chain",
+            "mq-publish-call-point",
+        ),
+        (
+            "aggregate-service-api-counts",
+            "aggregate-service-target-calls",
+            "aggregate-interface-implementations",
+        ),
+        (
+            "service-rest-external-mapping",
+            "api-external-mapping",
+            "call-service-outgoing-rest",
+        ),
+    ],
+)
+def test_common_example_bundles_stay_within_default_prompt_budget(
+    identifiers: tuple[str, str, str],
+) -> None:
+    examples_by_id = {
+        example.id: example for example in JsonFewShotExampleLoader().load()
+    }
+
+    size = sum(
+        LLMFewShotRouter._prompt_block_size(examples_by_id[identifier], index)
+        for index, identifier in enumerate(identifiers, start=1)
+    )
+
+    assert size <= 3500

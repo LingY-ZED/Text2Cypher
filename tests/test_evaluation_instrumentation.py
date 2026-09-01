@@ -8,11 +8,17 @@ import pytest
 
 from evaluation.instrumentation import (
     EvaluationRecorder,
+    RecordingFewShotRouter,
     RecordingPrimaryAgent,
     RecoveryEventHandler,
     StageLLMClient,
 )
-from text2cypher.domain.models import ChatPrompt, LLMResponse, PrimaryAgentPlan
+from text2cypher.domain.models import (
+    ChatPrompt,
+    GraphSchema,
+    LLMResponse,
+    PrimaryAgentPlan,
+)
 
 
 class _SuccessfulClient:
@@ -99,6 +105,34 @@ def test_recording_primary_agent_keeps_plan_for_evaluation_only() -> None:
                     "required_information": ["回答原始问题所需的图数据"],
                 }
             ],
+        }
+    ]
+
+
+class _Router:
+    def route(self, question: str, schema: GraphSchema) -> tuple[object, ...]:
+        del question, schema
+        return ()
+
+
+def test_recording_router_records_only_deterministic_effective_shape() -> None:
+    recorder = EvaluationRecorder()
+
+    selected = RecordingFewShotRouter(_Router(), recorder).route(
+        "查询getTickets的上游调用链",
+        GraphSchema(),
+    )
+
+    assert selected == ()
+    assert recorder.events == [
+        {
+            "component": "router",
+            "stage": "selection",
+            "outcome": "succeeded",
+            "question": "查询getTickets的上游调用链",
+            "effective_query_shape": "upstream_reachability",
+            "selected_ids": [],
+            "query_index": 1,
         }
     ]
 

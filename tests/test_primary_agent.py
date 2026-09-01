@@ -25,6 +25,8 @@ def test_primary_agent_prompt_is_schema_free_and_uses_capabilities_once() -> Non
     assert "哪些方法调用 X" in prompt.system
     assert "不得自行添加原问题没有的直接、间接、可达性" in prompt.system
     assert "按每个对象给出度量" in prompt.system
+    assert "query_shape" not in prompt.user
+    assert "requested_fields" not in prompt.user
 
 
 @pytest.mark.parametrize(
@@ -73,6 +75,13 @@ def test_primary_agent_response_parser_accepts_strict_json(
             '{"analysis_summary":"摘要","queries":['
             '{"question":"原问题","intent":"意图",'
             '"required_information":["信息"],"extra":true}]}',
+            PrimaryAgentResponseError,
+        ),
+        (
+            '{"analysis_summary":"摘要","queries":['
+            '{"question":"原问题","intent":"意图",'
+            '"required_information":["信息"],'
+            '"query_shape":"general","requested_fields":["字段"]}]}',
             PrimaryAgentResponseError,
         ),
         (

@@ -14,6 +14,7 @@ from text2cypher.domain.models import (
     RelationshipPattern,
     RelationshipSchema,
 )
+from text2cypher.domain.query_shapes import QueryShape
 
 
 class StubLLMClient:
@@ -41,6 +42,7 @@ def _example(
     *,
     requirements: FewShotSchemaRequirements | None = None,
     cypher: str = "MATCH (n) RETURN n",
+    query_shape: QueryShape = QueryShape.GENERAL,
 ) -> FewShotExample:
     return FewShotExample(
         id=identifier,
@@ -50,6 +52,7 @@ def _example(
         aliases=(f"{identifier} 别名",),
         tags=("测试",),
         schema_requirements=requirements or FewShotSchemaRequirements(),
+        query_shape=query_shape,
     )
 
 
@@ -203,3 +206,110 @@ def test_router_applies_prompt_character_budget_after_id_validation() -> None:
     )
 
     assert router.route("查询", GraphSchema()) == ()
+
+
+def test_router_filters_schema_before_deterministic_query_shape() -> None:
+    client = StubLLMClient(
+        LLMResponse(
+            content='{"selected_ids":["upstream","entry","general"]}'
+        )
+    )
+    router = LLMFewShotRouter(
+        (
+            _example(
+                "upstream",
+                query_shape=QueryShape.UPSTREAM_REACHABILITY,
+            ),
+            _example("entry", query_shape=QueryShape.FULL_ENTRY_CHAIN),
+            _example("general"),
+        ),
+        client,
+    )
+
+    selected = router.route("查询getTickets的上游调用链", GraphSchema())
+
+    assert tuple(example.id for example in selected) == ("upstream",)
+    assert "upstream_reachability" in client.prompts[0].user
+    assert "entry" not in client.prompts[0].user
+    assert "general" not in client.prompts[0].user
+
+
+def test_router_keeps_only_direct_rest_example_for_explicit_shape() -> None:
+    client = StubLLMClient(
+        LLMResponse(content='{"selected_ids":["direct-rest","general"]}')
+    )
+    router = LLMFewShotRouter(
+        (
+            _example(
+                "direct-rest",
+                query_shape=QueryShape.DIRECT_REST_EGRESS,
+            ),
+            _example("general"),
+        ),
+        client,
+    )
+
+    selected = router.route(
+        "InsidePaymentServiceImpl.pay 直接调用哪些下游 API 和目标服务？"
+        "同时返回目标方法。",
+        GraphSchema(),
+    )
+
+    assert tuple(example.id for example in selected) == ("direct-rest",)
+    assert "direct_rest_egress" in client.prompts[0].user
+    assert "general" not in client.prompts[0].user
+
+
+def test_router_keeps_service_mapping_general_for_complete_pairing() -> None:
+    client = StubLLMClient(
+        LLMResponse(content='{"selected_ids":["service-map","full-chain"]}')
+    )
+    router = LLMFewShotRouter(
+        (
+            _example("service-map"),
+            _example(
+                "full-chain",
+                query_shape=QueryShape.FULL_DOWNSTREAM_CHAIN,
+            ),
+        ),
+        client,
+    )
+
+    selected = router.route(
+        "列出 ts-admin-basic-info-service 远程调用的下游 API，并保持调用方法、"
+        "目标服务、目标上游 API 和目标入口方法的完整配对。",
+        GraphSchema(),
+    )
+
+    assert tuple(example.id for example in selected) == ("service-map",)
+    assert "general" in client.prompts[0].user
+    assert "full-chain" not in client.prompts[0].user
+
+
+def test_router_recognizes_explicit_full_downstream_cross_service_chain() -> None:
+    client = StubLLMClient(
+        LLMResponse(content='{"selected_ids":["full-chain","ordered"]}')
+    )
+    router = LLMFewShotRouter(
+        (
+            _example(
+                "full-chain",
+                query_shape=QueryShape.FULL_DOWNSTREAM_CHAIN,
+            ),
+            _example(
+                "ordered",
+                query_shape=QueryShape.ORDERED_METHOD_PATH,
+            ),
+        ),
+        client,
+    )
+
+    selected = router.route(
+        "查询 InsidePaymentServiceImpl.pay 的完整下游跨服务调用链，"
+        "返回有序方法路径、下游 API、目标服务、目标上游 API 和入口方法。",
+        GraphSchema(),
+    )
+
+    assert tuple(example.id for example in selected) == ("full-chain",)
+    assert "full_downstream_chain" in client.prompts[0].user
+    assert "ordered" not in client.prompts[0].user
