@@ -8,6 +8,7 @@ from text2cypher.components.code_graph_business_rules import (
     load_code_graph_business_rule_module,
     load_code_graph_business_rules,
 )
+from text2cypher.components.primary_agent import PrimaryAgentPromptBuilder
 from text2cypher.components.primary_agent_semantic_capabilities import (
     load_primary_agent_semantic_capabilities,
 )
@@ -134,6 +135,47 @@ def test_translator_uses_selected_few_shot_metadata_to_complete_selection() -> N
 
     assert "方法-[:下游调用]->下游API" in prompt.system
     assert "详细消息路径固定为" not in prompt.system
+
+
+def test_decomposition_rules_stay_out_of_router_and_translator_prompts() -> None:
+    question = (
+        "修改 ConsignServiceImpl.insertConsignRecord 后，哪些上游方法、可到达的"
+        "入口 API 和远程下游服务需要回归验证？"
+    )
+    example = _example()
+    translator = DefaultPromptBuilder().build(GraphSchema(), question)
+    router = LLMFewShotRouter(
+        (example,),
+        _NoopLLMClient(),
+    )._build_router_prompt(question, (example,))
+
+    decomposition = load_code_graph_business_rule_module(
+        BusinessRuleModule.DECOMPOSITION
+    )
+    assert decomposition not in translator.system
+    assert load_code_graph_business_rule_module(
+        BusinessRuleModule.METHOD_CALL
+    ) in translator.system
+    assert load_code_graph_business_rule_module(
+        BusinessRuleModule.ENTRY_API
+    ) in translator.system
+    assert load_code_graph_business_rule_module(
+        BusinessRuleModule.REST
+    ) in translator.system
+    assert "路由问题拆分" not in router.system
+    assert "方法变更拆分后" not in router.system
+
+
+def test_primary_prompt_keeps_decomposition_semantics() -> None:
+    prompt = PrimaryAgentPromptBuilder().build(
+        "修改 ConsignServiceImpl.insertConsignRecord 后需要验证什么？",
+        3,
+    )
+
+    assert "必须拆成三个独立且重复方法锚点的子问题" in prompt.system
+    assert "只有多个业务视角能够独立重算" in prompt.system
+    assert "MATCH" not in prompt.system
+    assert "方法-[:调用]->方法" not in prompt.system
 
 
 def test_builders_expose_optional_rule_selector_without_port_changes() -> None:

@@ -132,10 +132,20 @@ def test_aggregation_does_not_create_a_business_scene_on_its_own() -> None:
     assert _select("统计数量") == (BusinessRuleModule.CORE,)
 
 
-def test_compound_change_question_selects_decomposition_and_scene_union() -> None:
+@pytest.mark.parametrize(
+    "stage",
+    (
+        BusinessRulePromptStage.FEW_SHOT_ROUTER,
+        BusinessRulePromptStage.CYPHER_TRANSLATOR,
+    ),
+)
+def test_compound_change_question_excludes_decomposition_from_consumers(
+    stage: BusinessRulePromptStage,
+) -> None:
     selected = _select(
         "修改 ConsignServiceImpl.insertConsignRecord 后，哪些上游方法、可到达的"
-        "入口 API 和远程下游服务需要回归验证？"
+        "入口 API 和远程下游服务需要回归验证？",
+        stage=stage,
     )
 
     assert selected == (
@@ -144,7 +154,6 @@ def test_compound_change_question_selects_decomposition_and_scene_union() -> Non
         BusinessRuleModule.METHOD_CALL,
         BusinessRuleModule.ENTRY_API,
         BusinessRuleModule.REST,
-        BusinessRuleModule.DECOMPOSITION,
     )
 
 

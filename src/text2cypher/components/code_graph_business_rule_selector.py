@@ -17,6 +17,19 @@ class BusinessRulePromptStage(StrEnum):
     CYPHER_TRANSLATOR = "cypher_translator"
 
 
+_STAGE_EXCLUDED_MODULES: dict[
+    BusinessRulePromptStage,
+    frozenset[BusinessRuleModule],
+] = {
+    BusinessRulePromptStage.FEW_SHOT_ROUTER: frozenset(
+        {BusinessRuleModule.DECOMPOSITION}
+    ),
+    BusinessRulePromptStage.CYPHER_TRANSLATOR: frozenset(
+        {BusinessRuleModule.DECOMPOSITION}
+    ),
+}
+
+
 _SHAPE_MODULES: dict[QueryShape, frozenset[BusinessRuleModule]] = {
     QueryShape.GENERAL: frozenset(),
     QueryShape.UPSTREAM_REACHABILITY: frozenset(
@@ -149,6 +162,7 @@ class CodeGraphBusinessRuleSelector:
         if modules == {BusinessRuleModule.AGGREGATION}:
             modules.clear()
         self._apply_dependencies(modules)
+        self._apply_stage_policy(modules, stage)
         modules.add(BusinessRuleModule.CORE)
         return tuple(module for module in BusinessRuleModule if module in modules)
 
@@ -257,6 +271,13 @@ class CodeGraphBusinessRuleSelector:
             modules.add(BusinessRuleModule.ANCHOR_OWNERSHIP)
         if BusinessRuleModule.ORDERED_PATH in modules:
             modules.add(BusinessRuleModule.METHOD_CALL)
+
+    @staticmethod
+    def _apply_stage_policy(
+        modules: set[BusinessRuleModule],
+        stage: BusinessRulePromptStage,
+    ) -> None:
+        modules.difference_update(_STAGE_EXCLUDED_MODULES[stage])
 
 
 def _contains_any(text: str, cues: tuple[str, ...]) -> bool:
