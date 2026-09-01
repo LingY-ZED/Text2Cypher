@@ -1,0 +1,170 @@
+"""Primary Agent 所需的纯 Prompt 构造与响应解析。"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from text2cypher.components.primary_agent_semantic_capabilities import (
+    load_primary_agent_semantic_capabilities,
+)
+from text2cypher.domain.models import (
+    ChatPrompt,
+    PrimaryAgentPlan,
+    PrimaryAgentQuery,
+)
+
+_JSON_FENCE = re.compile(
+    r"\A```json[ \t]*\r?\n(?P<document>[\s\S]*?)\r?\n```[ \t]*\Z",
+    re.IGNORECASE,
+)
+
+
+class PrimaryAgentResponseError(ValueError):
+    """Primary Agent 的模型响应格式不符合严格 JSON 契约。"""
+
+
+class PrimaryAgentPlanError(ValueError):
+    """Primary Agent 响应可解析但无法形成有效计划。"""
+
+
+class PrimaryAgentPromptBuilder:
+    """构造与物理图 Schema 解耦的 Primary Agent Prompt。"""
+
+    system_instruction = (
+        "你是 Primary LLM Agent，负责把用户问题规划为一到多个可独立执行的"
+        "自然语言检索任务。\n"
+        "只分析问题需要从代码知识图谱取得什么信息；不要生成 Cypher、数据库答案、"
+        "存储实现细节、标签、关系、属性或数据库值。\n"
+        "分析摘要只能是简洁的可审计任务说明，不要输出隐藏推理过程。\n"
+        "简单问题必须保留为原问题的唯一查询。只有多个意图能够分别独立重算、无需"
+        "消费其他查询结果时才拆分。每个查询必须自包含，重复固定对象、方向、条件、"
+        "范围和返回语义；不得使用‘这些对象’、‘上述服务’、‘每个结果’等未绑定指代。\n"
+        "不得把同一 API 的对应字段、同一有序调用路径、同一消息路径或同一分组结果"
+        "机械拆开。只返回 JSON，不返回 Markdown、解释或其他文本。"
+    )
+
+    def build(self, question: str, max_queries: int) -> ChatPrompt:
+        normalized_question = self._normalize_question(question)
+        self._validate_max_queries(max_queries)
+        user = "\n\n".join(
+            (
+                "用户问题：\n" + normalized_question,
+                f"复杂问题最多生成 {max_queries} 个查询。",
+                "只返回 JSON：\n"
+                '{"analysis_summary":"简洁任务摘要","queries":['
+                '{"question":"完整子问题","intent":"检索意图",'
+                '"required_information":["需要的信息"]}]}',
+            )
+        )
+        return ChatPrompt(
+            system=(
+                f"{self.system_instruction}\n\n"
+                "可检索业务能力：\n"
+                f"{load_primary_agent_semantic_capabilities()}"
+            ),
+            user=user,
+        )
+
+    @staticmethod
+    def _normalize_question(question: str) -> str:
+        if type(question) is not str:
+            raise TypeError("问题必须是字符串")
+        normalized_question = question.strip()
+        if not normalized_question:
+            raise ValueError("问题不能为空")
+        return normalized_question
+
+    @staticmethod
+    def _validate_max_queries(max_queries: int) -> None:
+        if type(max_queries) is not int or not 2 <= max_queries <= 3:
+            raise ValueError("max_queries 必须在 2 到 3 之间")
+
+
+class PrimaryAgentResponseParser:
+    """严格解析 Primary Agent 返回的结构化检索计划。"""
+
+    def parse(
+        self,
+        content: str,
+        original_question: str,
+        max_queries: int,
+    ) -> PrimaryAgentPlan:
+        normalized_original = PrimaryAgentPromptBuilder._normalize_question(
+            original_question
+        )
+        PrimaryAgentPromptBuilder._validate_max_queries(max_queries)
+        payload = self._parse_document(content)
+        if set(payload) != {"analysis_summary", "queries"}:
+            raise PrimaryAgentResponseError("规划响应字段不符合契约")
+
+        analysis_summary = self._parse_text(
+            payload["analysis_summary"],
+            "analysis_summary",
+        )
+        raw_queries = payload["queries"]
+        if not isinstance(raw_queries, list):
+            raise PrimaryAgentResponseError("queries 必须是列表")
+        if not 1 <= len(raw_queries) <= max_queries:
+            raise PrimaryAgentPlanError("规划查询数量超出允许范围")
+
+        queries = tuple(
+            self._parse_query(raw_query, index)
+            for index, raw_query in enumerate(raw_queries, start=1)
+        )
+        try:
+            return PrimaryAgentPlan(
+                original_question=normalized_original,
+                analysis_summary=analysis_summary,
+                queries=queries,
+            )
+        except (TypeError, ValueError) as error:
+            raise PrimaryAgentPlanError("规划内容不符合领域约束") from error
+
+    def _parse_query(self, raw_query: object, index: int) -> PrimaryAgentQuery:
+        if not isinstance(raw_query, dict):
+            raise PrimaryAgentResponseError("查询项必须是对象")
+        if set(raw_query) != {"question", "intent", "required_information"}:
+            raise PrimaryAgentResponseError("查询项字段不符合契约")
+        raw_required_information = raw_query["required_information"]
+        if not isinstance(raw_required_information, list):
+            raise PrimaryAgentResponseError("required_information 必须是列表")
+        required_information = tuple(
+            self._parse_text(item, "required_information")
+            for item in raw_required_information
+        )
+        try:
+            return PrimaryAgentQuery(
+                query_id=f"q{index}",
+                question=self._parse_text(raw_query["question"], "question"),
+                intent=self._parse_text(raw_query["intent"], "intent"),
+                required_information=required_information,
+            )
+        except (TypeError, ValueError) as error:
+            raise PrimaryAgentPlanError("查询项不符合领域约束") from error
+
+    @staticmethod
+    def _parse_text(value: object, field_name: str) -> str:
+        if type(value) is not str or not value.strip():
+            raise PrimaryAgentResponseError(f"{field_name} 必须是非空字符串")
+        return value.strip()
+
+    @staticmethod
+    def _parse_document(content: str) -> dict[str, Any]:
+        if type(content) is not str or not content.strip():
+            raise PrimaryAgentResponseError("规划响应不能为空")
+        document = content.strip()
+        fence_match = _JSON_FENCE.fullmatch(document)
+        if fence_match is not None:
+            document = fence_match.group("document")
+        elif document.startswith("```"):
+            raise PrimaryAgentResponseError("规划响应不是标准 JSON fence")
+
+        try:
+            payload = json.loads(document)
+        except json.JSONDecodeError as error:
+            raise PrimaryAgentResponseError("规划响应不是 JSON") from error
+        if not isinstance(payload, dict):
+            raise PrimaryAgentResponseError("规划 JSON 根节点必须是对象")
+        return payload

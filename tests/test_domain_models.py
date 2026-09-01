@@ -8,6 +8,8 @@ from text2cypher.domain.models import (
     CypherFailureContext,
     CypherFailureKind,
     CypherFailureSource,
+    PrimaryAgentPlan,
+    PrimaryAgentQuery,
     QueryResult,
     QuestionDecomposition,
     QuestionDecompositionReview,
@@ -181,6 +183,109 @@ def test_question_decomposition_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         decomposition.original_question = "新问题"  # type: ignore[misc]
+
+
+def test_primary_agent_plan_normalizes_and_projects_sub_questions() -> None:
+    plan = PrimaryAgentPlan(
+        original_question="  分析上下游  ",
+        analysis_summary="  需要分别取得上游和下游。  ",
+        queries=(
+            PrimaryAgentQuery(
+                "q1",
+                "  查询上游  ",
+                "  定位上游  ",
+                ("  上游调用者  ",),
+            ),
+            PrimaryAgentQuery(
+                "q2",
+                "查询下游",
+                "定位下游",
+                ("下游调用目标",),
+            ),
+        ),
+    )
+
+    assert plan.original_question == "分析上下游"
+    assert plan.analysis_summary == "需要分别取得上游和下游。"
+    assert plan.sub_questions == ("查询上游", "查询下游")
+    assert plan.decomposed is True
+
+
+def test_primary_agent_plan_fallback_preserves_original_question() -> None:
+    plan = PrimaryAgentPlan.fallback("  查询服务  ")
+
+    assert plan.analysis_summary == "使用原始问题执行单次检索"
+    assert plan.queries[0].query_id == "q1"
+    assert plan.sub_questions == ("查询服务",)
+    assert plan.decomposed is False
+
+
+@pytest.mark.parametrize(
+    ("queries", "message"),
+    [
+        ((), "1 到 3"),
+        (
+            (
+                PrimaryAgentQuery("q2", "问题", "意图", ("信息",)),
+            ),
+            "q1 起连续编号",
+        ),
+        (
+            (
+                PrimaryAgentQuery("q1", "改写问题", "意图", ("信息",)),
+            ),
+            "保留原始问题",
+        ),
+        (
+            (
+                PrimaryAgentQuery("q1", "重复", "意图一", ("信息一",)),
+                PrimaryAgentQuery("q2", "重复", "意图二", ("信息二",)),
+            ),
+            "不能重复",
+        ),
+    ],
+)
+def test_primary_agent_plan_rejects_invalid_queries(
+    queries: tuple[PrimaryAgentQuery, ...],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        PrimaryAgentPlan("原始问题", "分析摘要", queries)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"query_id": 1}, "查询 ID必须是字符串"),
+        ({"required_information": ["信息"]}, "所需信息必须是元组"),
+        ({"required_information": ()}, "所需信息不能为空"),
+        ({"required_information": ("重复", "重复")}, "所需信息不能重复"),
+    ],
+)
+def test_primary_agent_query_rejects_invalid_values(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "query_id": "q1",
+        "question": "问题",
+        "intent": "意图",
+        "required_information": ("信息",),
+    }
+    values.update(kwargs)
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        PrimaryAgentQuery(**values)  # type: ignore[arg-type]
+
+
+def test_primary_agent_models_are_immutable() -> None:
+    query = PrimaryAgentQuery("q1", "问题", "意图", ("信息",))
+    plan = PrimaryAgentPlan("问题", "分析摘要", (query,))
+
+    with pytest.raises(FrozenInstanceError):
+        query.intent = "其他意图"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        plan.analysis_summary = "其他摘要"  # type: ignore[misc]
 
 
 def test_text2cypher_response_uses_uniform_sub_query_shape() -> None:

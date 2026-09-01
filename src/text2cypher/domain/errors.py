@@ -21,6 +21,10 @@ class CodeGraphBusinessRulesError(ConfigurationError):
     """代码知识图谱业务规则资源不存在或内容非法。"""
 
 
+class PrimaryAgentSemanticCapabilitiesError(ConfigurationError):
+    """Primary Agent 抽象语义能力资源不存在或内容非法。"""
+
+
 class QuestionValidationError(Text2CypherError):
     """用户问题为空或不合法时抛出。"""
 

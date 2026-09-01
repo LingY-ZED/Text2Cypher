@@ -26,6 +26,9 @@ class JsonLogFormatter(logging.Formatter):
         )
         if isinstance(decomposition_review_event, dict):
             payload.update(decomposition_review_event)
+        primary_agent_event = getattr(record, "primary_agent_event", None)
+        if isinstance(primary_agent_event, dict):
+            payload.update(primary_agent_event)
         result_summary_event = getattr(record, "result_summary_event", None)
         if isinstance(result_summary_event, dict):
             payload.update(result_summary_event)

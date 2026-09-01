@@ -16,6 +16,14 @@ def _require_text(value: str, field_name: str) -> str:
     return normalized
 
 
+def _require_strict_text(value: object, field_name: str) -> str:
+    """拒绝隐式转换，保留规划契约的严格字符串边界。"""
+
+    if type(value) is not str:
+        raise TypeError(f"{field_name}必须是字符串")
+    return _require_text(value, field_name)
+
+
 class CypherFailureKind(StrEnum):
     """可由一次性 Corrector 修正的 Cypher 阶段失败类型。"""
 
@@ -399,6 +407,105 @@ class QuestionDecomposition:
         """问题是否被拆成了多个独立分支。"""
 
         return len(self.sub_questions) > 1
+
+
+@dataclass(frozen=True, slots=True)
+class PrimaryAgentQuery:
+    """Primary Agent 规划出的单条自然语言检索任务。"""
+
+    query_id: str
+    question: str
+    intent: str
+    required_information: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "query_id",
+            _require_strict_text(self.query_id, "查询 ID"),
+        )
+        object.__setattr__(
+            self,
+            "question",
+            _require_strict_text(self.question, "规划子问题"),
+        )
+        object.__setattr__(
+            self,
+            "intent",
+            _require_strict_text(self.intent, "检索意图"),
+        )
+        if type(self.required_information) is not tuple:
+            raise TypeError("所需信息必须是元组")
+        required_information = tuple(
+            _require_strict_text(item, "所需信息")
+            for item in self.required_information
+        )
+        if not required_information:
+            raise ValueError("所需信息不能为空")
+        if len(set(required_information)) != len(required_information):
+            raise ValueError("所需信息不能重复")
+        object.__setattr__(self, "required_information", required_information)
+
+
+@dataclass(frozen=True, slots=True)
+class PrimaryAgentPlan:
+    """Primary Agent 的可审计、单轮自然语言检索计划。"""
+
+    original_question: str
+    analysis_summary: str
+    queries: tuple[PrimaryAgentQuery, ...]
+
+    def __post_init__(self) -> None:
+        original_question = _require_strict_text(self.original_question, "原始问题")
+        analysis_summary = _require_strict_text(self.analysis_summary, "分析摘要")
+        if type(self.queries) is not tuple:
+            raise TypeError("规划查询必须是元组")
+        queries = tuple(self.queries)
+        if not 1 <= len(queries) <= 3:
+            raise ValueError("规划查询数量必须在 1 到 3 之间")
+        if any(not isinstance(query, PrimaryAgentQuery) for query in queries):
+            raise TypeError("规划查询必须是 PrimaryAgentQuery")
+        expected_ids = tuple(f"q{index}" for index in range(1, len(queries) + 1))
+        if tuple(query.query_id for query in queries) != expected_ids:
+            raise ValueError("查询 ID 必须从 q1 起连续编号")
+        questions = tuple(query.question for query in queries)
+        if len(set(questions)) != len(questions):
+            raise ValueError("规划子问题不能重复")
+        if len(queries) == 1 and queries[0].question != original_question:
+            raise ValueError("单查询计划必须保留原始问题")
+        object.__setattr__(self, "original_question", original_question)
+        object.__setattr__(self, "analysis_summary", analysis_summary)
+        object.__setattr__(self, "queries", queries)
+
+    @classmethod
+    def fallback(cls, question: str) -> PrimaryAgentPlan:
+        """构造不依赖 LLM 的原问题单查询计划。"""
+
+        original_question = _require_strict_text(question, "原始问题")
+        return cls(
+            original_question=original_question,
+            analysis_summary="使用原始问题执行单次检索",
+            queries=(
+                PrimaryAgentQuery(
+                    query_id="q1",
+                    question=original_question,
+                    intent="回答原始问题",
+                    required_information=("回答原始问题所需的图数据",),
+                ),
+            ),
+        )
+
+    @property
+    def decomposed(self) -> bool:
+        """计划是否包含多个互相独立的查询。"""
+
+        return len(self.queries) > 1
+
+    @property
+    def sub_questions(self) -> tuple[str, ...]:
+        """向兼容层提供计划内自然语言子问题。"""
+
+        return tuple(query.question for query in self.queries)
 
 
 @dataclass(frozen=True, slots=True)

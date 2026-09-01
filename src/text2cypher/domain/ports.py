@@ -11,6 +11,7 @@ from text2cypher.domain.models import (
     FewShotExample,
     GraphSchema,
     LLMResponse,
+    PrimaryAgentPlan,
     QueryResult,
     QuestionDecomposition,
     ResultSummary,
@@ -58,6 +59,13 @@ class QuestionDecomposer(Protocol):
         question: str,
         schema: GraphSchema,
     ) -> QuestionDecomposition: ...
+
+
+@runtime_checkable
+class PrimaryAgent(Protocol):
+    """把用户问题规划为单轮结构化自然语言查询。"""
+
+    def plan(self, question: str) -> PrimaryAgentPlan: ...
 
 
 @runtime_checkable
