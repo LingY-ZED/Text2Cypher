@@ -23,9 +23,10 @@ from text2cypher.domain.models import (
     ChatPrompt,
     FewShotExample,
     GraphSchema,
+    PrimaryAgentQuery,
 )
 from text2cypher.domain.ports import LLMClient
-from text2cypher.domain.query_shapes import resolve_query_shape
+from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
 
 _LOGGER = logging.getLogger(__name__)
 _JSON_FENCE = re.compile(
@@ -87,10 +88,34 @@ class LLMFewShotRouter:
         question: str,
         schema: GraphSchema,
     ) -> tuple[FewShotExample, ...]:
+        return self._route(question, schema, planned_query=None)
+
+    def route_planned(
+        self,
+        query: PrimaryAgentQuery,
+        schema: GraphSchema,
+    ) -> tuple[FewShotExample, ...]:
+        """使用 Primary 的显式查询形状路由，兼容旧计划时确定性回退。"""
+
+        if not isinstance(query, PrimaryAgentQuery):
+            raise TypeError("规划查询必须是 PrimaryAgentQuery")
+        return self._route(query.question, schema, planned_query=query)
+
+    def _route(
+        self,
+        question: str,
+        schema: GraphSchema,
+        *,
+        planned_query: PrimaryAgentQuery | None,
+    ) -> tuple[FewShotExample, ...]:
         normalized_question = question.strip()
         if not normalized_question:
             return ()
-        query_shape = resolve_query_shape(normalized_question)
+        query_shape = (
+            planned_query.effective_query_shape
+            if planned_query is not None
+            else resolve_query_shape(normalized_question)
+        )
 
         schema_graph = self._schema_graph_builder.build(schema)
         compatible = tuple(
@@ -109,10 +134,20 @@ class LLMFewShotRouter:
         )
         if not compatible:
             return ()
+        if len(compatible) == 1:
+            only_candidate = compatible[0]
+            if self._prompt_block_size(only_candidate, 1) > self._max_chars:
+                return ()
+            return compatible
 
         try:
             response = self._llm_client.generate(
-                self._build_router_prompt(normalized_question, compatible)
+                self._build_router_prompt(
+                    normalized_question,
+                    compatible,
+                    query_shape,
+                    planned_query,
+                )
             )
             requested_ids = self._parse_selected_ids(response.content)
         except (LLMGenerationError, ValueError) as error:
@@ -140,12 +175,24 @@ class LLMFewShotRouter:
         self,
         question: str,
         candidates: tuple[FewShotExample, ...],
+        query_shape: QueryShape | None = None,
+        planned_query: PrimaryAgentQuery | None = None,
     ) -> ChatPrompt:
-        query_shape = resolve_query_shape(question)
+        effective_shape = query_shape or resolve_query_shape(question)
+        semantic_text = question
+        if planned_query is not None:
+            semantic_text = " ".join(
+                (
+                    question,
+                    planned_query.anchor or "",
+                    planned_query.intent,
+                    *planned_query.required_information,
+                )
+            )
         rule_modules = self._rule_selector.select(
-            question,
+            semantic_text,
             stage=BusinessRulePromptStage.FEW_SHOT_ROUTER,
-            query_shape=query_shape,
+            query_shape=effective_shape,
         )
         metadata = [
             {
@@ -161,7 +208,12 @@ class LLMFewShotRouter:
         user = "\n\n".join(
             (
                 f"最多选择 {self._top_k} 条候选。",
-                "查询形状：\n" + query_shape.value,
+                "查询形状：\n" + effective_shape.value,
+                *(
+                    (self._render_primary_plan(planned_query),)
+                    if planned_query is not None
+                    else ()
+                ),
                 "用户问题：\n" + question,
                 "兼容候选元数据：\n"
                 + json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
@@ -175,6 +227,16 @@ class LLMFewShotRouter:
                 f"{render_few_shot_routing_rules(rule_modules)}"
             ),
             user=user,
+        )
+
+    @staticmethod
+    def _render_primary_plan(query: PrimaryAgentQuery) -> str:
+        required_information = "、".join(query.required_information)
+        return (
+            "Primary 语义计划：\n"
+            f"查询锚点：{query.anchor or '未显式提供'}\n"
+            f"检索意图：{query.intent}\n"
+            f"所需信息：{required_information}"
         )
 
     @staticmethod

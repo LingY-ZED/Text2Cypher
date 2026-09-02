@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from text2cypher.domain.models import (
     FewShotExample,
+    FewShotSchemaRequirements,
     GraphSchema,
     SchemaGraph,
     SchemaGraphEdge,
@@ -19,7 +20,20 @@ class FewShotSchemaCompatibilityFilter:
         schema: GraphSchema,
         schema_graph: SchemaGraph,
     ) -> bool:
-        requirements = example.schema_requirements
+        return self.is_requirements_compatible(
+            example.schema_requirements,
+            schema,
+            schema_graph,
+        )
+
+    def is_requirements_compatible(
+        self,
+        requirements: FewShotSchemaRequirements,
+        schema: GraphSchema,
+        schema_graph: SchemaGraph,
+    ) -> bool:
+        """判断任意结构资源声明的 Schema 子集是否可用。"""
+
         node_properties = {
             node.name: {property_schema.name for property_schema in node.properties}
             for node in schema.nodes

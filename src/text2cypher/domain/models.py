@@ -357,6 +357,34 @@ class FewShotExample:
 
 
 @dataclass(frozen=True, slots=True)
+class QueryShapeTemplate:
+    """仅供 Translator 使用的、无业务实体值的查询结构模板。"""
+
+    id: str
+    query_shape: QueryShape
+    template: str
+    schema_requirements: FewShotSchemaRequirements
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "id", _require_text(self.id, "结构模板 ID"))
+        if self.query_shape not in {
+            QueryShape.FULL_ENTRY_CHAIN,
+            QueryShape.FULL_DOWNSTREAM_CHAIN,
+        }:
+            raise ValueError("结构模板只支持完整入口链或完整下游链")
+        object.__setattr__(
+            self,
+            "template",
+            _require_text(self.template, "查询结构模板"),
+        )
+        if not isinstance(
+            self.schema_requirements,
+            FewShotSchemaRequirements,
+        ):
+            raise TypeError("结构模板 Schema requirements 类型不合法")
+
+
+@dataclass(frozen=True, slots=True)
 class QuestionDecomposition:
     """原始问题及其一到三个互相独立的子问题。"""
 
@@ -392,6 +420,8 @@ class PrimaryAgentQuery:
     question: str
     intent: str
     required_information: tuple[str, ...]
+    anchor: str | None = None
+    query_shape: QueryShape | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -420,6 +450,29 @@ class PrimaryAgentQuery:
         if len(set(required_information)) != len(required_information):
             raise ValueError("所需信息不能重复")
         object.__setattr__(self, "required_information", required_information)
+        if self.anchor is not None:
+            object.__setattr__(
+                self,
+                "anchor",
+                _require_strict_text(self.anchor, "查询锚点"),
+            )
+        if self.query_shape is not None and not isinstance(
+            self.query_shape,
+            QueryShape,
+        ):
+            raise TypeError("查询形状必须是 QueryShape")
+        if (self.anchor is None) is not (self.query_shape is None):
+            raise ValueError("查询锚点和查询形状必须同时提供或同时省略")
+
+    @property
+    def effective_query_shape(self) -> QueryShape:
+        """优先使用 Primary 的显式规划，兼容旧计划时才做确定性解析。"""
+
+        if self.query_shape is not None:
+            return self.query_shape
+        from text2cypher.domain.query_shapes import resolve_query_shape
+
+        return resolve_query_shape(self.question)
 
 
 @dataclass(frozen=True, slots=True)

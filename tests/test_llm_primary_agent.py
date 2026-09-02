@@ -62,7 +62,8 @@ def test_llm_primary_agent_returns_plan_with_one_llm_call(
             LLMResponse(
                 content=(
                     '{"analysis_summary":"摘要","queries":['
-                    '{"question":"擅自改写","intent":"意图",'
+                    '{"question":"擅自改写","anchor":"ts-order-service",'
+                    '"query_shape":"full_entry_chain","intent":"意图",'
                     '"required_information":["信息"]}]}'
                 )
             ),

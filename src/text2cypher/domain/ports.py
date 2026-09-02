@@ -12,6 +12,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
+    PrimaryAgentQuery,
     QueryResult,
     QuestionDecomposition,
     ResultSummary,
@@ -40,12 +41,35 @@ class PromptBuilder(Protocol):
 
 
 @runtime_checkable
+class PlannedPromptBuilder(Protocol):
+    """可消费 Primary 完整查询计划的 Translator Prompt 端口。"""
+
+    def build_planned(
+        self,
+        schema: GraphSchema,
+        query: PrimaryAgentQuery,
+        examples: tuple[FewShotExample, ...] = (),
+    ) -> ChatPrompt: ...
+
+
+@runtime_checkable
 class FewShotRouter(Protocol):
     """根据问题和实时 Schema 路由可用于最终 Prompt 的示例。"""
 
     def route(
         self,
         question: str,
+        schema: GraphSchema,
+    ) -> tuple[FewShotExample, ...]: ...
+
+
+@runtime_checkable
+class PlannedFewShotRouter(Protocol):
+    """可消费 Primary 完整查询计划的 Few-shot 路由端口。"""
+
+    def route_planned(
+        self,
+        query: PrimaryAgentQuery,
         schema: GraphSchema,
     ) -> tuple[FewShotExample, ...]: ...
 

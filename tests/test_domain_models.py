@@ -18,6 +18,7 @@ from text2cypher.domain.models import (
     SubQueryResponse,
     Text2CypherResponse,
 )
+from text2cypher.domain.query_shapes import QueryShape
 
 
 def test_result_summary_accepts_llm_and_template_states() -> None:
@@ -160,6 +161,28 @@ def test_primary_agent_plan_fallback_preserves_original_question() -> None:
     assert plan.queries[0].query_id == "q1"
     assert plan.sub_questions == ("查询服务",)
     assert plan.decomposed is False
+    assert plan.queries[0].anchor is None
+    assert plan.queries[0].query_shape is None
+
+
+def test_primary_agent_query_exposes_explicit_and_legacy_effective_shape() -> None:
+    planned = PrimaryAgentQuery(
+        "q1",
+        "查询目标",
+        "查询完整入口链",
+        ("入口 API", "方法路径"),
+        "Target.method",
+        QueryShape.FULL_ENTRY_CHAIN,
+    )
+    legacy = PrimaryAgentQuery(
+        "q1",
+        "查询 Target.method 的上游调用链",
+        "查询上游",
+        ("上游方法",),
+    )
+
+    assert planned.effective_query_shape is QueryShape.FULL_ENTRY_CHAIN
+    assert legacy.effective_query_shape is QueryShape.UPSTREAM_REACHABILITY
 
 
 @pytest.mark.parametrize(
@@ -202,6 +225,12 @@ def test_primary_agent_plan_rejects_invalid_queries(
         ({"required_information": ["信息"]}, "所需信息必须是元组"),
         ({"required_information": ()}, "所需信息不能为空"),
         ({"required_information": ("重复", "重复")}, "所需信息不能重复"),
+        ({"anchor": "Target.method"}, "必须同时提供"),
+        ({"query_shape": QueryShape.GENERAL}, "必须同时提供"),
+        (
+            {"anchor": "Target.method", "query_shape": "general"},
+            "QueryShape",
+        ),
     ],
 )
 def test_primary_agent_query_rejects_invalid_values(

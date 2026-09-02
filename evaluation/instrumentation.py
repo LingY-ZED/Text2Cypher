@@ -14,6 +14,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
+    PrimaryAgentQuery,
     QueryResult,
     ValidationReport,
 )
@@ -23,6 +24,7 @@ from text2cypher.domain.ports import (
     CypherValidator,
     FewShotRouter,
     LLMClient,
+    PlannedFewShotRouter,
     PrimaryAgent,
 )
 from text2cypher.domain.query_shapes import resolve_query_shape
@@ -85,6 +87,8 @@ class StageLLMClient:
             outcome="succeeded",
             duration_seconds=round(perf_counter() - started, 6),
             content_length=len(response.content),
+            prompt_system_length=len(prompt.system),
+            prompt_user_length=len(prompt.user),
             model=response.model,
             finish_reason=response.finish_reason,
             query_index=self._recorder.current_query_index,
@@ -109,16 +113,40 @@ class RecordingFewShotRouter:
         schema: GraphSchema,
     ) -> tuple[FewShotExample, ...]:
         selected = self._delegate.route(question, schema)
+        self._record(question, resolve_query_shape(question).value, selected)
+        return selected
+
+    def route_planned(
+        self,
+        query: PrimaryAgentQuery,
+        schema: GraphSchema,
+    ) -> tuple[FewShotExample, ...]:
+        if isinstance(self._delegate, PlannedFewShotRouter):
+            selected = self._delegate.route_planned(query, schema)
+        else:
+            selected = self._delegate.route(query.question, schema)
+        self._record(
+            query.question,
+            query.effective_query_shape.value,
+            selected,
+        )
+        return selected
+
+    def _record(
+        self,
+        question: str,
+        effective_query_shape: str,
+        selected: tuple[FewShotExample, ...],
+    ) -> None:
         self._recorder.add(
             component="router",
             stage="selection",
             outcome="succeeded",
             question=question,
-            effective_query_shape=resolve_query_shape(question).value,
+            effective_query_shape=effective_query_shape,
             selected_ids=[example.id for example in selected],
             query_index=self._recorder.current_query_index + 1,
         )
-        return selected
 
 
 class RecordingPrimaryAgent:
@@ -147,6 +175,12 @@ class RecordingPrimaryAgent:
                     "question": query.question,
                     "intent": query.intent,
                     "required_information": list(query.required_information),
+                    "anchor": query.anchor,
+                    "query_shape": (
+                        query.query_shape.value
+                        if query.query_shape is not None
+                        else None
+                    ),
                 }
                 for query in result.queries
             ],

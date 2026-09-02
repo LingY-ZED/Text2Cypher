@@ -300,7 +300,7 @@
   {
     "id": "call-method-downstream-methods",
     "category": "path_query",
-    "query_shape": "general",
+    "query_shape": "direct_downstream_method",
     "question": "RebookServiceImpl.rebook 直接调用了哪些方法？",
     "cypher": "MATCH (callerMethod:方法)-[:调用]->(calledMethod:方法)\nWHERE\n  callerMethod.所属类名 ENDS WITH '.RebookServiceImpl' AND\n  callerMethod.方法名 = 'rebook'\nRETURN DISTINCT calledMethod.全限定名 AS 被调用方法\nORDER BY 被调用方法",
     "aliases": [
@@ -587,7 +587,7 @@
   {
     "id": "impact-entry-apis",
     "category": "impact_analysis",
-    "query_shape": "general",
+    "query_shape": "reachable_entry_api",
     "question": "修改 ConsignServiceImpl.updateConsignRecord 会影响哪些入口方法和 API？",
     "cypher": "MATCH (anchorMethod:方法)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.ConsignServiceImpl' AND\n  anchorMethod.方法名 = 'updateConsignRecord'\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nWHERE\n  entryMethod = anchorMethod OR\n  EXISTS {\n    MATCH (entryMethod)-[:调用*1..]->(anchorMethod)\n  }\nRETURN DISTINCT\n  entryMethod.全限定名 AS 入口方法,\n  entryApi.API路径 AS 入口接口,\n  entryApi.HTTP方法 AS 请求方式\nORDER BY 入口接口, 入口方法",
     "aliases": [
@@ -1136,181 +1136,6 @@
           "relationship_type": "调用",
           "end_labels": [
             "方法"
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "id": "call-method-full-upstream-chain",
-    "category": "path_query",
-    "query_shape": "full_entry_chain",
-    "question": "查询 FoodServiceImpl.getAllFood 的完整上游调用链，包括入口 API 和有序方法路径。",
-    "cypher": "MATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(anchorMethod:方法)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.FoodServiceImpl' AND\n  anchorMethod.方法名 = 'getAllFood'\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名, anchorMethod.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH path = (entryMethod)-[:链中下一节点*1..5]->(anchorMethod:方法)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.FoodServiceImpl' AND\n  anchorMethod.方法名 = 'getAllFood' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [method IN nodes(path) | method.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(firstMethod:方法)\nMATCH path = (firstMethod)-[:链中下一节点*1..4]->(anchorMethod:方法)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.FoodServiceImpl' AND\n  anchorMethod.方法名 = 'getAllFood' AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名] + [method IN nodes(path) | method.全限定名]\n    AS 方法路径\n\nUNION\n\nMATCH (anchorMethod:方法)-[:服务于]->(entryApi:上游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.FoodServiceImpl' AND\n  anchorMethod.方法名 = 'getAllFood'\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [anchorMethod.全限定名] AS 方法路径",
-    "aliases": [
-      "追踪方法的入口 API 与完整上游方法路径",
-      "查询到达目标方法的有序上游链"
-    ],
-    "tags": [
-      "路径查询",
-      "完整上游链",
-      "入口API",
-      "有序方法路径"
-    ],
-    "schema_requirements": {
-      "node_labels": [
-        "方法",
-        "上游API"
-      ],
-      "relationship_types": [
-        "服务于",
-        "接口调用",
-        "链中下一节点"
-      ],
-      "node_properties": {
-        "方法": [
-          "所属类名",
-          "方法名",
-          "全限定名"
-        ],
-        "上游API": [
-          "API路径"
-        ]
-      },
-      "relationship_properties": {
-        "链中下一节点": [
-          "路径签名",
-          "位置索引"
-        ]
-      },
-      "patterns": [
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "服务于",
-          "end_labels": [
-            "上游API"
-          ]
-        },
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "接口调用",
-          "end_labels": [
-            "方法"
-          ]
-        },
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "链中下一节点",
-          "end_labels": [
-            "方法"
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "id": "call-method-full-downstream-chain",
-    "category": "path_query",
-    "query_shape": "full_downstream_chain",
-    "question": "查询 InsidePaymentServiceImpl.pay 的完整下游调用链，包括方法路径、下游 API、目标服务和目标入口 API。",
-    "cypher": "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  anchorMethod.方法名 = 'pay'\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [anchorMethod.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法\n\nUNION\n\nMATCH methodPath = (anchorMethod:方法)\n  -[:链中下一节点*1..5]->(outboundMethod:方法)\nMATCH (outboundMethod)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  anchorMethod.所属类名 ENDS WITH '.InsidePaymentServiceImpl' AND\n  anchorMethod.方法名 = 'pay' AND\n  ALL(\n    pathRelationship IN relationships(methodPath)\n    WHERE\n      pathRelationship.路径签名 = relationships(methodPath)[0].路径签名\n  ) AND\n  (\n    size(relationships(methodPath)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(methodPath)) - 1)\n      WHERE\n        relationships(methodPath)[index].位置索引 =\n        relationships(methodPath)[index - 1].位置索引 + 1\n    )\n  )\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [method IN nodes(methodPath) | method.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法",
-    "aliases": [
-      "追踪方法到远程 API 和目标入口的完整下游链",
-      "查询有序下游方法路径与直接跨服务边界"
-    ],
-    "tags": [
-      "路径查询",
-      "完整下游链",
-      "跨服务",
-      "有序方法路径",
-      "REST"
-    ],
-    "schema_requirements": {
-      "node_labels": [
-        "方法",
-        "下游API",
-        "微服务",
-        "上游API"
-      ],
-      "relationship_types": [
-        "链中下一节点",
-        "下游调用",
-        "目标服务",
-        "外部调用",
-        "服务于"
-      ],
-      "node_properties": {
-        "方法": [
-          "所属类名",
-          "方法名",
-          "全限定名"
-        ],
-        "下游API": [
-          "API路径"
-        ],
-        "微服务": [
-          "服务名称"
-        ],
-        "上游API": [
-          "API路径"
-        ]
-      },
-      "relationship_properties": {
-        "链中下一节点": [
-          "路径签名",
-          "位置索引"
-        ]
-      },
-      "patterns": [
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "链中下一节点",
-          "end_labels": [
-            "方法"
-          ]
-        },
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "下游调用",
-          "end_labels": [
-            "下游API"
-          ]
-        },
-        {
-          "start_labels": [
-            "下游API"
-          ],
-          "relationship_type": "目标服务",
-          "end_labels": [
-            "微服务"
-          ]
-        },
-        {
-          "start_labels": [
-            "下游API"
-          ],
-          "relationship_type": "外部调用",
-          "end_labels": [
-            "上游API"
-          ]
-        },
-        {
-          "start_labels": [
-            "方法"
-          ],
-          "relationship_type": "服务于",
-          "end_labels": [
-            "上游API"
           ]
         }
       ]

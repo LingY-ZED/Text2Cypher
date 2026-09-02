@@ -11,6 +11,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     NodeSchema,
+    PrimaryAgentQuery,
     RelationshipPattern,
     RelationshipSchema,
 )
@@ -165,7 +166,7 @@ def test_router_falls_back_for_invalid_response(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     client = StubLLMClient(LLMResponse(content=content))
-    router = LLMFewShotRouter((_example("a"),), client)
+    router = LLMFewShotRouter((_example("a"), _example("b")), client)
 
     assert router.route("查询", GraphSchema()) == ()
     assert "ValueError" in caplog.text
@@ -187,7 +188,7 @@ def test_router_falls_back_after_llm_error_without_logging_sensitive_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     client = StubLLMClient(LLMGenerationError("router-secret-response"))
-    router = LLMFewShotRouter((_example("a"),), client)
+    router = LLMFewShotRouter((_example("a"), _example("b")), client)
 
     assert router.route("查询", GraphSchema()) == ()
     assert "LLMGenerationError" in caplog.text
@@ -229,9 +230,7 @@ def test_router_filters_schema_before_deterministic_query_shape() -> None:
     selected = router.route("查询getTickets的上游调用链", GraphSchema())
 
     assert tuple(example.id for example in selected) == ("upstream",)
-    assert "upstream_reachability" in client.prompts[0].user
-    assert "entry" not in client.prompts[0].user
-    assert "general" not in client.prompts[0].user
+    assert client.prompts == []
 
 
 def test_router_keeps_only_direct_rest_example_for_explicit_shape() -> None:
@@ -256,8 +255,7 @@ def test_router_keeps_only_direct_rest_example_for_explicit_shape() -> None:
     )
 
     assert tuple(example.id for example in selected) == ("direct-rest",)
-    assert "direct_rest_egress" in client.prompts[0].user
-    assert "general" not in client.prompts[0].user
+    assert client.prompts == []
 
 
 def test_router_keeps_service_mapping_general_for_complete_pairing() -> None:
@@ -282,8 +280,7 @@ def test_router_keeps_service_mapping_general_for_complete_pairing() -> None:
     )
 
     assert tuple(example.id for example in selected) == ("service-map",)
-    assert "general" in client.prompts[0].user
-    assert "full-chain" not in client.prompts[0].user
+    assert client.prompts == []
 
 
 def test_router_recognizes_explicit_full_downstream_cross_service_chain() -> None:
@@ -311,5 +308,62 @@ def test_router_recognizes_explicit_full_downstream_cross_service_chain() -> Non
     )
 
     assert tuple(example.id for example in selected) == ("full-chain",)
-    assert "full_downstream_chain" in client.prompts[0].user
-    assert "ordered" not in client.prompts[0].user
+    assert client.prompts == []
+
+
+def test_router_uses_primary_shape_and_semantics_as_authoritative_input() -> None:
+    client = StubLLMClient(
+        LLMResponse(content='{"selected_ids":["reachable-a"]}')
+    )
+    router = LLMFewShotRouter(
+        (
+            _example(
+                "reachable-a",
+                query_shape=QueryShape.UPSTREAM_REACHABILITY,
+            ),
+            _example(
+                "reachable-b",
+                query_shape=QueryShape.UPSTREAM_REACHABILITY,
+            ),
+            _example("direct", query_shape=QueryShape.DIRECT_UPSTREAM),
+        ),
+        client,
+    )
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 FoodServiceImpl.getAllFood 的调用关系",
+        "查询所有上游可达方法和距离",
+        ("目标方法", "上游可达方法", "调用距离"),
+        "FoodServiceImpl.getAllFood",
+        QueryShape.UPSTREAM_REACHABILITY,
+    )
+
+    selected = router.route_planned(query, GraphSchema())
+
+    assert tuple(example.id for example in selected) == ("reachable-a",)
+    prompt = client.prompts[0]
+    assert "upstream_reachability" in prompt.user
+    assert "Primary 语义计划" in prompt.user
+    assert "FoodServiceImpl.getAllFood" in prompt.user
+    assert "调用距离" in prompt.user
+    assert '"id":"direct"' not in prompt.user
+
+
+def test_router_returns_single_compatible_shape_without_llm_call() -> None:
+    client = StubLLMClient(LLMGenerationError("不应调用"))
+    only = _example(
+        "direct-downstream",
+        query_shape=QueryShape.DIRECT_DOWNSTREAM_METHOD,
+    )
+    router = LLMFewShotRouter((only,), client)
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 RebookServiceImpl.rebook 的直接下游方法",
+        "查询直接调用的方法",
+        ("目标方法", "直接下游方法"),
+        "RebookServiceImpl.rebook",
+        QueryShape.DIRECT_DOWNSTREAM_METHOD,
+    )
+
+    assert router.route_planned(query, GraphSchema()) == (only,)
+    assert client.prompts == []

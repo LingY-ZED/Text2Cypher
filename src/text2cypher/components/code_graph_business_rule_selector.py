@@ -36,10 +36,19 @@ _SHAPE_MODULES: dict[QueryShape, frozenset[BusinessRuleModule]] = {
         {BusinessRuleModule.METHOD_CALL}
     ),
     QueryShape.DIRECT_UPSTREAM: frozenset({BusinessRuleModule.METHOD_CALL}),
+    QueryShape.DIRECT_DOWNSTREAM_METHOD: frozenset(
+        {BusinessRuleModule.METHOD_CALL}
+    ),
     QueryShape.ORDERED_METHOD_PATH: frozenset(
         {
             BusinessRuleModule.METHOD_CALL,
             BusinessRuleModule.ORDERED_PATH,
+        }
+    ),
+    QueryShape.REACHABLE_ENTRY_API: frozenset(
+        {
+            BusinessRuleModule.METHOD_CALL,
+            BusinessRuleModule.ENTRY_API,
         }
     ),
     QueryShape.FULL_ENTRY_CHAIN: frozenset(

@@ -181,6 +181,16 @@ class JsonFewShotExampleLoader:
         except ValueError:
             raise FewShotLibraryError("Few-shot Schema requirements 不合法") from None
 
+    @classmethod
+    def parse_schema_requirements(
+        cls,
+        value: Any,
+        index: int = 0,
+    ) -> FewShotSchemaRequirements:
+        """供其他可信结构资源复用同一份严格 Schema 契约。"""
+
+        return cls._parse_requirements(value, index)
+
     @staticmethod
     def _validate_requirements(
         *,
@@ -255,6 +265,12 @@ class JsonFewShotExampleLoader:
             or "*/" in cypher
         ):
             raise FewShotLibraryError("Few-shot Cypher 包含禁止内容")
+
+    @classmethod
+    def validate_readonly_cypher(cls, cypher: str) -> None:
+        """供查询结构模板复用 Few-shot 的只读安全边界。"""
+
+        cls._validate_cypher(cypher)
 
     @staticmethod
     def _object(value: Any, field_name: str) -> dict[str, Any]:

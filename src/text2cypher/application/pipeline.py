@@ -21,6 +21,7 @@ from text2cypher.domain.models import (
     CypherFailureContext,
     CypherFailureKind,
     CypherFailureSource,
+    FewShotExample,
     GraphSchema,
     PrimaryAgentPlan,
     PrimaryAgentQuery,
@@ -36,6 +37,8 @@ from text2cypher.domain.ports import (
     CypherValidator,
     FewShotRouter,
     LLMClient,
+    PlannedFewShotRouter,
+    PlannedPromptBuilder,
     PrimaryAgent,
     PromptBuilder,
     QuestionDecomposer,
@@ -94,8 +97,8 @@ class Text2CypherPipeline:
         schema = self._schema_fetcher.fetch()
         plan = self._plan_question(normalized_question, schema)
         sub_queries = tuple(
-            self._run_sub_query(schema, sub_question)
-            for sub_question in plan.sub_questions
+            self._run_sub_query(schema, query)
+            for query in plan.queries
         )
         summary = (
             self._result_summarizer.summarize(normalized_question, sub_queries)
@@ -159,20 +162,19 @@ class Text2CypherPipeline:
     def _run_sub_query(
         self,
         schema: GraphSchema,
-        question: str,
+        query: PrimaryAgentQuery,
     ) -> SubQueryResponse:
         """按固定顺序生成、校验并执行一个独立子问题。"""
 
-        examples = (
-            self._few_shot_router.route(question, schema)
-            if self._few_shot_router is not None
-            else ()
-        )
-        prompt = self._prompt_builder.build(
-            schema,
-            question,
-            examples,
-        )
+        examples = self._route_examples(query, schema)
+        if isinstance(self._prompt_builder, PlannedPromptBuilder):
+            prompt = self._prompt_builder.build_planned(schema, query, examples)
+        else:
+            prompt = self._prompt_builder.build(
+                schema,
+                query.question,
+                examples,
+            )
         llm_response = self._llm_client.generate(prompt)
         try:
             cypher = self._cypher_parser.parse(llm_response.content)
@@ -212,10 +214,22 @@ class Text2CypherPipeline:
         ):
             cypher, result = self._recover_empty_result(prompt, cypher, result)
         return SubQueryResponse(
-            question=question,
+            question=query.question,
             cypher=cypher,
             result=result,
         )
+
+    def _route_examples(
+        self,
+        query: PrimaryAgentQuery,
+        schema: GraphSchema,
+    ) -> tuple[FewShotExample, ...]:
+        router = self._few_shot_router
+        if router is None:
+            return ()
+        if isinstance(router, PlannedFewShotRouter):
+            return router.route_planned(query, schema)
+        return router.route(query.question, schema)
 
     def _correct_and_execute(
         self,

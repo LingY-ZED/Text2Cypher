@@ -77,7 +77,7 @@ def test_bootstrap_enables_default_few_shot_library() -> None:
 
     assert "参考示例：" in prompt.user
     assert "系统中有哪些微服务？" in prompt.user
-    assert len(router_client.prompts) == 1
+    assert router_client.prompts == []
 
 
 def test_bootstrap_enables_primary_agent_with_shared_client() -> None:

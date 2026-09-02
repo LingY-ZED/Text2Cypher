@@ -16,6 +16,7 @@ from text2cypher.domain.models import (
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
+    PrimaryAgentQuery,
     QueryResult,
     QuestionDecomposition,
     ResultSummary,
@@ -25,6 +26,7 @@ from text2cypher.domain.models import (
     Text2CypherResponse,
     ValidationReport,
 )
+from text2cypher.domain.query_shapes import QueryShape
 
 
 class FakeSchemaFetcher:
@@ -377,6 +379,15 @@ def test_pipeline_continues_zero_shot_when_router_model_call_fails() -> None:
         tags=("测试",),
         schema_requirements=FewShotSchemaRequirements(),
     )
+    second_example = FewShotExample(
+        id="fallback-example-2",
+        category="test",
+        question="示例二",
+        cypher="MATCH (n) RETURN n",
+        aliases=("别名二",),
+        tags=("测试",),
+        schema_requirements=FewShotSchemaRequirements(),
+    )
     pipeline = Text2CypherPipeline(
         schema_fetcher=FakeSchemaFetcher(calls),
         prompt_builder=prompt_builder,
@@ -385,7 +396,10 @@ def test_pipeline_continues_zero_shot_when_router_model_call_fails() -> None:
         cypher_validator=FakeValidator(calls),
         cypher_executor=FakeExecutor(calls),
         result_formatter=FakeFormatter(calls),
-        few_shot_router=LLMFewShotRouter((example,), shared_llm_client),
+        few_shot_router=LLMFewShotRouter(
+            (example, second_example),
+            shared_llm_client,
+        ),
     )
 
     pipeline.run("列出服务")
@@ -401,6 +415,88 @@ def test_pipeline_continues_zero_shot_when_router_model_call_fails() -> None:
         "executor",
         "formatter",
     ]
+
+
+def test_pipeline_passes_complete_primary_query_to_planned_ports() -> None:
+    calls: list[str] = []
+    planned_query = PrimaryAgentQuery(
+        "q1",
+        "查询 FoodServiceImpl.getAllFood 的调用关系",
+        "查询全部上游可达方法和距离",
+        ("目标方法", "上游方法", "调用距离"),
+        "FoodServiceImpl.getAllFood",
+        QueryShape.UPSTREAM_REACHABILITY,
+    )
+
+    class PlannedPrimary:
+        def plan(self, question: str) -> PrimaryAgentPlan:
+            return PrimaryAgentPlan(question, "查询上游可达集合", (planned_query,))
+
+    class PlannedRouter:
+        def route(
+            self,
+            question: str,
+            schema: GraphSchema,
+        ) -> tuple[FewShotExample, ...]:
+            raise AssertionError("不应使用旧 Router 端口")
+
+        def route_planned(
+            self,
+            query: PrimaryAgentQuery,
+            schema: GraphSchema,
+        ) -> tuple[FewShotExample, ...]:
+            assert query is planned_query
+            assert schema == GraphSchema()
+            calls.append("planned_router")
+            return ()
+
+    class PlannedBuilder:
+        def build(
+            self,
+            schema: GraphSchema,
+            question: str,
+            examples: tuple[FewShotExample, ...] = (),
+        ) -> ChatPrompt:
+            raise AssertionError("不应使用旧 PromptBuilder 端口")
+
+        def build_planned(
+            self,
+            schema: GraphSchema,
+            query: PrimaryAgentQuery,
+            examples: tuple[FewShotExample, ...] = (),
+        ) -> ChatPrompt:
+            assert query is planned_query
+            assert examples == ()
+            calls.append("planned_prompt")
+            return ChatPrompt(system="system", user="user")
+
+    class PlannedFormatter:
+        def format(
+            self,
+            question: str,
+            sub_queries: tuple[SubQueryResponse, ...],
+        ) -> str:
+            assert question == planned_query.question
+            assert sub_queries[0].question == planned_query.question
+            calls.append("formatter")
+            return "formatted"
+
+    pipeline = Text2CypherPipeline(
+        schema_fetcher=FakeSchemaFetcher(calls),
+        prompt_builder=PlannedBuilder(),
+        llm_client=FakeLLMClient(calls),
+        cypher_parser=FakeParser(calls),
+        cypher_validator=FakeValidator(calls),
+        cypher_executor=FakeExecutor(calls),
+        result_formatter=PlannedFormatter(),
+        primary_agent=PlannedPrimary(),
+        few_shot_router=PlannedRouter(),
+    )
+
+    response = pipeline.run(planned_query.question)
+
+    assert response.sub_queries[0].question == planned_query.question
+    assert calls[:3] == ["schema", "planned_router", "planned_prompt"]
 
 
 def test_pipeline_stops_before_execution_when_validation_fails() -> None:

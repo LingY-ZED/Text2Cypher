@@ -63,6 +63,23 @@ def _select(
             ),
         ),
         (
+            "RebookServiceImpl.rebook 直接调用了哪些方法？",
+            (
+                BusinessRuleModule.CORE,
+                BusinessRuleModule.ANCHOR_OWNERSHIP,
+                BusinessRuleModule.METHOD_CALL,
+            ),
+        ),
+        (
+            "哪些入口 API 可以到达 ConsignServiceImpl.updateConsignRecord？",
+            (
+                BusinessRuleModule.CORE,
+                BusinessRuleModule.ANCHOR_OWNERSHIP,
+                BusinessRuleModule.METHOD_CALL,
+                BusinessRuleModule.ENTRY_API,
+            ),
+        ),
+        (
             "查询 WaitListOrderServiceImpl.triggerThread 到 "
             "PollThread.doPreserve 的有序方法路径。",
             (

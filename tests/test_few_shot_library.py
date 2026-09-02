@@ -101,13 +101,13 @@ def code_knowledge_schema() -> GraphSchema:
     )
 
 
-def test_default_library_contains_expected_28_example_catalog() -> None:
+def test_default_library_contains_compact_reusable_example_catalog() -> None:
     examples = JsonFewShotExampleLoader().load()
 
-    assert len(examples) == 28
+    assert len(examples) == 26
     assert Counter(example.category for example in examples) == {
         "simple_query": 3,
-        "path_query": 16,
+        "path_query": 14,
         "impact_analysis": 2,
         "mq_query": 4,
         "aggregate_statistics": 3,
@@ -125,8 +125,6 @@ def test_default_library_contains_expected_28_example_catalog() -> None:
         "call-method-upstream-reachability",
         "call-method-direct-upstream",
         "call-method-direct-rest-egress",
-        "call-method-full-upstream-chain",
-        "call-method-full-downstream-chain",
         "call-service-outgoing-rest",
         "impact-upstream-services",
         "impact-entry-apis",
@@ -151,11 +149,17 @@ def test_default_library_contains_expected_28_example_catalog() -> None:
     } == {
         "call-method-upstream-reachability": QueryShape.UPSTREAM_REACHABILITY,
         "call-method-direct-upstream": QueryShape.DIRECT_UPSTREAM,
-        "call-method-full-upstream-chain": QueryShape.FULL_ENTRY_CHAIN,
-        "call-method-full-downstream-chain": QueryShape.FULL_DOWNSTREAM_CHAIN,
+        "call-method-downstream-methods": QueryShape.DIRECT_DOWNSTREAM_METHOD,
+        "impact-entry-apis": QueryShape.REACHABLE_ENTRY_API,
         "call-ordered-method-path": QueryShape.ORDERED_METHOD_PATH,
         "call-method-direct-rest-egress": QueryShape.DIRECT_REST_EGRESS,
     }
+    non_general_shapes = [
+        example.query_shape
+        for example in examples
+        if example.query_shape is not QueryShape.GENERAL
+    ]
+    assert len(non_general_shapes) == len(set(non_general_shapes))
 
 
 def test_all_default_examples_match_frozen_code_knowledge_schema(
@@ -263,9 +267,8 @@ def test_selected_example_metadata_uses_business_language_without_noise() -> Non
     assert "调用链" not in " ".join(
         (reachability.question, *reachability.aliases, *reachability.tags)
     )
-    assert "完整上游调用链" in examples_by_id[
-        "call-method-full-upstream-chain"
-    ].question
+    assert "call-method-full-upstream-chain" not in examples_by_id
+    assert "call-method-full-downstream-chain" not in examples_by_id
 
     api_list = examples_by_id["simple-filter-upstream-apis"]
     assert "属性过滤" not in api_list.tags
@@ -368,31 +371,6 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     assert "-[:消费自]->(consumerMethod:方法)" in mq_chain.cypher
     assert "publish.路由键 = route.路由键" in mq_chain.cypher
 
-    upstream_chain = examples_by_id["call-method-full-upstream-chain"]
-    assert "[:接口调用]" in upstream_chain.cypher
-    assert "方法路径" in upstream_chain.cypher
-    assert (
-        upstream_chain.cypher.count(
-            "anchorMethod.所属类名 ENDS WITH '.FoodServiceImpl'"
-        )
-        == 4
-    )
-    downstream_chain = examples_by_id["call-method-full-downstream-chain"]
-    assert "OPTIONAL MATCH" in downstream_chain.cypher
-    assert "目标上游API" in downstream_chain.cypher
-    assert "MATCH methodPath = (anchorMethod:方法)" in downstream_chain.cypher
-    assert (
-        "MATCH (outboundMethod)-[:下游调用]->(downstreamApi:下游API)"
-        in downstream_chain.cypher
-    )
-    method_path_clause = downstream_chain.cypher.split(
-        "MATCH methodPath =",
-        maxsplit=1,
-    )[1].split("\nMATCH (outboundMethod)", maxsplit=1)[0]
-    assert "下游调用" not in method_path_clause
-    assert "relationships(methodPath)" in downstream_chain.cypher
-    assert "nodes(methodPath)" in downstream_chain.cypher
-
     ordered_path = examples_by_id["call-ordered-method-path"]
     assert "链中下一节点*1..5" in ordered_path.cypher
     assert "路径签名" in ordered_path.cypher
@@ -470,17 +448,6 @@ def test_default_library_uses_readable_cypher_style_and_role_variables() -> None
     assert "callerMethod" in direct_calls.cypher
     assert "calledMethod" in direct_calls.cypher
 
-    downstream_chain = examples_by_id["call-method-full-downstream-chain"]
-    assert "anchorMethod" in downstream_chain.cypher
-    assert "targetEntryMethod" in downstream_chain.cypher
-    assert "(target:方法)" not in downstream_chain.cypher
-    assert downstream_chain.cypher.count("UNION") == 1
-
-    upstream_chain = examples_by_id["call-method-full-upstream-chain"]
-    assert upstream_chain.cypher.count("UNION") == 3
-    assert "pathRelationship" in upstream_chain.cypher
-    assert "[:调用*" not in upstream_chain.cypher
-    assert "[:调用*" not in downstream_chain.cypher
     assert "\n  EXISTS {" in examples_by_id["impact-entry-apis"].cypher
 
 
@@ -506,14 +473,9 @@ def test_default_library_preserves_multiline_cypher_in_generation_prompt() -> No
     "identifiers",
     [
         (
-            "call-method-downstream-services",
-            "call-method-full-downstream-chain",
-            "api-external-mapping",
-        ),
-        (
-            "call-method-full-upstream-chain",
-            "call-interface-dispatch",
-            "call-ordered-method-path",
+            "call-method-downstream-methods",
+            "call-method-direct-upstream",
+            "call-method-upstream-reachability",
         ),
         (
             "mq-publishers-for-queue",

@@ -103,6 +103,8 @@ def test_recording_primary_agent_keeps_plan_for_evaluation_only() -> None:
                     "question": "查询服务",
                     "intent": "回答原始问题",
                     "required_information": ["回答原始问题所需的图数据"],
+                    "anchor": None,
+                    "query_shape": None,
                 }
             ],
         }

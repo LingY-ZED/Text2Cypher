@@ -11,7 +11,9 @@ class QueryShape(StrEnum):
     GENERAL = "general"
     UPSTREAM_REACHABILITY = "upstream_reachability"
     DIRECT_UPSTREAM = "direct_upstream"
+    DIRECT_DOWNSTREAM_METHOD = "direct_downstream_method"
     ORDERED_METHOD_PATH = "ordered_method_path"
+    REACHABLE_ENTRY_API = "reachable_entry_api"
     FULL_ENTRY_CHAIN = "full_entry_chain"
     FULL_DOWNSTREAM_CHAIN = "full_downstream_chain"
     DIRECT_REST_EGRESS = "direct_rest_egress"
@@ -63,7 +65,19 @@ def resolve_query_shape(question: str) -> QueryShape:
     )
     has_direct = "直接" in compact
     has_api = "api" in compact or "接口" in compact
-    has_target_method = "目标方法" in compact
+    has_method = "方法" in compact
+    has_reachable_entry = any(
+        cue in compact
+        for cue in (
+            "可达入口api",
+            "可达的入口api",
+            "哪些入口api可以到达",
+            "哪些入口api能到达",
+            "入口api可到达",
+            "影响哪些入口api",
+            "影响哪些入口",
+        )
+    )
 
     if has_full_downstream_chain or (has_full_call_chain and has_downstream):
         return QueryShape.FULL_DOWNSTREAM_CHAIN
@@ -77,10 +91,27 @@ def resolve_query_shape(question: str) -> QueryShape:
         return QueryShape.FULL_ENTRY_CHAIN
     if has_ordered:
         return QueryShape.ORDERED_METHOD_PATH
+    if has_reachable_entry:
+        return QueryShape.REACHABLE_ENTRY_API
     if has_direct and has_upstream:
         return QueryShape.DIRECT_UPSTREAM
     if has_upstream:
         return QueryShape.UPSTREAM_REACHABILITY
-    if has_direct and has_downstream and has_api and has_target_method:
+    if has_direct and has_downstream and has_api:
         return QueryShape.DIRECT_REST_EGRESS
+    if (
+        has_direct
+        and has_method
+        and not has_api
+        and any(
+            cue in compact
+            for cue in (
+                "直接调用哪些方法",
+                "直接调用了哪些方法",
+                "直接下游方法",
+                "直接调用的下游方法",
+            )
+        )
+    ):
+        return QueryShape.DIRECT_DOWNSTREAM_METHOD
     return QueryShape.GENERAL

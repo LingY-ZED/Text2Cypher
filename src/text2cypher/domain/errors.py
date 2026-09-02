@@ -17,6 +17,10 @@ class FewShotLibraryError(ConfigurationError):
     """Few-shot 示例库不存在或内容非法。"""
 
 
+class QueryShapeTemplateError(ConfigurationError):
+    """查询形状结构模板资源不存在或内容非法。"""
+
+
 class CodeGraphBusinessRulesError(ConfigurationError):
     """代码知识图谱业务规则资源不存在或内容非法。"""
 

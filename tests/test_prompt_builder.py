@@ -13,10 +13,12 @@ from text2cypher.domain.models import (
     FewShotSchemaRequirements,
     GraphSchema,
     NodeSchema,
+    PrimaryAgentQuery,
     PropertySchema,
     RelationshipPattern,
     RelationshipSchema,
 )
+from text2cypher.domain.query_shapes import QueryShape
 
 
 def test_prompt_includes_question_complete_schema_and_selected_rules() -> None:
@@ -159,6 +161,104 @@ def test_prompt_does_not_include_primary_agent_internal_contract_fields() -> Non
     assert "requested_fields" not in prompt.user
     assert "查询形状：" not in prompt.user
     assert "请求字段：" not in prompt.user
+
+
+def test_planned_upstream_prompt_uses_primary_shape_without_example_rule_leak() -> None:
+    rest_example = FewShotExample(
+        id="rest",
+        category="path_query",
+        question="查询 REST 下游 API 和目标服务",
+        cypher="MATCH (n) RETURN n",
+        aliases=("远程调用",),
+        tags=("REST",),
+        schema_requirements=FewShotSchemaRequirements(),
+        query_shape=QueryShape.DIRECT_REST_EGRESS,
+    )
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 FoodServiceImpl.getAllFood 的调用关系",
+        "查询所有上游可达方法和调用距离",
+        ("目标方法", "上游可达方法", "调用距离"),
+        "FoodServiceImpl.getAllFood",
+        QueryShape.UPSTREAM_REACHABILITY,
+    )
+
+    prompt = DefaultPromptBuilder().build_planned(
+        GraphSchema(),
+        query,
+        (rest_example,),
+    )
+
+    method_call = load_code_graph_business_rule_module(
+        BusinessRuleModule.METHOD_CALL
+    )
+    rest = load_code_graph_business_rule_module(BusinessRuleModule.REST)
+    ordered = load_code_graph_business_rule_module(BusinessRuleModule.ORDERED_PATH)
+    assert method_call in prompt.system
+    assert rest not in prompt.system
+    assert ordered not in prompt.system
+    assert "查询结构模板：" not in prompt.user
+    assert "Primary 语义计划：" in prompt.user
+    assert "查询形状：upstream_reachability" in prompt.user
+    assert prompt.user.index("图谱 Schema：") < prompt.user.index(
+        "Primary 语义计划："
+    )
+    assert prompt.user.index("Primary 语义计划：") < prompt.user.index(
+        "参考示例："
+    )
+    assert prompt.user.index("参考示例：") < prompt.user.index("用户问题：")
+
+
+def test_full_entry_plan_injects_schema_aware_template_before_few_shot() -> None:
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 ConsignServiceImpl.updateConsignRecord 的完整入口调用链",
+        "查询入口 API 到锚点方法的完整有序链",
+        ("目标方法", "入口 API", "有序方法路径"),
+        "ConsignServiceImpl.updateConsignRecord",
+        QueryShape.FULL_ENTRY_CHAIN,
+    )
+
+    prompt = DefaultPromptBuilder().build_planned(_template_schema(), query)
+
+    assert "查询结构模板：" in prompt.user
+    assert "full-entry-chain-structure" in prompt.user
+    assert prompt.user.count("UNION") == 3
+    assert "<TARGET_METHOD_FILTER>" in prompt.user
+    assert "FoodServiceImpl" not in prompt.user
+    assert "不得保留占位符" in prompt.system
+    assert prompt.user.index("Primary 语义计划：") < prompt.user.index(
+        "查询结构模板："
+    )
+    assert prompt.user.index("查询结构模板：") < prompt.user.index("用户问题：")
+
+
+def _template_schema() -> GraphSchema:
+    return GraphSchema(
+        nodes=(
+            NodeSchema(
+                "方法",
+                tuple(
+                    PropertySchema(name)
+                    for name in ("所属类名", "方法名", "全限定名")
+                ),
+            ),
+            NodeSchema("上游API", (PropertySchema("API路径"),)),
+        ),
+        relationships=(
+            RelationshipSchema("服务于"),
+            RelationshipSchema("接口调用"),
+            RelationshipSchema(
+                "链中下一节点",
+                (PropertySchema("路径签名"), PropertySchema("位置索引")),
+            ),
+        ),
+        patterns=(
+            RelationshipPattern(("方法",), "服务于", ("上游API",)),
+            RelationshipPattern(("方法",), "接口调用", ("方法",)),
+            RelationshipPattern(("方法",), "链中下一节点", ("方法",)),
+        ),
+    )
 
 
 def _few_shot_example(

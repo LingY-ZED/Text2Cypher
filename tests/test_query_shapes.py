@@ -10,7 +10,15 @@ from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
     [
         ("查询getTickets的上游调用链", QueryShape.UPSTREAM_REACHABILITY),
         ("哪些方法直接调用 getTickets", QueryShape.DIRECT_UPSTREAM),
+        (
+            "RebookServiceImpl.rebook 直接调用了哪些方法？",
+            QueryShape.DIRECT_DOWNSTREAM_METHOD,
+        ),
         ("查询 getTickets 的有序方法路径", QueryShape.ORDERED_METHOD_PATH),
+        (
+            "哪些入口 API 可以到达 ConsignServiceImpl.updateConsignRecord？",
+            QueryShape.REACHABLE_ENTRY_API,
+        ),
         (
             "查询 getTickets 从入口 API 开始的完整上游调用链",
             QueryShape.FULL_ENTRY_CHAIN,
@@ -56,8 +64,15 @@ def test_resolve_query_shape_uses_only_explicit_question_language(
     assert resolve_query_shape(question) is expected
 
 
-def test_direct_rest_shape_requires_all_explicit_result_cues() -> None:
+def test_direct_rest_shape_does_not_require_extra_return_field_cues() -> None:
     assert (
         resolve_query_shape("InsidePaymentServiceImpl.pay 直接调用哪些下游 API？")
-        is QueryShape.GENERAL
+        is QueryShape.DIRECT_REST_EGRESS
+    )
+
+
+def test_plain_upstream_call_chain_is_reachability_not_full_entry_chain() -> None:
+    assert (
+        resolve_query_shape("FoodServiceImpl.getAllFood 的上游调用链是什么？")
+        is QueryShape.UPSTREAM_REACHABILITY
     )
