@@ -44,7 +44,7 @@ CASES = (
     AcceptanceCase(
         question="getAllFood 方法调用了哪些下游服务？",
         key_terms=("getAllFood",),
-        expected_example_id="call-method-downstream-services",
+        expected_example_id="call-method-direct-rest-egress",
     ),
     AcceptanceCase(
         question="getAllFood 方法调用了哪些方法？",

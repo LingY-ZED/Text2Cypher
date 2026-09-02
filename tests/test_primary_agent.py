@@ -21,6 +21,8 @@ def test_primary_agent_prompt_is_schema_free_and_uses_capabilities_once() -> Non
     assert "Schema" not in prompt.user
     assert "不要生成 Cypher" in prompt.system
     assert "未绑定指代" in prompt.system
+    assert "以原问题要求的独立结果集合为单位" in prompt.system
+    assert "是否遗漏了可独立计算的并列集合" in prompt.system
     assert "不得按返回列机械拆分" in prompt.system
     assert "哪些方法调用 X" in prompt.system
     assert "不得自行添加原问题没有的直接、间接、可达性" in prompt.system
@@ -30,6 +32,38 @@ def test_primary_agent_prompt_is_schema_free_and_uses_capabilities_once() -> Non
     assert "upstream_reachability" in prompt.user
     assert "full_entry_chain" in prompt.user
     assert "requested_fields" not in prompt.user
+
+
+def test_primary_agent_prompt_defines_independent_three_view_splits() -> None:
+    prompt = PrimaryAgentPromptBuilder().build(
+        "分析 ts-security-service 的公开 API、REST 下游服务和 REST 上游服务。",
+        3,
+    )
+
+    assert "逐项列出原问题要求的结果集合" in prompt.system
+    assert "从原始锚点独立计算且不依赖其他集合" in prompt.system
+    assert "InsidePaymentServiceImpl.pay" in prompt.system
+    assert "`upstream_reachability`" in prompt.system
+    assert "`reachable_entry_api`" in prompt.system
+    assert "`direct_rest_egress`" in prompt.system
+    assert "ts-security-service 的公开 API 路径和 HTTP 方法" in prompt.system
+    assert "通过 REST 直接依赖 ts-security-service 的上游服务" in prompt.system
+    assert "三个服务级子问题均使用 `general`" in prompt.system
+
+
+def test_primary_agent_prompt_keeps_atomic_correspondence_in_one_query() -> None:
+    prompt = PrimaryAgentPromptBuilder().build(
+        "查询入口 API 到 InsidePaymentServiceImpl.pay 的完整调用链。",
+        3,
+    )
+
+    assert "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径" in (
+        prompt.system
+    )
+    assert "同一 API 的请求与响应字段" in prompt.system
+    assert "同一 REST 调用的调用方与目标字段" in prompt.system
+    assert "同一分组的维度与聚合值" in prompt.system
+    assert "MATCH" not in prompt.system
 
 
 @pytest.mark.parametrize(

@@ -56,6 +56,9 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "第三个子问题必须原样写明" in prompt.system
     assert "‘外部服务’也不得输出该泛称" in prompt.system
     assert "外部服务绝不是调用该变更方法的上游方法" in prompt.system
+    assert "逐项列出原问题要求的结果集合" in prompt.system
+    assert "ts-security-service 的公开 API 路径和 HTTP 方法" in prompt.system
+    assert "三个服务级子问题均使用 `general`" in prompt.system
 
 
 def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
@@ -70,6 +73,9 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
     )
     assert "不要按返回列、属性或关系端点机械拆分" in prompt.system
     assert "查询完整消息路径及其中需要保持对应的路由条件" in prompt.system
+    assert "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径" in (
+        prompt.system
+    )
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system
 
 

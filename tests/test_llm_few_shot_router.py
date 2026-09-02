@@ -98,6 +98,7 @@ def test_router_sends_only_stable_compatible_metadata() -> None:
     assert len(client.prompts) == 1
     prompt = client.prompts[0]
     assert prompt.user.index("a-compatible") < prompt.user.index("b-compatible")
+    assert '"id":"a-compatible","category":"test"' in prompt.user
     assert "z-incompatible" not in prompt.user
     assert "MATCH" not in prompt.user
     assert "schema_requirements" not in prompt.user
@@ -347,6 +348,52 @@ def test_router_uses_primary_shape_and_semantics_as_authoritative_input() -> Non
     assert "FoodServiceImpl.getAllFood" in prompt.user
     assert "调用距离" in prompt.user
     assert '"id":"direct"' not in prompt.user
+
+
+@pytest.mark.parametrize(
+    ("required_information", "selected_id"),
+    [
+        (("下游 API", "目标服务"), "base-rest"),
+        (
+            ("下游 API", "目标服务", "目标 API", "入口方法", "匹配类型"),
+            "external-mapping",
+        ),
+    ],
+)
+def test_router_distinguishes_direct_rest_return_structures(
+    required_information: tuple[str, ...],
+    selected_id: str,
+) -> None:
+    client = StubLLMClient(
+        LLMResponse(content=f'{{"selected_ids":["{selected_id}"]}}')
+    )
+    router = LLMFewShotRouter(
+        (
+            _example(
+                "base-rest",
+                query_shape=QueryShape.DIRECT_REST_EGRESS,
+            ),
+            _example(
+                "external-mapping",
+                query_shape=QueryShape.DIRECT_REST_EGRESS,
+            ),
+        ),
+        client,
+    )
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 InsidePaymentServiceImpl.pay 的直接 REST 出口",
+        "查询直接 REST 下游及所需映射",
+        required_information,
+        "InsidePaymentServiceImpl.pay",
+        QueryShape.DIRECT_REST_EGRESS,
+    )
+
+    selected = router.route_planned(query, GraphSchema())
+
+    assert tuple(example.id for example in selected) == (selected_id,)
+    prompt = client.prompts[0]
+    assert "、".join(required_information) in prompt.user
 
 
 def test_router_returns_single_compatible_shape_without_llm_call() -> None:

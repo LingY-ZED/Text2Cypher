@@ -172,7 +172,8 @@ def test_primary_prompt_keeps_decomposition_semantics() -> None:
         3,
     )
 
-    assert "必须拆成三个独立且重复方法锚点的子问题" in prompt.system
+    assert "必须拆成三个自包含子问题并重复方法锚点" in prompt.system
+    assert "三个服务级子问题均使用 `general`" in prompt.system
     assert "只有多个业务视角能够独立重算" in prompt.system
     assert "MATCH" not in prompt.system
     assert "方法-[:调用]->方法" not in prompt.system

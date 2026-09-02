@@ -109,7 +109,10 @@ def test_loader_rejects_duplicate_ids(tmp_path: Path) -> None:
         JsonFewShotExampleLoader(library_path).load()
 
 
-@pytest.mark.parametrize("missing_field", ["question", "cypher", "aliases"])
+@pytest.mark.parametrize(
+    "missing_field",
+    ["question", "cypher", "aliases"],
+)
 def test_loader_rejects_missing_fields(
     tmp_path: Path,
     missing_field: str,

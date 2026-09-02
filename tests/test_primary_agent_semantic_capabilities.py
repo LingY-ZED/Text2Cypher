@@ -30,8 +30,15 @@ def test_loads_abstract_semantic_capabilities_from_package_resource() -> None:
     assert "哪些方法调用 X" in capabilities
     assert "不得扩大或缩小原问题的范围" in capabilities
     assert "按每个对象给出度量" in capabilities
+    assert "逐项列出原问题要求的结果集合" in capabilities
+    assert "InsidePaymentServiceImpl.pay" in capabilities
+    assert "ts-security-service 的公开 API 路径和 HTTP 方法" in capabilities
+    assert "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径" in (
+        capabilities
+    )
     assert "方法-[:服务于]->上游API" not in capabilities
     assert "MATCH" not in capabilities
+    assert "Few-shot" not in capabilities
 
 
 @pytest.mark.parametrize(

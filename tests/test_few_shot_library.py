@@ -104,41 +104,12 @@ def code_knowledge_schema() -> GraphSchema:
 def test_default_library_contains_compact_reusable_example_catalog() -> None:
     examples = JsonFewShotExampleLoader().load()
 
-    assert len(examples) == 26
+    assert len(examples) == 25
     assert Counter(example.category for example in examples) == {
         "simple_query": 3,
-        "path_query": 14,
-        "impact_analysis": 2,
+        "path_query": 15,
         "mq_query": 4,
         "aggregate_statistics": 3,
-    }
-    assert {example.id for example in examples} == {
-        "simple-list-services",
-        "simple-filter-upstream-apis",
-        "simple-api-contract",
-        "ownership-service-apis",
-        "path-class-methods",
-        "path-interface-implementation",
-        "path-queue-owner",
-        "call-method-downstream-methods",
-        "call-method-downstream-services",
-        "call-method-upstream-reachability",
-        "call-method-direct-upstream",
-        "call-method-direct-rest-egress",
-        "call-service-outgoing-rest",
-        "impact-upstream-services",
-        "impact-entry-apis",
-        "mq-between-services",
-        "mq-publishers-for-queue",
-        "mq-full-message-chain",
-        "aggregate-service-api-counts",
-        "aggregate-service-target-calls",
-        "aggregate-interface-implementations",
-        "call-interface-dispatch",
-        "call-ordered-method-path",
-        "api-external-mapping",
-        "service-rest-external-mapping",
-        "mq-publish-call-point",
     }
     assert all(len(example.aliases) == 2 for example in examples)
     assert all(3 <= len(example.tags) <= 5 for example in examples)
@@ -152,14 +123,9 @@ def test_default_library_contains_compact_reusable_example_catalog() -> None:
         "call-method-downstream-methods": QueryShape.DIRECT_DOWNSTREAM_METHOD,
         "impact-entry-apis": QueryShape.REACHABLE_ENTRY_API,
         "call-ordered-method-path": QueryShape.ORDERED_METHOD_PATH,
+        "api-external-mapping": QueryShape.DIRECT_REST_EGRESS,
         "call-method-direct-rest-egress": QueryShape.DIRECT_REST_EGRESS,
     }
-    non_general_shapes = [
-        example.query_shape
-        for example in examples
-        if example.query_shape is not QueryShape.GENERAL
-    ]
-    assert len(non_general_shapes) == len(set(non_general_shapes))
 
 
 def test_all_default_examples_match_frozen_code_knowledge_schema(
@@ -182,6 +148,163 @@ def test_all_default_examples_match_frozen_code_knowledge_schema(
     assert incompatible == []
 
 
+def test_default_catalog_metadata_has_one_unambiguous_structure_per_example(
+) -> None:
+    examples = JsonFewShotExampleLoader().load()
+    examples_by_id = {example.id: example for example in examples}
+    expected_questions = {
+        "simple-list-services": "系统中有哪些微服务？",
+        "simple-filter-upstream-apis": (
+            "系统提供了哪些 HTTP API？请列出路径和请求方式。"
+        ),
+        "simple-api-contract": (
+            "POST /api/v1/adminrouteservice/adminroute 使用什么请求体和响应类型？"
+        ),
+        "ownership-service-apis": (
+            "AdminRouteServiceImpl 所属微服务提供哪些公开 API？"
+            "请返回 API 路径和 HTTP 方法。"
+        ),
+        "path-class-methods": (
+            "consignprice.service.ConsignPriceServiceImpl 定义了哪些方法及签名？"
+        ),
+        "path-interface-implementation": (
+            "auth.service.impl.TokenServiceImpl 实现了哪个接口？"
+        ),
+        "path-queue-owner": "列出所有消息队列及其所属微服务。",
+        "call-method-downstream-methods": (
+            "RebookServiceImpl.rebook 直接调用了哪些方法？"
+        ),
+        "call-service-outgoing-rest": (
+            "查询 ts-rebook-service 直接 REST 调用的下游服务，"
+            "并返回调用方法和下游服务。"
+        ),
+        "impact-upstream-services": (
+            "查询 ts-order-other-service 的 REST 调用方，"
+            "并返回调用服务、调用方法、下游 API、目标 API 和入口方法。"
+        ),
+        "impact-entry-apis": (
+            "哪些入口 API 可以到达 ConsignServiceImpl.updateConsignRecord？"
+            "请返回入口方法、API 路径和 HTTP 方法。"
+        ),
+        "mq-between-services": (
+            "查询 ts-preserve-service 到 ts-notification-service 的 MQ 通道，"
+            "并返回交换机、队列和路由键。"
+        ),
+        "mq-publishers-for-queue": (
+            "查询经交换机向 food_delivery 队列发送消息的方法，"
+            "并返回发布方法和交换机。"
+        ),
+        "mq-full-message-chain": (
+            "展开 food_delivery 的完整消息链，返回发布方法、发送服务、"
+            "交换机、队列、消费方法和接收服务。"
+        ),
+        "aggregate-service-api-counts": (
+            "按请求方式统计 ts-admin-route-service 对外 API 数量。"
+        ),
+        "aggregate-service-target-calls": (
+            "按下游服务统计 ts-admin-basic-info-service 的 REST 调用关系数。"
+        ),
+        "aggregate-interface-implementations": "按微服务统计接口实现类数量。",
+        "call-method-upstream-reachability": (
+            "哪些上游方法可以调用到 travel.service.TravelServiceImpl.getTickets？"
+            "请返回各自的调用距离。"
+        ),
+        "call-method-direct-upstream": (
+            "哪些方法直接调用 FoodServiceImpl.getAllFood？"
+        ),
+        "call-interface-dispatch": (
+            "FoodController.getAllFood 通过哪个接口分派到了哪个实现方法？"
+        ),
+        "call-ordered-method-path": (
+            "查询 WaitListOrderServiceImpl.triggerThread 到 "
+            "PollThread.doPreserve 的有序方法路径，并返回路径签名和方法顺序。"
+        ),
+        "api-external-mapping": (
+            "查询 InsidePaymentServiceImpl.pay 直接调用的下游 API，"
+            "并返回目标服务、目标 API、入口方法和匹配类型。"
+        ),
+        "call-method-direct-rest-egress": (
+            "查询 InsidePaymentServiceImpl.pay 直接调用的下游 API 和目标服务。"
+        ),
+        "service-rest-external-mapping": (
+            "查询 ts-admin-basic-info-service 的 REST 出口，"
+            "并返回调用方法、下游 API、目标服务、目标 API 和入口方法。"
+        ),
+        "mq-publish-call-point": (
+            "preserve.mq.RabbitSend.send 在哪个调用点使用什么路由键"
+            "发布到哪个交换机？"
+        ),
+    }
+
+    assert {
+        identifier: example.question
+        for identifier, example in examples_by_id.items()
+    } == expected_questions
+    assert {
+        example.id for example in examples if example.category == "simple_query"
+    } == {
+        "simple-list-services",
+        "simple-filter-upstream-apis",
+        "simple-api-contract",
+    }
+    assert {
+        example.id for example in examples if example.category == "mq_query"
+    } == {
+        "mq-between-services",
+        "mq-publishers-for-queue",
+        "mq-full-message-chain",
+        "mq-publish-call-point",
+    }
+    assert {
+        example.id
+        for example in examples
+        if example.category == "aggregate_statistics"
+    } == {
+        "aggregate-service-api-counts",
+        "aggregate-service-target-calls",
+        "aggregate-interface-implementations",
+    }
+    assert all(
+        resolve_query_shape(example.question) is example.query_shape
+        for example in examples
+    )
+    assert all(
+        resolve_query_shape(alias) in {QueryShape.GENERAL, example.query_shape}
+        for example in examples
+        for alias in example.aliases
+    )
+
+
+def test_default_catalog_has_no_literal_only_cypher_duplicates() -> None:
+    examples = JsonFewShotExampleLoader().load()
+
+    def fingerprint(cypher: str) -> str:
+        without_literals = re.sub(r"'(?:''|[^'])*'", "'<value>'", cypher)
+        return re.sub(r"\s+", " ", without_literals).strip()
+
+    fingerprints = [fingerprint(example.cypher) for example in examples]
+
+    assert len(fingerprints) == len(set(fingerprints))
+
+
+def test_schema_requirements_do_not_retain_unused_schema_tokens() -> None:
+    for example in JsonFewShotExampleLoader().load():
+        requirements = example.schema_requirements
+        for label in requirements.node_labels:
+            assert re.search(rf"\([^)]*:{re.escape(label)}(?:[\s{{)])", example.cypher)
+        for relationship_type in requirements.relationship_types:
+            assert re.search(
+                rf"\[[^]]*:{re.escape(relationship_type)}(?:[\s*{{\]])",
+                example.cypher,
+            )
+        for properties in requirements.node_properties.values():
+            for property_name in properties:
+                assert property_name in example.cypher
+        for properties in requirements.relationship_properties.values():
+            for property_name in properties:
+                assert property_name in example.cypher
+
+
 def test_selected_example_metadata_uses_business_language_without_noise() -> None:
     examples_by_id = {
         example.id: example for example in JsonFewShotExampleLoader().load()
@@ -201,19 +324,19 @@ def test_selected_example_metadata_uses_business_language_without_noise() -> Non
         ),
         "impact-upstream-services": (
             (
-                "哪些服务通过 REST 调用了 ts-order-other-service？"
-                "请列出调用方法、下游 API，以及对应的目标 API 和入口方法。"
+                "查询 ts-order-other-service 的 REST 调用方，"
+                "并返回调用服务、调用方法、下游 API、目标 API 和入口方法。"
             ),
             (
                 "查找 ts-order-other-service 的 REST 调用方",
                 "查看目标服务的调用来源和入口 API",
             ),
-            ("影响分析", "REST", "上游服务", "调用来源", "入口映射"),
+            ("路径查询", "REST", "上游服务", "调用来源", "入口映射"),
         ),
         "api-external-mapping": (
             (
-                "InsidePaymentServiceImpl.pay 调用了哪些下游 API？"
-                "请同时给出目标服务、目标 API、入口方法和匹配类型。"
+                "查询 InsidePaymentServiceImpl.pay 直接调用的下游 API，"
+                "并返回目标服务、目标 API、入口方法和匹配类型。"
             ),
             (
                 "查看方法的 REST 调用及其目标入口",
@@ -223,8 +346,8 @@ def test_selected_example_metadata_uses_business_language_without_noise() -> Non
         ),
         "service-rest-external-mapping": (
             (
-                "ts-admin-basic-info-service 调用了哪些下游 API？"
-                "请列出调用方法以及对应的目标服务、目标 API 和入口方法。"
+                "查询 ts-admin-basic-info-service 的 REST 出口，"
+                "并返回调用方法、下游 API、目标服务、目标 API 和入口方法。"
             ),
             (
                 "查看服务发起的 REST 调用及目标入口",
@@ -313,7 +436,8 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     assert "调用" not in direct_methods.schema_requirements.relationship_properties
     assert "所属类名" in direct_methods.cypher
     upstream_reachability = examples_by_id["call-method-upstream-reachability"]
-    assert upstream_reachability.cypher.count("MATCH") == 3
+    assert upstream_reachability.cypher.count("MATCH") == 1
+    assert upstream_reachability.cypher.startswith("MATCH path = shortestPath(")
     assert (
         "targetMethod.所属类名 = 'travel.service.TravelServiceImpl'"
         in upstream_reachability.cypher
@@ -345,19 +469,14 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
         "OPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)"
         in direct_rest.cypher
     )
-    assert "anchorMethod.全限定名 AS 目标方法" in direct_rest.cypher
+    assert "anchorMethod.全限定名 AS 目标方法" not in direct_rest.cypher
+    assert "downstreamApi.API路径 AS 下游API" in direct_rest.cypher
+    assert "targetService.服务名称 AS 下游服务" in direct_rest.cypher
+    assert "全限定名" not in direct_rest.schema_requirements.node_properties[
+        "方法"
+    ]
     assert "外部调用" not in direct_rest.cypher
-
-    downstream_services = examples_by_id["call-method-downstream-services"]
-    assert downstream_services.cypher.startswith(
-        "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)"
-    )
-    assert downstream_services.cypher.count("OPTIONAL MATCH") == 1
-    assert (
-        "OPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)"
-        in downstream_services.cypher
-    )
-    assert "可用目标服务" in " ".join(downstream_services.aliases)
+    assert "call-method-downstream-services" not in examples_by_id
 
     service_apis = examples_by_id["ownership-service-apis"]
     assert "(anchorClass:类 {简名:" in service_apis.cypher
@@ -370,6 +489,9 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     mq_chain = examples_by_id["mq-full-message-chain"]
     assert "-[:消费自]->(consumerMethod:方法)" in mq_chain.cypher
     assert "publish.路由键 = route.路由键" in mq_chain.cypher
+
+    interface_counts = examples_by_id["aggregate-interface-implementations"]
+    assert interface_counts.cypher.count("MATCH") == 1
 
     ordered_path = examples_by_id["call-ordered-method-path"]
     assert "链中下一节点*1..5" in ordered_path.cypher
@@ -417,6 +539,7 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
         (impacted_entries.question, *impacted_entries.aliases, *impacted_entries.tags)
     )
     call_point = examples_by_id["mq-publish-call-point"]
+    assert call_point.cypher.count("MATCH") == 1
     assert "publish.调用点标识 = callPoint.语句文本" in call_point.cypher
 
 

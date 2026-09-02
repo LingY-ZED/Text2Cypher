@@ -45,7 +45,6 @@ GOLDEN_ROW_COUNTS = {
     "path-interface-implementation": 1,
     "path-queue-owner": 5,
     "call-method-downstream-methods": 4,
-    "call-method-downstream-services": 3,
     "call-service-outgoing-rest": 15,
     "impact-upstream-services": 21,
     "impact-entry-apis": 1,
@@ -58,8 +57,6 @@ GOLDEN_ROW_COUNTS = {
     "call-method-upstream-reachability": 2,
     "call-method-direct-upstream": 1,
     "call-method-direct-rest-egress": 3,
-    "call-method-full-upstream-chain": 1,
-    "call-method-full-downstream-chain": 7,
     "call-interface-dispatch": 1,
     "call-ordered-method-path": 1,
     "api-external-mapping": 3,
@@ -76,7 +73,6 @@ GOLDEN_COLUMNS = {
     "path-interface-implementation": ("接口全限定名",),
     "path-queue-owner": ("队列名称", "服务名称"),
     "call-method-downstream-methods": ("被调用方法",),
-    "call-method-downstream-services": ("下游服务", "接口路径"),
     "call-service-outgoing-rest": ("调用方法", "下游服务"),
     "impact-upstream-services": (
         "调用服务",
@@ -101,16 +97,7 @@ GOLDEN_COLUMNS = {
     "aggregate-interface-implementations": ("服务名称", "实现类数量"),
     "call-method-upstream-reachability": ("目标方法", "上游方法", "调用距离"),
     "call-method-direct-upstream": ("目标方法", "上游方法"),
-    "call-method-direct-rest-egress": ("目标方法", "下游API", "下游服务"),
-    "call-method-full-upstream-chain": ("目标方法", "入口API", "方法路径"),
-    "call-method-full-downstream-chain": (
-        "目标方法",
-        "方法路径",
-        "下游API",
-        "下游服务",
-        "目标上游API",
-        "目标入口方法",
-    ),
+    "call-method-direct-rest-egress": ("下游API", "下游服务"),
     "call-interface-dispatch": ("调用方法", "实现方法", "经由接口"),
     "call-ordered-method-path": ("路径签名", "方法路径"),
     "api-external-mapping": (
@@ -275,7 +262,7 @@ def test_real_neo4j_error_reaches_corrector_as_structured_context() -> None:
 
 
 def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
-    """逐条验证 28 条黄金示例的 Schema、只读性和真实结果语义。"""
+    """逐条验证 25 条黄金示例的 Schema、只读性和真实结果语义。"""
 
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings)
@@ -324,7 +311,7 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
         provider.close()
 
     assert incompatible == []
-    assert len(reports) == 28
+    assert len(reports) == 25
     assert all(report.query_type == "r" for report in reports.values())
     assert set(results) == set(GOLDEN_ROW_COUNTS)
     assert {
@@ -389,18 +376,18 @@ def _assert_golden_result_semantics(
         "rebook.service.RebookServiceImpl.getTripAllDetailInformation",
         "rebook.service.RebookServiceImpl.updateOrder",
     }
-    assert results["call-method-downstream-services"].rows == (
+    assert results["call-method-direct-rest-egress"].rows == (
         {
+            "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
             "下游服务": "ts-order-other-service",
-            "接口路径": "/api/v1/orderOtherService/orderOther/{orderId}",
         },
         {
+            "下游API": "/api/v1/orderservice/order/",
             "下游服务": "ts-order-service",
-            "接口路径": "/api/v1/orderservice/order/",
         },
         {
+            "下游API": "/api/v1/paymentservice/payment",
             "下游服务": "ts-payment-service",
-            "接口路径": "/api/v1/paymentservice/payment",
         },
     )
     assert _values(results["call-service-outgoing-rest"], "下游服务") == {
@@ -494,19 +481,6 @@ def _assert_golden_result_semantics(
     assert _values(results["mq-full-message-chain"], "接收服务") == {
         "ts-delivery-service",
     }
-    assert results["call-method-full-upstream-chain"].rows == (
-        {
-            "目标方法": "foodsearch.service.FoodServiceImpl.getAllFood",
-            "入口API": (
-                "/api/v1/foodservice/foods/"
-                "{date}/{startStation}/{endStation}/{tripId}"
-            ),
-            "方法路径": [
-                "foodsearch.controller.FoodController.getAllFood",
-                "foodsearch.service.FoodServiceImpl.getAllFood",
-            ],
-        },
-    )
     assert results["call-method-upstream-reachability"].rows == (
         {
             "目标方法": "travel.service.TravelServiceImpl.getTickets",
@@ -518,104 +492,6 @@ def _assert_golden_result_semantics(
             "上游方法": "travel.controller.TravelController.getTripAllDetailInfo",
             "调用距离": 2,
         },
-    )
-    assert results["call-method-direct-rest-egress"].rows == (
-        {
-            "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
-            "下游API": "/api/v1/orderOtherService/orderOther/{orderId}",
-            "下游服务": "ts-order-other-service",
-        },
-        {
-            "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
-            "下游API": "/api/v1/orderservice/order/",
-            "下游服务": "ts-order-service",
-        },
-        {
-            "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay",
-            "下游API": "/api/v1/paymentservice/payment",
-            "下游服务": "ts-payment-service",
-        },
-    )
-    downstream_chain = results["call-method-full-downstream-chain"].rows
-    assert all(
-        row["目标方法"]
-        == "inside_payment.service.InsidePaymentServiceImpl.pay"
-        for row in downstream_chain
-    )
-    direct_rest_rows = {
-        (
-            row["下游API"],
-            row["下游服务"],
-            row["目标上游API"],
-            row["目标入口方法"],
-        )
-        for row in downstream_chain
-        if len(row["方法路径"]) == 1
-    }
-    assert direct_rest_rows == {
-        (
-            "/api/v1/orderOtherService/orderOther/{orderId}",
-            "ts-order-other-service",
-            "/api/v1/orderOtherService/orderOther/{orderId}",
-            "other.controller.OrderOtherController.getOrderById",
-        ),
-        (
-            "/api/v1/orderservice/order/",
-            "ts-order-service",
-            "/api/v1/orderservice/order/status/{orderId}/{status}",
-            "order.controller.OrderController.modifyOrder",
-        ),
-        (
-            "/api/v1/paymentservice/payment",
-            "ts-payment-service",
-            "/api/v1/paymentservice/payment",
-            "com.trainticket.controller.PaymentController.pay",
-        ),
-    }
-    indirect_rest_rows = {
-        (
-            row["下游API"],
-            row["下游服务"],
-            row["目标上游API"],
-            row["目标入口方法"],
-        )
-        for row in downstream_chain
-        if len(row["方法路径"]) == 2
-    }
-    assert indirect_rest_rows == {
-        (
-            "/api/v1/orderOtherService/orderOther/status//",
-            "ts-order-other-service",
-            "/api/v1/orderOtherService/orderOther",
-            "other.controller.OrderOtherController.findAllOrder",
-        ),
-        (
-            "/api/v1/orderOtherService/orderOther/status/{orderId}/",
-            "ts-order-other-service",
-            "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}",
-            "other.controller.OrderOtherController.modifyOrder",
-        ),
-        (
-            "/api/v1/orderservice/order/status//",
-            "ts-order-service",
-            "/api/v1/orderservice/order",
-            "order.controller.OrderController.findAllOrder",
-        ),
-        (
-            "/api/v1/orderservice/order/status/{orderId}/",
-            "ts-order-service",
-            "/api/v1/orderservice/order/status/{orderId}/{status}",
-            "order.controller.OrderController.modifyOrder",
-        ),
-    }
-    assert all(
-        row["方法路径"]
-        == [
-            "inside_payment.service.InsidePaymentServiceImpl.pay",
-            "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus",
-        ]
-        for row in downstream_chain
-        if len(row["方法路径"]) == 2
     )
     assert {
         (row["请求方式"], row["API数量"])
