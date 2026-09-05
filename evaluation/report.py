@@ -52,6 +52,7 @@ def render_report(
         f"- 模型：`{metadata['model']}`",
         run_summary,
         f"- Schema 指纹：`{metadata.get('schema_fingerprint', 'unknown')}`",
+        *_provenance_lines(metadata),
     ]
     if regrade is not None:
         lines.extend(
@@ -364,6 +365,7 @@ def _render_drift_report(
         "",
         f"- 分支：`{metadata['revision']}`",
         f"- 提交：`{metadata['revision_sha']}`",
+        *_provenance_lines(metadata),
         "- 原因：实时 Neo4j Oracle 与冻结快照不一致，未调用 LLM。",
         f"- 确定性恢复探针：{sum(recovery_probes.values())}/{len(recovery_probes)}",
         "",
@@ -386,6 +388,22 @@ def _render_drift_report(
             )
         )
     (output / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _provenance_lines(metadata: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Render optional provenance without rejecting historical evaluation records."""
+
+    raw_dataset = metadata.get("dataset")
+    dataset = raw_dataset if isinstance(raw_dataset, Mapping) else {}
+    raw_resources = metadata.get("query_resources")
+    resources = raw_resources if isinstance(raw_resources, Mapping) else {}
+    return (
+        f"- 评测器提交：`{metadata.get('evaluator_revision_sha', 'unknown')}`",
+        "- 数据集："
+        f"v{dataset.get('version', 'unknown')} "
+        f"(`{dataset.get('sha256', 'unknown')}`)",
+        f"- 查询资源指纹：`{resources.get('sha256', 'unknown')}`",
+    )
 
 
 def _render_charts(

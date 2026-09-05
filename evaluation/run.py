@@ -7,10 +7,13 @@ import csv
 import hashlib
 import json
 import logging
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -49,6 +52,14 @@ from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
 
+_RESOURCE_PACKAGE = "text2cypher.resources"
+_RESOURCE_FILES = (
+    "few_shot_examples.json",
+    "primary_agent_semantic_capabilities.md",
+    "query_shape_templates.json",
+)
+_BUSINESS_RULES_DIRECTORY = "code_graph_business_rules"
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -71,6 +82,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.revision_sha,
         args.runs,
         len(cases),
+        args.cases,
     )
     _write_json(output / "metadata.json", metadata)
 
@@ -628,11 +640,15 @@ def _metadata(
     revision_sha: str,
     runs: int,
     case_count: int,
+    cases_path: Path,
 ) -> dict[str, Any]:
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "revision": revision,
         "revision_sha": revision_sha,
+        "evaluator_revision_sha": _evaluator_revision_sha(),
+        "dataset": _dataset_provenance(cases_path),
+        "query_resources": _query_resource_provenance(),
         "python": sys.version,
         "runs_per_case": runs,
         "case_count": case_count,
@@ -655,6 +671,104 @@ def _metadata(
             "llm_disable_thinking": settings.llm_disable_thinking,
         },
     }
+
+
+def _evaluator_revision_sha() -> str:
+    """Return the evaluator checkout SHA without making Git a runtime requirement."""
+
+    repository = Path(__file__).resolve().parents[1]
+    try:
+        completed = subprocess.run(
+            ("git", "-C", str(repository), "rev-parse", "HEAD"),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    candidate = completed.stdout.strip().lower()
+    if completed.returncode != 0 or len(candidate) != 40:
+        return "unknown"
+    if not all(character in "0123456789abcdef" for character in candidate):
+        return "unknown"
+    return candidate
+
+
+def _dataset_provenance(path: Path) -> dict[str, Any]:
+    """Fingerprint the exact dataset bytes used by the current evaluation run."""
+
+    try:
+        content = path.read_bytes()
+        payload = json.loads(content)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("evaluation dataset provenance cannot be loaded") from error
+    version = payload.get("version") if isinstance(payload, dict) else None
+    if type(version) is not int:
+        raise ValueError("evaluation dataset provenance requires an integer version")
+    return {
+        "path": path.name,
+        "version": version,
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
+def _query_resource_provenance(
+    root: Traversable | None = None,
+) -> dict[str, Any]:
+    """Fingerprint packaged assets that change planning or translation behavior."""
+
+    resource_root = files(_RESOURCE_PACKAGE) if root is None else root
+    entries: list[tuple[str, str]] = []
+    for relative_path in _RESOURCE_FILES:
+        entries.append(
+            _resource_digest(relative_path, resource_root.joinpath(relative_path))
+        )
+
+    rules_root = resource_root.joinpath(_BUSINESS_RULES_DIRECTORY)
+    if not rules_root.is_dir():
+        raise ValueError("evaluation query resources are missing business rules")
+    rule_names = sorted(
+        child.name
+        for child in rules_root.iterdir()
+        if child.is_file() and child.name.endswith(".md")
+    )
+    if not rule_names:
+        raise ValueError("evaluation query resources contain no business rules")
+    for name in rule_names:
+        entries.append(
+            _resource_digest(
+                f"{_BUSINESS_RULES_DIRECTORY}/{name}",
+                rules_root.joinpath(name),
+            )
+        )
+
+    entries.sort(key=lambda item: item[0])
+    combined = hashlib.sha256()
+    for relative_path, digest in entries:
+        combined.update(relative_path.encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(digest.encode("ascii"))
+        combined.update(b"\n")
+    return {
+        "sha256": combined.hexdigest(),
+        "files": [
+            {"path": relative_path, "sha256": digest}
+            for relative_path, digest in entries
+        ],
+    }
+
+
+def _resource_digest(relative_path: str, resource: Traversable) -> tuple[str, str]:
+    if not resource.is_file():
+        raise ValueError(f"evaluation query resource is missing: {relative_path}")
+    try:
+        content = resource.read_bytes()
+    except OSError as error:
+        raise ValueError(
+            f"evaluation query resource cannot be read: {relative_path}"
+        ) from error
+    return relative_path, hashlib.sha256(content).hexdigest()
 
 
 def _write_json(path: Path, value: object) -> None:
