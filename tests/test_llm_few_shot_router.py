@@ -230,7 +230,7 @@ def test_router_filters_schema_before_deterministic_query_shape() -> None:
 
     selected = router.route("查询getTickets的上游调用链", GraphSchema())
 
-    assert tuple(example.id for example in selected) == ("upstream",)
+    assert tuple(example.id for example in selected) == ("entry",)
     assert client.prompts == []
 
 

@@ -57,26 +57,22 @@ def _full_chain_schema() -> GraphSchema:
     )
 
 
-def test_complete_chain_templates_are_entity_neutral_and_preserve_branches() -> None:
+def test_full_downstream_template_is_entity_neutral_and_preserves_path() -> None:
     templates = JsonQueryShapeTemplateLoader().load()
 
     assert {template.query_shape for template in templates} == {
-        QueryShape.FULL_ENTRY_CHAIN,
         QueryShape.FULL_DOWNSTREAM_CHAIN,
     }
     catalog = "\n".join(template.template for template in templates)
     assert "FoodServiceImpl" not in catalog
     assert "InsidePaymentServiceImpl" not in catalog
-    assert catalog.count("<TARGET_METHOD_FILTER>") == 6
+    assert catalog.count("<TARGET_METHOD_FILTER>") == 1
 
     by_shape = {template.query_shape: template for template in templates}
-    entry = by_shape[QueryShape.FULL_ENTRY_CHAIN].template
     downstream = by_shape[QueryShape.FULL_DOWNSTREAM_CHAIN].template
-    assert entry.count("UNION") == 3
-    assert "[:接口调用]" in entry
-    assert "路径签名" in entry and "位置索引" in entry
-    assert downstream.count("UNION") == 1
+    assert "UNION" not in downstream
     assert "MATCH methodPath = (anchorMethod:方法)" in downstream
+    assert "链中下一节点*0..5" in downstream
     assert "OPTIONAL MATCH (downstreamApi)-[:外部调用]" in downstream
     assert "relationships(methodPath)" in downstream
 
@@ -86,21 +82,18 @@ def test_template_selector_requires_matching_shape_and_schema() -> None:
     graph = SchemaGraphBuilder().build(schema)
     selector = QueryShapeTemplateSelector()
 
-    assert selector.select(QueryShape.FULL_ENTRY_CHAIN, schema, graph) is not None
+    assert selector.select(QueryShape.FULL_ENTRY_CHAIN, schema, graph) is None
     assert (
         selector.select(QueryShape.FULL_DOWNSTREAM_CHAIN, schema, graph)
         is not None
     )
     assert selector.select(QueryShape.UPSTREAM_REACHABILITY, schema, graph) is None
     empty_schema = GraphSchema()
-    assert (
-        selector.select(
-            QueryShape.FULL_ENTRY_CHAIN,
-            empty_schema,
-            SchemaGraphBuilder().build(empty_schema),
-        )
-        is None
-    )
+    assert selector.select(
+        QueryShape.FULL_DOWNSTREAM_CHAIN,
+        empty_schema,
+        SchemaGraphBuilder().build(empty_schema),
+    ) is None
 
 
 @pytest.mark.parametrize(

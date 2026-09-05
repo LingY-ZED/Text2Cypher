@@ -12,7 +12,9 @@ from text2cypher.components.few_shot_schema_filter import (
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.domain.models import (
+    ChatPrompt,
     GraphSchema,
+    LLMResponse,
     NodeSchema,
     PropertySchema,
     RelationshipPattern,
@@ -20,6 +22,11 @@ from text2cypher.domain.models import (
 )
 from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
+
+
+class _UnexpectedLLMClient:
+    def generate(self, prompt: ChatPrompt) -> LLMResponse:
+        raise AssertionError(f"精确 QueryShape 不应调用 Router LLM：{prompt.user}")
 
 
 @pytest.fixture(scope="module")
@@ -104,10 +111,10 @@ def code_knowledge_schema() -> GraphSchema:
 def test_default_library_contains_compact_reusable_example_catalog() -> None:
     examples = JsonFewShotExampleLoader().load()
 
-    assert len(examples) == 25
+    assert len(examples) == 26
     assert Counter(example.category for example in examples) == {
         "simple_query": 3,
-        "path_query": 15,
+        "path_query": 16,
         "mq_query": 4,
         "aggregate_statistics": 3,
     }
@@ -119,6 +126,7 @@ def test_default_library_contains_compact_reusable_example_catalog() -> None:
         if example.query_shape is not QueryShape.GENERAL
     } == {
         "call-method-upstream-reachability": QueryShape.UPSTREAM_REACHABILITY,
+        "call-method-full-entry-chain": QueryShape.FULL_ENTRY_CHAIN,
         "call-method-direct-upstream": QueryShape.DIRECT_UPSTREAM,
         "call-method-downstream-methods": QueryShape.DIRECT_DOWNSTREAM_METHOD,
         "impact-entry-apis": QueryShape.REACHABLE_ENTRY_API,
@@ -206,8 +214,12 @@ def test_default_catalog_metadata_has_one_unambiguous_structure_per_example(
         ),
         "aggregate-interface-implementations": "按微服务统计接口实现类数量。",
         "call-method-upstream-reachability": (
-            "哪些上游方法可以调用到 travel.service.TravelServiceImpl.getTickets？"
-            "请返回各自的调用距离。"
+            "查询 travel.service.TravelServiceImpl.getTickets 的所有上游方法及"
+            "调用距离。"
+        ),
+        "call-method-full-entry-chain": (
+            "查询 travel.service.TravelServiceImpl.getTickets 的上游调用链，"
+            "返回目标方法、入口 API 和有序方法路径。"
         ),
         "call-method-direct-upstream": (
             "哪些方法直接调用 FoodServiceImpl.getAllFood？"
@@ -217,7 +229,7 @@ def test_default_catalog_metadata_has_one_unambiguous_structure_per_example(
         ),
         "call-ordered-method-path": (
             "查询 WaitListOrderServiceImpl.triggerThread 到 "
-            "PollThread.doPreserve 的有序方法路径，并返回路径签名和方法顺序。"
+            "PollThread.doPreserve 的有序调用路径，并返回路径签名和方法顺序。"
         ),
         "api-external-mapping": (
             "查询 InsidePaymentServiceImpl.pay 直接调用的下游 API，"
@@ -287,6 +299,51 @@ def test_default_catalog_has_no_literal_only_cypher_duplicates() -> None:
     assert len(fingerprints) == len(set(fingerprints))
 
 
+@pytest.mark.parametrize(
+    ("question", "shape", "example_id", "columns"),
+    [
+        (
+            "查询 travel.service.TravelServiceImpl.getTickets 的所有上游方法及"
+            "调用距离。",
+            QueryShape.UPSTREAM_REACHABILITY,
+            "call-method-upstream-reachability",
+            ("上游方法", "调用距离"),
+        ),
+        (
+            "查询 travel.service.TravelServiceImpl.getTickets 的上游调用链，"
+            "返回目标方法、入口 API 和有序方法路径。",
+            QueryShape.FULL_ENTRY_CHAIN,
+            "call-method-full-entry-chain",
+            ("目标方法", "入口API", "方法路径"),
+        ),
+        (
+            "查询 WaitListOrderServiceImpl.triggerThread 到 PollThread.doPreserve "
+            "的有序调用路径，返回路径签名和方法顺序。",
+            QueryShape.ORDERED_METHOD_PATH,
+            "call-ordered-method-path",
+            ("路径签名", "方法路径"),
+        ),
+    ],
+)
+def test_upstream_semantic_matrix_routes_to_distinct_examples_and_shapes(
+    code_knowledge_schema: GraphSchema,
+    question: str,
+    shape: QueryShape,
+    example_id: str,
+    columns: tuple[str, ...],
+) -> None:
+    router = LLMFewShotRouter(
+        JsonFewShotExampleLoader().load(),
+        _UnexpectedLLMClient(),
+    )
+
+    selected = router.route(question, code_knowledge_schema)
+
+    assert resolve_query_shape(question) is shape
+    assert tuple(example.id for example in selected) == (example_id,)
+    assert all(f" AS {column}" in selected[0].cypher for column in columns)
+
+
 def test_schema_requirements_do_not_retain_unused_schema_tokens() -> None:
     for example in JsonFewShotExampleLoader().load():
         requirements = example.schema_requirements
@@ -294,7 +351,8 @@ def test_schema_requirements_do_not_retain_unused_schema_tokens() -> None:
             assert re.search(rf"\([^)]*:{re.escape(label)}(?:[\s{{)])", example.cypher)
         for relationship_type in requirements.relationship_types:
             assert re.search(
-                rf"\[[^]]*:{re.escape(relationship_type)}(?:[\s*{{\]])",
+                rf"\[[^]]*(?::|\|){re.escape(relationship_type)}"
+                rf"(?:[\s*{{|\]])",
                 example.cypher,
             )
         for properties in requirements.node_properties.values():
@@ -311,11 +369,8 @@ def test_selected_example_metadata_uses_business_language_without_noise() -> Non
     }
     expected_metadata = {
         "call-method-upstream-reachability": (
-            (
-                "哪些上游方法可以调用到 "
-                "travel.service.TravelServiceImpl.getTickets？"
-                "请返回各自的调用距离。"
-            ),
+            "查询 travel.service.TravelServiceImpl.getTickets 的所有上游方法及"
+            "调用距离。",
             (
                 "查询目标方法的全部上游可达方法",
                 "查看能够调用到指定方法的方法及距离",
@@ -390,7 +445,7 @@ def test_selected_example_metadata_uses_business_language_without_noise() -> Non
     assert "调用链" not in " ".join(
         (reachability.question, *reachability.aliases, *reachability.tags)
     )
-    assert "call-method-full-upstream-chain" not in examples_by_id
+    assert "call-method-full-entry-chain" in examples_by_id
     assert "call-method-full-downstream-chain" not in examples_by_id
 
     api_list = examples_by_id["simple-filter-upstream-apis"]
@@ -438,13 +493,14 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     upstream_reachability = examples_by_id["call-method-upstream-reachability"]
     assert upstream_reachability.cypher.count("MATCH") == 1
     assert upstream_reachability.cypher.startswith("MATCH path = shortestPath(")
-    assert (
-        "targetMethod.所属类名 = 'travel.service.TravelServiceImpl'"
-        in upstream_reachability.cypher
+    assert "所属类名: 'travel.service.TravelServiceImpl'" in (
+        upstream_reachability.cypher
     )
     assert "所属类名" in upstream_reachability.schema_requirements.node_properties[
         "方法"
     ]
+    # Neo4j forbids shortestPath candidates with the same start/end node even
+    # when the relationship lower bound is one, so this guard is operational.
     assert "upstreamMethod <> targetMethod" in upstream_reachability.cypher
     assert "shortestPath(" in upstream_reachability.cypher
     assert "[:调用*1..]" in upstream_reachability.cypher
@@ -455,10 +511,12 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
         not in upstream_reachability.schema_requirements.relationship_properties
     )
     assert "UNION" not in upstream_reachability.cypher
+    assert "目标方法" not in upstream_reachability.cypher
     direct_upstream = examples_by_id["call-method-direct-upstream"]
-    assert "MATCH (upstreamMethod:方法)-[:调用]->(targetMethod:方法)" in (
+    assert "MATCH (upstreamMethod:方法)-[:调用]->(anchorMethod:方法)" in (
         direct_upstream.cypher
     )
+    assert "目标方法" not in direct_upstream.cypher
     assert "调用深度" not in direct_upstream.cypher
     assert "调用" not in direct_upstream.schema_requirements.relationship_properties
     direct_rest = examples_by_id["call-method-direct-rest-egress"]
@@ -481,8 +539,8 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     service_apis = examples_by_id["ownership-service-apis"]
     assert "(anchorClass:类 {简名:" in service_apis.cypher
     assert service_apis.cypher.count("MATCH") == 2
-    assert "(service)<-[:归属于]-(serviceClass:类)" in service_apis.cypher
-    assert "<-[:归属于]-(serviceMethod:方法)" in service_apis.cypher
+    assert "(service)<-[:归属于]-(:类)" in service_apis.cypher
+    assert "<-[:归属于]-(:方法)" in service_apis.cypher
 
     mq_publishers = examples_by_id["mq-publishers-for-queue"]
     assert "publish.路由键 = route.路由键" in mq_publishers.cypher
@@ -497,6 +555,14 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     assert "链中下一节点*1..5" in ordered_path.cypher
     assert "路径签名" in ordered_path.cypher
     assert "位置索引" in ordered_path.cypher
+    full_entry = examples_by_id["call-method-full-entry-chain"]
+    assert "接口调用|链中下一节点*0..6" in full_entry.cypher
+    assert "type(pathRelationships[index]) <> '接口调用' OR index = 0" in (
+        full_entry.cypher
+    )
+    assert "路径签名" in full_entry.cypher
+    assert "位置索引" in full_entry.cypher
+    assert "UNION" not in full_entry.cypher
     external_mapping = examples_by_id["api-external-mapping"]
     assert external_mapping.cypher.startswith(
         "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)"
@@ -514,14 +580,8 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
         (service_mapping.question, *service_mapping.aliases)
     )
     upstream_rest = examples_by_id["impact-upstream-services"]
-    assert (
-        "MATCH (callerMethod)-[:下游调用]->(downstreamApi:下游API)"
-        in upstream_rest.cypher
-    )
-    assert (
-        "MATCH (downstreamApi)-[:目标服务]->(targetService:微服务"
-        in upstream_rest.cypher
-    )
+    assert "-[:下游调用]->(downstreamApi:下游API)" in upstream_rest.cypher
+    assert "-[:目标服务]->(:微服务" in upstream_rest.cypher
     assert upstream_rest.cypher.count("OPTIONAL MATCH") == 2
     assert "callerService.服务名称 AS 调用服务" in upstream_rest.cypher
     assert "callerMethod.全限定名 AS 调用方法" in upstream_rest.cypher
@@ -529,10 +589,8 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     assert {"调用来源", "入口映射"} <= set(upstream_rest.tags)
 
     impacted_entries = examples_by_id["impact-entry-apis"]
-    assert (
-        "MATCH (entryMethod)-[:调用*1..]->(anchorMethod)"
-        in impacted_entries.cypher
-    )
+    assert "shortestPath(" in impacted_entries.cypher
+    assert "[:调用*0..]" in impacted_entries.cypher
     assert "调用深度" not in impacted_entries.cypher
     assert "调用" not in impacted_entries.schema_requirements.relationship_properties
     assert "直接上游" not in " ".join(
@@ -541,6 +599,7 @@ def test_default_library_uses_only_current_schema_and_preserves_shapes() -> None
     call_point = examples_by_id["mq-publish-call-point"]
     assert call_point.cypher.count("MATCH") == 1
     assert "publish.调用点标识 = callPoint.语句文本" in call_point.cypher
+    assert "发布方法" not in call_point.cypher
 
 
 def test_default_library_uses_readable_cypher_style_and_role_variables() -> None:
@@ -571,7 +630,7 @@ def test_default_library_uses_readable_cypher_style_and_role_variables() -> None
     assert "callerMethod" in direct_calls.cypher
     assert "calledMethod" in direct_calls.cypher
 
-    assert "\n  EXISTS {" in examples_by_id["impact-entry-apis"].cypher
+    assert "shortestPath(" in examples_by_id["impact-entry-apis"].cypher
 
 
 def test_default_library_preserves_multiline_cypher_in_generation_prompt() -> None:
@@ -588,7 +647,7 @@ def test_default_library_preserves_multiline_cypher_in_generation_prompt() -> No
     )
 
     assert example.cypher in prompt.user
-    assert "\n  EXISTS {\n    MATCH" in prompt.user
+    assert "\nMATCH path = shortestPath(" in prompt.user
     assert "\nRETURN DISTINCT\n" in prompt.user
 
 

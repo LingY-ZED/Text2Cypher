@@ -86,9 +86,9 @@ TEXT2CYPHER_FEW_SHOT_MAX_CHARS=3500
 TEXT2CYPHER_FEW_SHOT_LIBRARY_PATH=
 ```
 
-空路径使用包内 25 条 canonical 示例，其中包含普通/直接上游、接口分派、有序方法路径、
-方法级直接 REST 出口、服务级 REST 外部映射及 MQ 调用点；完整入口链和完整下游链由
-Schema 感知结构模板提供。设置外部 JSON 路径可替换示例库，每条示例必须提供唯一的
+空路径使用包内 26 条 canonical 示例，其中包含上游可达集合、完整入口链、直接上游、
+接口分派、有序方法路径、方法级直接 REST 出口、服务级 REST 外部映射及 MQ 调用点；
+完整下游链由 Schema 感知结构模板提供。设置外部 JSON 路径可替换示例库，每条示例必须提供唯一的
 `id`，并以 `query_shape` 表达查询结构。Router 只接收通过实时 Schema 兼容过滤的候选
 元数据。设置 `TEXT2CYPHER_FEW_SHOT_ENABLED=false` 会跳过
 示例文件加载并恢复 Zero-shot。
@@ -222,7 +222,7 @@ $env:TEXT2CYPHER_RUN_INTEGRATION="1"
 pytest tests\integration\test_neo4j_readonly.py
 ```
 
-该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 25 条 canonical 示例逐条执行
+该集成测试只读取动态 Schema、执行 `RETURN 1`，并对 26 条 canonical 示例逐条执行
 `EXPLAIN` 和真实查询，检查精确列名、非空结果、黄金行数及关键实体；不会写入或修改
 图数据。数据库快照变化后应显式复核并更新黄金结果。
 

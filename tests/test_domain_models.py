@@ -182,7 +182,7 @@ def test_primary_agent_query_exposes_explicit_and_legacy_effective_shape() -> No
     )
 
     assert planned.effective_query_shape is QueryShape.FULL_ENTRY_CHAIN
-    assert legacy.effective_query_shape is QueryShape.UPSTREAM_REACHABILITY
+    assert legacy.effective_query_shape is QueryShape.FULL_ENTRY_CHAIN
 
 
 @pytest.mark.parametrize(

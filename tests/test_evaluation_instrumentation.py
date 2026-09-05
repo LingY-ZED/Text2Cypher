@@ -132,7 +132,7 @@ def test_recording_router_records_only_deterministic_effective_shape() -> None:
             "stage": "selection",
             "outcome": "succeeded",
             "question": "查询getTickets的上游调用链",
-            "effective_query_shape": "upstream_reachability",
+            "effective_query_shape": "full_entry_chain",
             "selected_ids": [],
             "query_index": 1,
         }

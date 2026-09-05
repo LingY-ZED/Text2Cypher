@@ -49,7 +49,8 @@ def test_decomposition_prompt_contains_complete_dynamic_schema() -> None:
     assert "# 代码知识图谱可检索业务能力" in prompt.system
     assert "方法-[:服务于]->上游API" not in prompt.system
     assert "MATCH" not in prompt.system
-    assert "无修饰的“上游调用链、上游方法、上游调用方”" in prompt.system
+    assert "“某方法的上游调用链”表示从入口 API / 入口方法" in prompt.system
+    assert "不得规划为上游可达方法集合" in prompt.system
     assert "只有明确要求“直接上游”时才限制为直接调用" in prompt.system
     assert "查询完整的上游或下游有序调用路径" in prompt.system
     assert "完整且不重复地覆盖原问题" in prompt.system

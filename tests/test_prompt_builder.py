@@ -19,6 +19,7 @@ from text2cypher.domain.models import (
     RelationshipSchema,
 )
 from text2cypher.domain.query_shapes import QueryShape
+from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 
 
 def test_prompt_includes_question_complete_schema_and_selected_rules() -> None:
@@ -209,7 +210,7 @@ def test_planned_upstream_prompt_uses_primary_shape_without_example_rule_leak() 
     assert prompt.user.index("参考示例：") < prompt.user.index("用户问题：")
 
 
-def test_full_entry_plan_injects_schema_aware_template_before_few_shot() -> None:
+def test_full_entry_plan_uses_canonical_few_shot_without_duplicate_template() -> None:
     query = PrimaryAgentQuery(
         "q1",
         "查询 ConsignServiceImpl.updateConsignRecord 的完整入口调用链",
@@ -219,18 +220,27 @@ def test_full_entry_plan_injects_schema_aware_template_before_few_shot() -> None
         QueryShape.FULL_ENTRY_CHAIN,
     )
 
-    prompt = DefaultPromptBuilder().build_planned(_template_schema(), query)
-
-    assert "查询结构模板：" in prompt.user
-    assert "full-entry-chain-structure" in prompt.user
-    assert prompt.user.count("UNION") == 3
-    assert "<TARGET_METHOD_FILTER>" in prompt.user
-    assert "FoodServiceImpl" not in prompt.user
-    assert "不得保留占位符" in prompt.system
-    assert prompt.user.index("Primary 语义计划：") < prompt.user.index(
-        "查询结构模板："
+    example = next(
+        item
+        for item in JsonFewShotExampleLoader().load()
+        if item.id == "call-method-full-entry-chain"
     )
-    assert prompt.user.index("查询结构模板：") < prompt.user.index("用户问题：")
+    prompt = DefaultPromptBuilder().build_planned(
+        _template_schema(),
+        query,
+        (example,),
+    )
+
+    assert "查询结构模板：" not in prompt.user
+    assert "full-entry-chain-structure" not in prompt.user
+    assert "参考示例：" in prompt.user
+    assert example.question in prompt.user
+    assert example.cypher in prompt.user
+    assert "UNION" not in prompt.user
+    assert prompt.user.index("Primary 语义计划：") < prompt.user.index(
+        "参考示例："
+    )
+    assert prompt.user.index("参考示例：") < prompt.user.index("用户问题：")
 
 
 def _template_schema() -> GraphSchema:

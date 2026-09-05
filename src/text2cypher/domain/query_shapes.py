@@ -24,13 +24,20 @@ def resolve_query_shape(question: str) -> QueryShape:
 
     compact = "".join(question.lower().split())
     direction_text = compact.replace("直接", "")
-    has_upstream = any(
+    has_upstream_chain = any(
         cue in compact
         for cue in (
             "上游调用链",
+            "上游链",
+        )
+    )
+    has_upstream = any(
+        cue in compact
+        for cue in (
             "上游方法",
             "上游调用方",
             "上游调用者",
+            "上游影响范围",
             "直接上游",
             "谁调用",
         )
@@ -61,7 +68,8 @@ def resolve_query_shape(question: str) -> QueryShape:
         cue in compact for cue in ("完整入口调用链", "完整入口链", "端到端入口链")
     )
     has_ordered = any(
-        cue in compact for cue in ("有序", "方法路径", "调用顺序", "按顺序")
+        cue in compact
+        for cue in ("有序", "方法路径", "调用路径", "调用顺序", "按顺序")
     )
     has_direct = "直接" in compact
     has_api = "api" in compact or "接口" in compact
@@ -81,8 +89,11 @@ def resolve_query_shape(question: str) -> QueryShape:
 
     if has_full_downstream_chain or (has_full_call_chain and has_downstream):
         return QueryShape.FULL_DOWNSTREAM_CHAIN
+    if has_direct and (has_upstream or has_upstream_chain):
+        return QueryShape.DIRECT_UPSTREAM
     if (
-        has_full_upstream_chain
+        has_upstream_chain
+        or has_full_upstream_chain
         or has_full_entry_chain
         or (has_full_call_chain and (has_upstream or has_entry_context))
         or has_from_entry
@@ -93,8 +104,6 @@ def resolve_query_shape(question: str) -> QueryShape:
         return QueryShape.ORDERED_METHOD_PATH
     if has_reachable_entry:
         return QueryShape.REACHABLE_ENTRY_API
-    if has_direct and has_upstream:
-        return QueryShape.DIRECT_UPSTREAM
     if has_upstream:
         return QueryShape.UPSTREAM_REACHABILITY
     if has_direct and has_downstream and has_api:

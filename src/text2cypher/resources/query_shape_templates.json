@@ -1,41 +1,8 @@
 [
   {
-    "id": "full-entry-chain-structure",
-    "query_shape": "full_entry_chain",
-    "template": "MATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(anchorMethod:方法)\nWHERE\n  <TARGET_METHOD_FILTER>\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名, anchorMethod.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH path = (entryMethod)-[:链中下一节点*1..5]->(anchorMethod:方法)\nWHERE\n  <TARGET_METHOD_FILTER> AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [method IN nodes(path) | method.全限定名] AS 方法路径\n\nUNION\n\nMATCH (entryMethod:方法)-[:服务于]->(entryApi:上游API)\nMATCH (entryMethod)-[:接口调用]->(firstMethod:方法)\nMATCH path = (firstMethod)-[:链中下一节点*1..4]->(anchorMethod:方法)\nWHERE\n  <TARGET_METHOD_FILTER> AND\n  ALL(\n    pathRelationship IN relationships(path)\n    WHERE pathRelationship.路径签名 = relationships(path)[0].路径签名\n  ) AND\n  (\n    size(relationships(path)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(path)) - 1)\n      WHERE\n        relationships(path)[index].位置索引 =\n        relationships(path)[index - 1].位置索引 + 1\n    )\n  )\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [entryMethod.全限定名] + [method IN nodes(path) | method.全限定名]\n    AS 方法路径\n\nUNION\n\nMATCH (anchorMethod:方法)-[:服务于]->(entryApi:上游API)\nWHERE\n  <TARGET_METHOD_FILTER>\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  entryApi.API路径 AS 入口API,\n  [anchorMethod.全限定名] AS 方法路径",
-    "schema_requirements": {
-      "node_labels": ["方法", "上游API"],
-      "relationship_types": ["服务于", "接口调用", "链中下一节点"],
-      "node_properties": {
-        "方法": ["所属类名", "方法名", "全限定名"],
-        "上游API": ["API路径"]
-      },
-      "relationship_properties": {
-        "链中下一节点": ["路径签名", "位置索引"]
-      },
-      "patterns": [
-        {
-          "start_labels": ["方法"],
-          "relationship_type": "服务于",
-          "end_labels": ["上游API"]
-        },
-        {
-          "start_labels": ["方法"],
-          "relationship_type": "接口调用",
-          "end_labels": ["方法"]
-        },
-        {
-          "start_labels": ["方法"],
-          "relationship_type": "链中下一节点",
-          "end_labels": ["方法"]
-        }
-      ]
-    }
-  },
-  {
     "id": "full-downstream-chain-structure",
     "query_shape": "full_downstream_chain",
-    "template": "MATCH (anchorMethod:方法)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  <TARGET_METHOD_FILTER>\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [anchorMethod.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法\n\nUNION\n\nMATCH methodPath = (anchorMethod:方法)\n  -[:链中下一节点*1..5]->(outboundMethod:方法)\nMATCH (outboundMethod)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  <TARGET_METHOD_FILTER> AND\n  ALL(\n    pathRelationship IN relationships(methodPath)\n    WHERE\n      pathRelationship.路径签名 = relationships(methodPath)[0].路径签名\n  ) AND\n  (\n    size(relationships(methodPath)) = 1 OR\n    ALL(\n      index IN range(1, size(relationships(methodPath)) - 1)\n      WHERE\n        relationships(methodPath)[index].位置索引 =\n        relationships(methodPath)[index - 1].位置索引 + 1\n    )\n  )\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [method IN nodes(methodPath) | method.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法",
+    "template": "MATCH methodPath = (anchorMethod:方法)\n  -[:链中下一节点*0..5]->(outboundMethod:方法)\nMATCH (outboundMethod)-[:下游调用]->(downstreamApi:下游API)\nWHERE\n  <TARGET_METHOD_FILTER> AND\n  (\n    size(relationships(methodPath)) = 0 OR\n    ALL(\n      pathRelationship IN relationships(methodPath)\n      WHERE\n        pathRelationship.路径签名 =\n        relationships(methodPath)[0].路径签名\n    )\n  ) AND\n  (\n    size(relationships(methodPath)) <= 1 OR\n    ALL(\n      index IN range(1, size(relationships(methodPath)) - 1)\n      WHERE\n        relationships(methodPath)[index].位置索引 =\n        relationships(methodPath)[index - 1].位置索引 + 1\n    )\n  )\nOPTIONAL MATCH (downstreamApi)-[:目标服务]->(targetService:微服务)\nOPTIONAL MATCH (downstreamApi)-[:外部调用]->(targetApi:上游API)\nOPTIONAL MATCH (targetEntryMethod:方法)-[:服务于]->(targetApi)\nRETURN DISTINCT\n  anchorMethod.全限定名 AS 目标方法,\n  [method IN nodes(methodPath) | method.全限定名] AS 方法路径,\n  downstreamApi.API路径 AS 下游API,\n  targetService.服务名称 AS 下游服务,\n  targetApi.API路径 AS 目标上游API,\n  targetEntryMethod.全限定名 AS 目标入口方法",
     "schema_requirements": {
       "node_labels": ["方法", "下游API", "微服务", "上游API"],
       "relationship_types": ["链中下一节点", "下游调用", "目标服务", "外部调用", "服务于"],

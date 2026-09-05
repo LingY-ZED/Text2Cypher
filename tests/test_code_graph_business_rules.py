@@ -46,9 +46,9 @@ def test_loads_complete_business_rules_from_ordered_package_modules() -> None:
     assert "禁止拿服务名称与 `方法.全限定名`" in rules
     assert "直接上游调用者的唯一方向是" in rules
     assert "可达入口 API 必须先绑定" in rules
-    assert "[:调用*1..]->(target)" in rules
+    assert "`调用*0..` 最短路径" in rules
     assert "链中下一节点" in rules
-    assert "完整下游链必须用 `UNION` 分开" in rules
+    assert "`链中下一节点*0..` 同时覆盖" in rules
     assert "发布至.路由键 = 路由至.路由键" in rules
     assert "count(DISTINCT remote) AS 调用关系数" in rules
     assert "无论是否出现“分别”二字" in rules

@@ -102,19 +102,19 @@ def test_primary_agent_response_parser_accepts_strict_json(
 def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> None:
     question = "FoodServiceImpl.getAllFood 的上游调用链是什么？"
     content = (
-        '{"analysis_summary":"查询全部上游可达方法。","queries":['
+        '{"analysis_summary":"查询从入口到目标的完整上游调用链。","queries":['
         '{"question":"FoodServiceImpl.getAllFood 的上游调用链是什么？",'
         '"anchor":"FoodServiceImpl.getAllFood",'
-        '"query_shape":"upstream_reachability",'
-        '"intent":"查询可到达锚点的所有上游方法和距离",'
-        '"required_information":["目标方法","上游可达方法","调用距离"]}]}'
+        '"query_shape":"full_entry_chain",'
+        '"intent":"查询入口 API 到锚点方法的完整有序链",'
+        '"required_information":["目标方法","入口 API","有序方法路径"]}]}'
     )
 
     plan = PrimaryAgentResponseParser().parse(content, question, 3)
 
     assert plan.queries[0].anchor == "FoodServiceImpl.getAllFood"
-    assert plan.queries[0].query_shape.value == "upstream_reachability"
-    assert plan.queries[0].effective_query_shape.value == "upstream_reachability"
+    assert plan.queries[0].query_shape.value == "full_entry_chain"
+    assert plan.queries[0].effective_query_shape.value == "full_entry_chain"
 
 
 @pytest.mark.parametrize(
@@ -133,6 +133,14 @@ def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> 
             '{"question":"查询 A 的直接上游","anchor":"A",'
             '"query_shape":"upstream_reachability","intent":"意图",'
             '"required_information":["信息"]}]}',
+            "冲突",
+        ),
+        (
+            "查询 A 的上游调用链",
+            '{"analysis_summary":"摘要","queries":['
+            '{"question":"查询 A 的上游调用链","anchor":"A",'
+            '"query_shape":"upstream_reachability","intent":"意图",'
+            '"required_information":["上游方法"]}]}',
             "冲突",
         ),
         (
@@ -216,17 +224,17 @@ def test_primary_agent_response_parser_rejects_invalid_contracts(
 
 def test_primary_agent_parser_restores_original_single_question() -> None:
     content = (
-        '{"analysis_summary":"查询上游可达方法。","queries":['
+        '{"analysis_summary":"查询完整上游调用链。","queries":['
         '{"question":"改写后的上游问题","anchor":"FoodServiceImpl.getAllFood",'
-        '"query_shape":"upstream_reachability","intent":"查询上游可达方法",'
-        '"required_information":["上游方法","调用距离"]}]}'
+        '"query_shape":"full_entry_chain","intent":"查询完整入口链",'
+        '"required_information":["目标方法","入口 API","方法路径"]}]}'
     )
     original = "FoodServiceImpl.getAllFood 的上游调用链是什么？"
 
     plan = PrimaryAgentResponseParser().parse(content, original, 3)
 
     assert plan.queries[0].question == original
-    assert plan.queries[0].query_shape.value == "upstream_reachability"
+    assert plan.queries[0].query_shape.value == "full_entry_chain"
 
 
 @pytest.mark.parametrize("max_queries", [1, 4, True])

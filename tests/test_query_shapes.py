@@ -8,13 +8,14 @@ from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
 @pytest.mark.parametrize(
     ("question", "expected"),
     [
-        ("查询getTickets的上游调用链", QueryShape.UPSTREAM_REACHABILITY),
+        ("查询getTickets的上游调用链", QueryShape.FULL_ENTRY_CHAIN),
         ("哪些方法直接调用 getTickets", QueryShape.DIRECT_UPSTREAM),
         (
             "RebookServiceImpl.rebook 直接调用了哪些方法？",
             QueryShape.DIRECT_DOWNSTREAM_METHOD,
         ),
         ("查询 getTickets 的有序方法路径", QueryShape.ORDERED_METHOD_PATH),
+        ("查询 A 到 B 的调用路径", QueryShape.ORDERED_METHOD_PATH),
         (
             "哪些入口 API 可以到达 ConsignServiceImpl.updateConsignRecord？",
             QueryShape.REACHABLE_ENTRY_API,
@@ -71,8 +72,19 @@ def test_direct_rest_shape_does_not_require_extra_return_field_cues() -> None:
     )
 
 
-def test_plain_upstream_call_chain_is_reachability_not_full_entry_chain() -> None:
+def test_plain_upstream_call_chain_is_full_entry_chain() -> None:
     assert (
         resolve_query_shape("FoodServiceImpl.getAllFood 的上游调用链是什么？")
+        is QueryShape.FULL_ENTRY_CHAIN
+    )
+
+
+def test_upstream_reachability_requires_set_or_caller_wording() -> None:
+    assert (
+        resolve_query_shape("查询 getTickets 的所有上游方法及调用距离")
+        is QueryShape.UPSTREAM_REACHABILITY
+    )
+    assert (
+        resolve_query_shape("查询 getTickets 的上游影响范围")
         is QueryShape.UPSTREAM_REACHABILITY
     )

@@ -55,6 +55,7 @@ GOLDEN_ROW_COUNTS = {
     "aggregate-service-target-calls": 5,
     "aggregate-interface-implementations": 38,
     "call-method-upstream-reachability": 2,
+    "call-method-full-entry-chain": 1,
     "call-method-direct-upstream": 1,
     "call-method-direct-rest-egress": 3,
     "call-interface-dispatch": 1,
@@ -95,10 +96,11 @@ GOLDEN_COLUMNS = {
     "aggregate-service-api-counts": ("请求方式", "API数量"),
     "aggregate-service-target-calls": ("下游服务", "调用关系数"),
     "aggregate-interface-implementations": ("服务名称", "实现类数量"),
-    "call-method-upstream-reachability": ("目标方法", "上游方法", "调用距离"),
-    "call-method-direct-upstream": ("目标方法", "上游方法"),
+    "call-method-upstream-reachability": ("上游方法", "调用距离"),
+    "call-method-full-entry-chain": ("目标方法", "入口API", "方法路径"),
+    "call-method-direct-upstream": ("上游方法",),
     "call-method-direct-rest-egress": ("下游API", "下游服务"),
-    "call-interface-dispatch": ("调用方法", "实现方法", "经由接口"),
+    "call-interface-dispatch": ("实现方法", "经由接口"),
     "call-ordered-method-path": ("路径签名", "方法路径"),
     "api-external-mapping": (
         "下游API",
@@ -114,7 +116,7 @@ GOLDEN_COLUMNS = {
         "目标上游API",
         "目标入口方法",
     ),
-    "mq-publish-call-point": ("发布方法", "源码行号", "路由键", "交换机名称"),
+    "mq-publish-call-point": ("源码行号", "路由键", "交换机名称"),
 }
 
 MISSING_REST_MAPPING_QUERY = """
@@ -262,7 +264,7 @@ def test_real_neo4j_error_reaches_corrector_as_structured_context() -> None:
 
 
 def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
-    """逐条验证 25 条黄金示例的 Schema、只读性和真实结果语义。"""
+    """逐条验证 26 条黄金示例的 Schema、只读性和真实结果语义。"""
 
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings)
@@ -311,7 +313,7 @@ def test_real_few_shot_library_is_schema_compatible_and_readonly() -> None:
         provider.close()
 
     assert incompatible == []
-    assert len(reports) == 25
+    assert len(reports) == 26
     assert all(report.query_type == "r" for report in reports.values())
     assert set(results) == set(GOLDEN_ROW_COUNTS)
     assert {
@@ -483,14 +485,23 @@ def _assert_golden_result_semantics(
     }
     assert results["call-method-upstream-reachability"].rows == (
         {
-            "目标方法": "travel.service.TravelServiceImpl.getTickets",
             "上游方法": "travel.service.TravelServiceImpl.getTripAllDetailInfo",
             "调用距离": 1,
         },
         {
-            "目标方法": "travel.service.TravelServiceImpl.getTickets",
             "上游方法": "travel.controller.TravelController.getTripAllDetailInfo",
             "调用距离": 2,
+        },
+    )
+    assert results["call-method-full-entry-chain"].rows == (
+        {
+            "目标方法": "travel.service.TravelServiceImpl.getTickets",
+            "入口API": "/api/v1/travelservice/trip_detail",
+            "方法路径": [
+                "travel.controller.TravelController.getTripAllDetailInfo",
+                "travel.service.TravelServiceImpl.getTripAllDetailInfo",
+                "travel.service.TravelServiceImpl.getTickets",
+            ],
         },
     )
     assert {
@@ -516,7 +527,6 @@ def _assert_golden_result_semantics(
     assert max(row["实现类数量"] for row in implementation_counts.rows) == 2
     assert results["call-interface-dispatch"].rows == (
         {
-            "调用方法": "foodsearch.controller.FoodController.getAllFood",
             "实现方法": "foodsearch.service.FoodServiceImpl.getAllFood",
             "经由接口": "foodsearch.service.FoodService",
         },
@@ -593,7 +603,6 @@ def _assert_golden_result_semantics(
     )
     assert results["mq-publish-call-point"].rows == (
         {
-            "发布方法": "preserve.mq.RabbitSend.send",
             "源码行号": 0,
             "路由键": "email",
             "交换机名称": "(default)",

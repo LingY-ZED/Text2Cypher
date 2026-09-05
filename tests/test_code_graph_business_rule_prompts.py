@@ -105,7 +105,7 @@ def test_translator_rules_change_only_with_the_subquestion_scene() -> None:
     assert "详细消息路径固定为" not in rest_prompt.system
     assert "详细消息路径固定为" in mq_prompt.system
     assert "方法-[:下游调用]->下游API" not in mq_prompt.system
-    assert "完整下游链必须用 `UNION` 分开" in chain_prompt.system
+    assert "`链中下一节点*0..` 同时覆盖" in chain_prompt.system
     assert "方法-[:下游调用]->下游API" in chain_prompt.system
     assert "详细消息路径固定为" not in chain_prompt.system
     assert rest_prompt.system.count(
