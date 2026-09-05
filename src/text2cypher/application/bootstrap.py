@@ -19,6 +19,9 @@ from text2cypher.domain.ports import (
     PrimaryAgent,
     QuestionDecomposer,
 )
+from text2cypher.graph_core.readonly_cypher_gateway import (
+    DefaultReadOnlyCypherGateway,
+)
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
@@ -49,6 +52,20 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
         primary_agent = _build_primary_agent(settings, llm_client)
         few_shot_router = _build_few_shot_router(settings, llm_client)
         cypher_corrector = _build_cypher_corrector(settings, llm_client)
+        cypher_parser = DefaultCypherParser()
+        cypher_validator = Neo4jCypherValidator(
+            driver,
+            settings.neo4j_database,
+            settings.query_timeout_seconds,
+            retry_policy=retry_policy,
+        )
+        cypher_executor = Neo4jCypherExecutor(
+            driver,
+            settings.neo4j_database,
+            settings.query_timeout_seconds,
+            settings.max_result_rows,
+            retry_policy=retry_policy,
+        )
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(
                 driver,
@@ -58,19 +75,13 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             ),
             prompt_builder=DefaultPromptBuilder(),
             llm_client=llm_client,
-            cypher_parser=DefaultCypherParser(),
-            cypher_validator=Neo4jCypherValidator(
-                driver,
-                settings.neo4j_database,
-                settings.query_timeout_seconds,
-                retry_policy=retry_policy,
-            ),
-            cypher_executor=Neo4jCypherExecutor(
-                driver,
-                settings.neo4j_database,
-                settings.query_timeout_seconds,
-                settings.max_result_rows,
-                retry_policy=retry_policy,
+            cypher_parser=cypher_parser,
+            cypher_validator=cypher_validator,
+            cypher_executor=cypher_executor,
+            read_only_cypher_gateway=DefaultReadOnlyCypherGateway(
+                cypher_parser,
+                cypher_validator,
+                cypher_executor,
             ),
             result_formatter=JsonResultFormatter(),
             result_summarizer=_build_result_summarizer(settings, llm_client),

@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 from text2cypher.domain.models import (
     ChatPrompt,
     CypherFailureContext,
+    ExecutedCypher,
     FewShotExample,
     GraphSchema,
     LLMResponse,
@@ -134,6 +135,13 @@ class CypherExecutor(Protocol):
         cypher: str,
         parameters: Mapping[str, Any] | None = None,
     ) -> QueryResult: ...
+
+
+@runtime_checkable
+class ReadOnlyCypherGateway(Protocol):
+    """让候选 Cypher 经过解析、只读准入和执行的唯一入口。"""
+
+    def execute_candidate(self, candidate: str) -> ExecutedCypher: ...
 
 
 @runtime_checkable

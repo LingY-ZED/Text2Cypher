@@ -42,9 +42,14 @@ from text2cypher.domain.ports import (
     PrimaryAgent,
     PromptBuilder,
     QuestionDecomposer,
+    ReadOnlyCypherGateway,
     ResultFormatter,
     ResultSummarizer,
     SchemaFetcher,
+)
+from text2cypher.graph_core.readonly_cypher_gateway import (
+    CandidateExecutionFailure,
+    DefaultReadOnlyCypherGateway,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +68,7 @@ class Text2CypherPipeline:
         cypher_validator: CypherValidator,
         cypher_executor: CypherExecutor,
         result_formatter: ResultFormatter,
+        read_only_cypher_gateway: ReadOnlyCypherGateway | None = None,
         result_summarizer: ResultSummarizer | None = None,
         primary_agent: PrimaryAgent | None = None,
         question_decomposer: QuestionDecomposer | None = None,
@@ -76,9 +82,14 @@ class Text2CypherPipeline:
         self._schema_fetcher = schema_fetcher
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
-        self._cypher_parser = cypher_parser
-        self._cypher_validator = cypher_validator
-        self._cypher_executor = cypher_executor
+        self._read_only_cypher_gateway = (
+            read_only_cypher_gateway
+            or DefaultReadOnlyCypherGateway(
+                cypher_parser,
+                cypher_validator,
+                cypher_executor,
+            )
+        )
         self._result_formatter = result_formatter
         self._result_summarizer = result_summarizer
         self._primary_agent = primary_agent
@@ -177,35 +188,21 @@ class Text2CypherPipeline:
             )
         llm_response = self._llm_client.generate(prompt)
         try:
-            cypher = self._cypher_parser.parse(llm_response.content)
-        except CypherParseError as error:
+            executed = self._read_only_cypher_gateway.execute_candidate(
+                llm_response.content
+            )
+        except CandidateExecutionFailure as failure:
+            error = failure.error
             if self._cypher_corrector is None:
-                raise
+                raise error from None
             cypher, result = self._correct_and_execute(
                 prompt,
-                llm_response.content,
-                self._failure_context(CypherFailureKind.PARSE, error),
+                failure.candidate,
+                self._failure_context(self._failure_kind(error), error),
             )
         else:
-            try:
-                self._cypher_validator.validate(cypher)
-                result = self._cypher_executor.execute(cypher)
-            except CypherValidationError as error:
-                if self._cypher_corrector is None:
-                    raise
-                cypher, result = self._correct_and_execute(
-                    prompt,
-                    cypher,
-                    self._failure_context(CypherFailureKind.VALIDATION, error),
-                )
-            except CypherExecutionError as error:
-                if self._cypher_corrector is None:
-                    raise
-                cypher, result = self._correct_and_execute(
-                    prompt,
-                    cypher,
-                    self._failure_context(CypherFailureKind.EXECUTION, error),
-                )
+            cypher = executed.cypher
+            result = executed.result
 
         if (
             not result.rows
@@ -254,9 +251,17 @@ class Text2CypherPipeline:
                 failed_candidate,
                 failure,
             )
-            cypher = self._cypher_parser.parse(corrected.content)
-            self._cypher_validator.validate(cypher)
-            result = self._cypher_executor.execute(cypher)
+            executed = self._read_only_cypher_gateway.execute_candidate(
+                corrected.content
+            )
+        except CandidateExecutionFailure as gateway_failure:
+            log_correction_event(
+                _LOGGER,
+                event="cypher_correction_exhausted",
+                reason=failure.kind.value,
+                outcome="failed",
+            )
+            raise gateway_failure.error from None
         except Exception:
             log_correction_event(
                 _LOGGER,
@@ -271,7 +276,7 @@ class Text2CypherPipeline:
             reason=failure.kind.value,
             outcome="corrected",
         )
-        return cypher, result
+        return executed.cypher, executed.result
 
     def _recover_empty_result(
         self,
@@ -317,6 +322,18 @@ class Text2CypherPipeline:
             outcome="no_improvement",
         )
         return original_cypher, original_result
+
+    @staticmethod
+    def _failure_kind(
+        error: CypherParseError | CypherValidationError | CypherExecutionError,
+    ) -> CypherFailureKind:
+        """将 Core 保留的原始错误映射回既有恢复阶段。"""
+
+        if isinstance(error, CypherParseError):
+            return CypherFailureKind.PARSE
+        if isinstance(error, CypherValidationError):
+            return CypherFailureKind.VALIDATION
+        return CypherFailureKind.EXECUTION
 
     @staticmethod
     def _failure_context(

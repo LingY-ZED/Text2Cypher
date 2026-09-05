@@ -590,6 +590,17 @@ class QueryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutedCypher:
+    """已通过只读准入并执行完成的一条 Cypher 及其结构化结果。"""
+
+    cypher: str
+    result: QueryResult
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "cypher", _require_text(self.cypher, "Cypher"))
+
+
+@dataclass(frozen=True, slots=True)
 class SubQueryResponse:
     """一个子问题及其已执行的只读 Cypher 结果。"""
 
