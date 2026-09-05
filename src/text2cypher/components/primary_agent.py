@@ -7,15 +7,15 @@ import re
 from dataclasses import replace
 from typing import Any
 
-from text2cypher.components.primary_agent_semantic_capabilities import (
-    load_primary_agent_semantic_capabilities,
-)
 from text2cypher.domain.models import (
     ChatPrompt,
     PrimaryAgentPlan,
     PrimaryAgentQuery,
 )
 from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
+from text2cypher.skills.registry import (
+    load_primary_agent_semantic_capabilities,
+)
 
 _JSON_FENCE = re.compile(
     r"\A```json[ \t]*\r?\n(?P<document>[\s\S]*?)\r?\n```[ \t]*\Z",

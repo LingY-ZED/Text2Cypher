@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import json
-import re
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 from text2cypher.domain.errors import FewShotLibraryError
-from text2cypher.domain.models import (
-    FewShotExample,
-    FewShotSchemaRequirements,
-    RelationshipPattern,
-)
+from text2cypher.domain.models import FewShotExample, FewShotSchemaRequirements
 from text2cypher.domain.query_shapes import QueryShape
+from text2cypher.domain.resource_contracts import (
+    ResourceContractError,
+    parse_schema_requirements,
+    validate_readonly_cypher,
+)
 
 _REQUIRED_EXAMPLE_KEYS = {
     "id",
@@ -26,26 +26,6 @@ _REQUIRED_EXAMPLE_KEYS = {
     "schema_requirements",
 }
 _OPTIONAL_EXAMPLE_KEYS = {"query_shape"}
-_REQUIREMENT_KEYS = {
-    "node_labels",
-    "relationship_types",
-    "node_properties",
-    "relationship_properties",
-    "patterns",
-}
-_PATTERN_KEYS = {"start_labels", "relationship_type", "end_labels"}
-_ALLOWED_START = re.compile(
-    r"^\s*(?:MATCH|OPTIONAL\s+MATCH|WITH|UNWIND|RETURN)\b",
-    re.IGNORECASE,
-)
-_FORBIDDEN_CYPHER = re.compile(
-    r"\b(?:"
-    r"CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|ALTER|GRANT|DENY|"
-    r"REVOKE|FOREACH|LOAD\s+CSV"
-    r")\b",
-    re.IGNORECASE,
-)
-_CALL_CLAUSE = re.compile(r"\bCALL\s+(?:\{|[A-Za-z_`])", re.IGNORECASE)
 
 
 class JsonFewShotExampleLoader:
@@ -94,7 +74,7 @@ class JsonFewShotExampleLoader:
         ):
             raise FewShotLibraryError(f"示例 {index} 字段集合不合法")
         cypher = cls._text(data, "cypher", f"示例 {index}")
-        cls._validate_cypher(cypher)
+        cls.validate_readonly_cypher(cypher)
         requirements = cls._parse_requirements(
             data["schema_requirements"],
             index,
@@ -130,147 +110,36 @@ class JsonFewShotExampleLoader:
         except (TypeError, ValueError):
             raise FewShotLibraryError("Few-shot 示例字段不合法") from None
 
-    @classmethod
+    @staticmethod
     def _parse_requirements(
-        cls,
         value: Any,
         index: int,
     ) -> FewShotSchemaRequirements:
-        field_name = f"示例 {index}.schema_requirements"
-        data = cls._object(value, field_name)
-        cls._exact_keys(data, _REQUIREMENT_KEYS, field_name)
-        patterns_value = data.get("patterns")
-        if not isinstance(patterns_value, list):
-            raise FewShotLibraryError(f"{field_name}.patterns 必须是数组")
-        patterns = tuple(
-            cls._parse_pattern(pattern, f"{field_name}.patterns[{pattern_index}]")
-            for pattern_index, pattern in enumerate(patterns_value)
-        )
-        node_labels = cls._text_tuple(
-            data.get("node_labels"),
-            f"{field_name}.node_labels",
-        )
-        relationship_types = cls._text_tuple(
-            data.get("relationship_types"),
-            f"{field_name}.relationship_types",
-        )
-        node_properties = cls._text_mapping(
-            data.get("node_properties"),
-            f"{field_name}.node_properties",
-        )
-        relationship_properties = cls._text_mapping(
-            data.get("relationship_properties"),
-            f"{field_name}.relationship_properties",
-        )
-        cls._validate_requirements(
-            node_labels=node_labels,
-            relationship_types=relationship_types,
-            node_properties=node_properties,
-            relationship_properties=relationship_properties,
-            patterns=patterns,
-            field_name=field_name,
-        )
-        try:
-            return FewShotSchemaRequirements(
-                node_labels=node_labels,
-                relationship_types=relationship_types,
-                node_properties=node_properties,
-                relationship_properties=relationship_properties,
-                patterns=patterns,
-            )
-        except ValueError:
-            raise FewShotLibraryError("Few-shot Schema requirements 不合法") from None
+        return JsonFewShotExampleLoader.parse_schema_requirements(value, index)
 
-    @classmethod
+    @staticmethod
     def parse_schema_requirements(
-        cls,
         value: Any,
         index: int = 0,
     ) -> FewShotSchemaRequirements:
-        """供其他可信结构资源复用同一份严格 Schema 契约。"""
+        """兼容供其他可信资源复用的严格 Schema requirements 契约。"""
 
-        return cls._parse_requirements(value, index)
-
-    @staticmethod
-    def _validate_requirements(
-        *,
-        node_labels: tuple[str, ...],
-        relationship_types: tuple[str, ...],
-        node_properties: dict[str, tuple[str, ...]],
-        relationship_properties: dict[str, tuple[str, ...]],
-        patterns: tuple[RelationshipPattern, ...],
-        field_name: str,
-    ) -> None:
-        label_set = set(node_labels)
-        relationship_type_set = set(relationship_types)
-        if not set(node_properties).issubset(label_set):
-            raise FewShotLibraryError(
-                f"{field_name}.node_properties 包含未声明的节点标签"
-            )
-        if not set(relationship_properties).issubset(relationship_type_set):
-            raise FewShotLibraryError(
-                f"{field_name}.relationship_properties 包含未声明的关系类型"
-            )
-        if len(set(patterns)) != len(patterns):
-            raise FewShotLibraryError(f"{field_name}.patterns 不能包含重复值")
-        for pattern in patterns:
-            if (
-                not set(pattern.start_labels).issubset(label_set)
-                or not set(pattern.end_labels).issubset(label_set)
-                or pattern.relationship_type not in relationship_type_set
-            ):
-                raise FewShotLibraryError(
-                    f"{field_name}.patterns 包含未声明的 Schema 元素"
-                )
-
-    @classmethod
-    def _parse_pattern(
-        cls,
-        value: Any,
-        field_name: str,
-    ) -> RelationshipPattern:
-        data = cls._object(value, field_name)
-        cls._exact_keys(data, _PATTERN_KEYS, field_name)
         try:
-            return RelationshipPattern(
-                start_labels=cls._text_tuple(
-                    data.get("start_labels"),
-                    f"{field_name}.start_labels",
-                    require_values=True,
-                ),
-                relationship_type=cls._text(
-                    data,
-                    "relationship_type",
-                    field_name,
-                ),
-                end_labels=cls._text_tuple(
-                    data.get("end_labels"),
-                    f"{field_name}.end_labels",
-                    require_values=True,
-                ),
+            return parse_schema_requirements(
+                value,
+                field_name=f"示例 {index}.schema_requirements",
             )
-        except ValueError:
-            raise FewShotLibraryError("Few-shot relationship pattern 不合法") from None
+        except ResourceContractError as error:
+            raise FewShotLibraryError(str(error)) from None
 
     @staticmethod
-    def _validate_cypher(cypher: str) -> None:
-        if not _ALLOWED_START.match(cypher):
-            raise FewShotLibraryError("Few-shot Cypher 必须以只读子句开始")
-        if (
-            _FORBIDDEN_CYPHER.search(cypher)
-            or _CALL_CLAUSE.search(cypher)
-            or ";" in cypher
-            or "//" in cypher
-            or "/*" in cypher
-            or "*/" in cypher
-        ):
-            raise FewShotLibraryError("Few-shot Cypher 包含禁止内容")
+    def validate_readonly_cypher(cypher: str) -> None:
+        """兼容 Few-shot 资源的只读 Cypher 校验入口。"""
 
-    @classmethod
-    def validate_readonly_cypher(cls, cypher: str) -> None:
-        """供查询结构模板复用 Few-shot 的只读安全边界。"""
-
-        cls._validate_cypher(cypher)
+        try:
+            validate_readonly_cypher(cypher)
+        except ResourceContractError as error:
+            raise FewShotLibraryError(str(error)) from None
 
     @staticmethod
     def _object(value: Any, field_name: str) -> dict[str, Any]:
@@ -281,24 +150,14 @@ class JsonFewShotExampleLoader:
         return value
 
     @staticmethod
-    def _exact_keys(
-        data: dict[str, Any],
-        expected: set[str],
-        field_name: str,
-    ) -> None:
-        if set(data) != expected:
-            raise FewShotLibraryError(f"{field_name} 字段集合不合法")
-
-    @staticmethod
     def _text(data: dict[str, Any], key: str, field_name: str) -> str:
         value = data.get(key)
         if not isinstance(value, str) or not value.strip():
             raise FewShotLibraryError(f"{field_name}.{key} 必须是非空文本")
         return value.strip()
 
-    @classmethod
+    @staticmethod
     def _text_tuple(
-        cls,
         value: Any,
         field_name: str,
         *,
@@ -316,23 +175,3 @@ class JsonFewShotExampleLoader:
         if len(set(values)) != len(values):
             raise FewShotLibraryError(f"{field_name} 不能包含重复值")
         return tuple(values)
-
-    @classmethod
-    def _text_mapping(
-        cls,
-        value: Any,
-        field_name: str,
-    ) -> dict[str, tuple[str, ...]]:
-        data = cls._object(value, field_name)
-        normalized: dict[str, tuple[str, ...]] = {}
-        for key, properties in data.items():
-            normalized_key = key.strip()
-            if not normalized_key:
-                raise FewShotLibraryError(f"{field_name} 的键必须是非空文本")
-            if normalized_key in normalized:
-                raise FewShotLibraryError(f"{field_name} 不能包含重复键")
-            normalized[normalized_key] = cls._text_tuple(
-                properties,
-                f"{field_name}.{key}",
-            )
-        return normalized

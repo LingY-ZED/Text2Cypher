@@ -4,11 +4,11 @@ from collections.abc import Generator
 
 import pytest
 
-from text2cypher.components import primary_agent_semantic_capabilities
 from text2cypher.components.primary_agent_semantic_capabilities import (
     load_primary_agent_semantic_capabilities,
 )
 from text2cypher.domain.errors import PrimaryAgentSemanticCapabilitiesError
+from text2cypher.skills import registry
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ def test_rejects_empty_or_unreadable_semantic_capabilities(
             return _Resource()
 
     monkeypatch.setattr(
-        primary_agent_semantic_capabilities,
+        registry,
         "files",
         lambda _: _Package(),
     )

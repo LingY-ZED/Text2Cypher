@@ -4,7 +4,6 @@ from collections.abc import Generator
 
 import pytest
 
-from text2cypher.components import code_graph_business_rules
 from text2cypher.components.code_graph_business_rules import (
     BusinessRuleModule,
     load_code_graph_business_rule_module,
@@ -12,6 +11,7 @@ from text2cypher.components.code_graph_business_rules import (
     load_code_graph_business_rules,
 )
 from text2cypher.domain.errors import CodeGraphBusinessRulesError
+from text2cypher.skills import graph_profile
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,7 @@ def test_rejects_empty_or_unreadable_business_rule_module(
             assert name == "code_graph_business_rules"
             return _Directory()
 
-    monkeypatch.setattr(code_graph_business_rules, "files", lambda _: _Package())
+    monkeypatch.setattr(graph_profile, "files", lambda _: _Package())
 
     with pytest.raises(CodeGraphBusinessRulesError, match=message):
         load_code_graph_business_rule_module(BusinessRuleModule.CORE)

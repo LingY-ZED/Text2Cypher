@@ -11,14 +11,18 @@ from typing import Any
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
-from text2cypher.domain.errors import FewShotLibraryError, QueryShapeTemplateError
+from text2cypher.domain.errors import QueryShapeTemplateError
 from text2cypher.domain.models import (
     GraphSchema,
     QueryShapeTemplate,
     SchemaGraph,
 )
 from text2cypher.domain.query_shapes import QueryShape
-from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
+from text2cypher.domain.resource_contracts import (
+    ResourceContractError,
+    parse_schema_requirements,
+    validate_readonly_cypher,
+)
 
 _TEMPLATE_KEYS = {"id", "query_shape", "template", "schema_requirements"}
 _PLACEHOLDER = "<TARGET_METHOD_FILTER>"
@@ -86,10 +90,10 @@ class JsonQueryShapeTemplateLoader:
         if placeholders != {_PLACEHOLDER}:
             raise QueryShapeTemplateError("结构模板必须且只能使用目标方法占位符")
         try:
-            JsonFewShotExampleLoader.validate_readonly_cypher(template)
-            requirements = JsonFewShotExampleLoader.parse_schema_requirements(
+            validate_readonly_cypher(template)
+            requirements = parse_schema_requirements(
                 value.get("schema_requirements"),
-                index,
+                field_name=f"结构模板 {index}.schema_requirements",
             )
             return QueryShapeTemplate(
                 id=identifier,
@@ -97,7 +101,7 @@ class JsonQueryShapeTemplateLoader:
                 template=template,
                 schema_requirements=requirements,
             )
-        except (FewShotLibraryError, TypeError, ValueError):
+        except (ResourceContractError, TypeError, ValueError):
             raise QueryShapeTemplateError(
                 f"结构模板 {index} 内容不合法"
             ) from None

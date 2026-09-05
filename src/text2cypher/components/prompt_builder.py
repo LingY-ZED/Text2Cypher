@@ -2,14 +2,6 @@
 
 from __future__ import annotations
 
-from text2cypher.components.code_graph_business_rule_selector import (
-    BusinessRulePromptStage,
-    CodeGraphBusinessRuleSelector,
-)
-from text2cypher.components.code_graph_business_rules import (
-    BusinessRuleModule,
-    load_code_graph_business_rule_modules,
-)
 from text2cypher.components.query_shape_templates import QueryShapeTemplateSelector
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
@@ -22,6 +14,12 @@ from text2cypher.domain.models import (
     QueryShapeTemplate,
 )
 from text2cypher.domain.query_shapes import resolve_query_shape
+from text2cypher.skills.graph_profile import BusinessRuleModule
+from text2cypher.skills.policies import (
+    BusinessRulePromptStage,
+    GraphQuerySkillPolicy,
+)
+from text2cypher.skills.views import render_translation_rules
 
 
 class DefaultPromptBuilder:
@@ -56,12 +54,12 @@ class DefaultPromptBuilder:
         schema_graph_builder: SchemaGraphBuilder | None = None,
         schema_serializer: SchemaSerializer | None = None,
         *,
-        rule_selector: CodeGraphBusinessRuleSelector | None = None,
+        rule_selector: GraphQuerySkillPolicy | None = None,
         template_selector: QueryShapeTemplateSelector | None = None,
     ) -> None:
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
         self._schema_serializer = schema_serializer or SchemaSerializer()
-        self._rule_selector = rule_selector or CodeGraphBusinessRuleSelector()
+        self._rule_selector = rule_selector or GraphQuerySkillPolicy()
         self._template_selector = template_selector or QueryShapeTemplateSelector()
 
     def build(
@@ -155,7 +153,7 @@ class DefaultPromptBuilder:
         instruction = (
             f"{self.system_instruction}\n\n"
             "代码知识图谱业务语义：\n"
-            f"{load_code_graph_business_rule_modules(rule_modules)}"
+            f"{render_translation_rules(rule_modules)}"
         )
         extra_instructions: list[str] = []
         if has_template:

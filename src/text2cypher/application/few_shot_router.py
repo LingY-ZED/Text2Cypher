@@ -7,13 +7,6 @@ import logging
 import re
 from collections.abc import Iterable
 
-from text2cypher.components.code_graph_business_rule_routing import (
-    render_few_shot_routing_rules,
-)
-from text2cypher.components.code_graph_business_rule_selector import (
-    BusinessRulePromptStage,
-    CodeGraphBusinessRuleSelector,
-)
 from text2cypher.components.few_shot_schema_filter import (
     FewShotSchemaCompatibilityFilter,
 )
@@ -27,6 +20,11 @@ from text2cypher.domain.models import (
 )
 from text2cypher.domain.ports import LLMClient
 from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
+from text2cypher.skills.policies import (
+    BusinessRulePromptStage,
+    GraphQuerySkillPolicy,
+)
+from text2cypher.skills.views import render_few_shot_routing_rules
 
 _LOGGER = logging.getLogger(__name__)
 _JSON_FENCE = re.compile(
@@ -62,7 +60,7 @@ class LLMFewShotRouter:
         max_chars: int = 3500,
         compatibility_filter: FewShotSchemaCompatibilityFilter | None = None,
         schema_graph_builder: SchemaGraphBuilder | None = None,
-        rule_selector: CodeGraphBusinessRuleSelector | None = None,
+        rule_selector: GraphQuerySkillPolicy | None = None,
     ) -> None:
         if not 1 <= top_k <= 3:
             raise ValueError("top_k 必须在 1 到 3 之间")
@@ -81,7 +79,7 @@ class LLMFewShotRouter:
             compatibility_filter or FewShotSchemaCompatibilityFilter()
         )
         self._schema_graph_builder = schema_graph_builder or SchemaGraphBuilder()
-        self._rule_selector = rule_selector or CodeGraphBusinessRuleSelector()
+        self._rule_selector = rule_selector or GraphQuerySkillPolicy()
 
     def route(
         self,

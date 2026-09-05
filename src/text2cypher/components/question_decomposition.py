@@ -6,12 +6,10 @@ import json
 import re
 from typing import Any
 
-from text2cypher.components.primary_agent_semantic_capabilities import (
-    load_primary_agent_semantic_capabilities,
-)
 from text2cypher.components.schema_graph_builder import SchemaGraphBuilder
 from text2cypher.components.schema_serializer import SchemaSerializer
 from text2cypher.domain.models import ChatPrompt, GraphSchema, QuestionDecomposition
+from text2cypher.skills.registry import load_primary_agent_semantic_capabilities
 
 _JSON_FENCE = re.compile(
     r"\A```json[ \t]*\r?\n(?P<document>[\s\S]*?)\r?\n```[ \t]*\Z",
