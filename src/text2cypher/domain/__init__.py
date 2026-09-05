@@ -19,6 +19,7 @@ from .models import (
     ResultSummaryMode,
     SchemaGraph,
     SchemaGraphEdge,
+    SingleRoundRun,
     SubQueryResponse,
     Text2CypherResponse,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "ResultSummaryMode",
     "SchemaGraph",
     "SchemaGraphEdge",
+    "SingleRoundRun",
     "SubQueryResponse",
     "Text2CypherError",
     "Text2CypherResponse",

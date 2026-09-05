@@ -29,6 +29,9 @@ from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
 from text2cypher.query_engine.engine import DefaultGraphQueryEngine
+from text2cypher.runtime.single_round import SingleRoundRuntime
+from text2cypher.tools.query_code_graph import QueryCodeGraphTool
+from text2cypher.tools.schema import GetSchemaTool
 
 from .pipeline import Text2CypherPipeline
 
@@ -73,33 +76,29 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             cypher_validator,
             cypher_executor,
         )
-        return Text2CypherPipeline(
-            schema_fetcher=Neo4jSchemaFetcher(
-                driver,
-                settings.neo4j_database,
-                settings.schema_timeout_seconds,
-                retry_policy=retry_policy,
-            ),
+        schema_fetcher = Neo4jSchemaFetcher(
+            driver,
+            settings.neo4j_database,
+            settings.schema_timeout_seconds,
+            retry_policy=retry_policy,
+        )
+        graph_query_engine = DefaultGraphQueryEngine(
             prompt_builder=prompt_builder,
             llm_client=llm_client,
-            cypher_parser=cypher_parser,
-            cypher_validator=cypher_validator,
-            cypher_executor=cypher_executor,
             read_only_cypher_gateway=read_only_cypher_gateway,
-            graph_query_engine=DefaultGraphQueryEngine(
-                prompt_builder=prompt_builder,
-                llm_client=llm_client,
-                read_only_cypher_gateway=read_only_cypher_gateway,
-                few_shot_router=few_shot_router,
-                cypher_corrector=cypher_corrector,
-                recover_empty_results=settings.empty_result_correction_enabled,
-            ),
-            result_formatter=JsonResultFormatter(),
-            result_summarizer=_build_result_summarizer(settings, llm_client),
-            primary_agent=primary_agent,
             few_shot_router=few_shot_router,
             cypher_corrector=cypher_corrector,
             recover_empty_results=settings.empty_result_correction_enabled,
+        )
+        runtime = SingleRoundRuntime(
+            schema_tool=GetSchemaTool(schema_fetcher),
+            query_code_graph_tool=QueryCodeGraphTool(graph_query_engine),
+            result_summarizer=_build_result_summarizer(settings, llm_client),
+            primary_agent=primary_agent,
+        )
+        return Text2CypherPipeline(
+            result_formatter=JsonResultFormatter(),
+            single_round_runtime=runtime,
             close_callback=lambda: _close_resources(llm_client, driver_provider),
         )
     except Exception:

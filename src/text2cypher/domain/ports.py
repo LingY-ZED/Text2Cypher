@@ -158,6 +158,24 @@ class GraphQueryEngine(Protocol):
 
 
 @runtime_checkable
+class SchemaTool(Protocol):
+    """向 Runtime 提供固定 Schema 获取能力的内部 Tool。"""
+
+    def get_schema(self) -> GraphSchema: ...
+
+
+@runtime_checkable
+class CodeGraphQueryTool(Protocol):
+    """向 Runtime 提供一次图查询能力的内部 Tool。"""
+
+    def query(
+        self,
+        request: GraphQueryRequest,
+        context: QueryContext,
+    ) -> ExecutedCypher: ...
+
+
+@runtime_checkable
 class ResultFormatter(Protocol):
     """将查询结果格式化给用户或 CLI 使用者。"""
 

@@ -694,6 +694,39 @@ class SubQueryResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class SingleRoundRun:
+    """单轮 Runtime 的结构化执行结果，不包含接口展示文本。"""
+
+    question: str
+    plan: PrimaryAgentPlan
+    sub_queries: tuple[SubQueryResponse, ...]
+    summary: ResultSummary | None = None
+
+    def __post_init__(self) -> None:
+        question = _require_text(self.question, "问题")
+        if not isinstance(self.plan, PrimaryAgentPlan):
+            raise TypeError("单轮运行计划必须是 PrimaryAgentPlan")
+        sub_queries = tuple(self.sub_queries)
+        if not 1 <= len(sub_queries) <= 3:
+            raise ValueError("子查询结果数量必须在 1 到 3 之间")
+        if any(
+            not isinstance(sub_query, SubQueryResponse)
+            for sub_query in sub_queries
+        ):
+            raise TypeError("子查询结果必须是 SubQueryResponse")
+        if self.plan.original_question != question:
+            raise ValueError("运行问题必须与计划原始问题一致")
+        if tuple(query.question for query in self.plan.queries) != tuple(
+            sub_query.question for sub_query in sub_queries
+        ):
+            raise ValueError("子查询结果必须与计划顺序一致")
+        if self.summary is not None and not isinstance(self.summary, ResultSummary):
+            raise TypeError("自然语言总结必须是 ResultSummary 或 None")
+        object.__setattr__(self, "question", question)
+        object.__setattr__(self, "sub_queries", sub_queries)
+
+
+@dataclass(frozen=True, slots=True)
 class Text2CypherResponse:
     """一次成功 Text2Cypher 请求的公开结果。"""
 
