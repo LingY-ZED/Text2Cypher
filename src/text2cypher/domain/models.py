@@ -476,6 +476,86 @@ class PrimaryAgentQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphQueryRequest:
+    """Graph Query Engine 所需的一条独立查询任务。"""
+
+    query_id: str
+    question: str
+    intent: str
+    required_information: tuple[str, ...]
+    anchor: str | None = None
+    query_shape: QueryShape | None = None
+    _primary_agent_query: PrimaryAgentQuery | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        primary_query = PrimaryAgentQuery(
+            query_id=self.query_id,
+            question=self.question,
+            intent=self.intent,
+            required_information=self.required_information,
+            anchor=self.anchor,
+            query_shape=self.query_shape,
+        )
+        object.__setattr__(self, "query_id", primary_query.query_id)
+        object.__setattr__(self, "question", primary_query.question)
+        object.__setattr__(self, "intent", primary_query.intent)
+        object.__setattr__(
+            self,
+            "required_information",
+            primary_query.required_information,
+        )
+        object.__setattr__(self, "anchor", primary_query.anchor)
+        object.__setattr__(self, "query_shape", primary_query.query_shape)
+
+    @classmethod
+    def from_primary_agent_query(cls, query: PrimaryAgentQuery) -> GraphQueryRequest:
+        """无损适配当前 Primary 计划，供兼容 Pipeline 使用。"""
+
+        if not isinstance(query, PrimaryAgentQuery):
+            raise TypeError("规划查询必须是 PrimaryAgentQuery")
+        request = cls(
+            query_id=query.query_id,
+            question=query.question,
+            intent=query.intent,
+            required_information=query.required_information,
+            anchor=query.anchor,
+            query_shape=query.query_shape,
+        )
+        object.__setattr__(request, "_primary_agent_query", query)
+        return request
+
+    def as_primary_agent_query(self) -> PrimaryAgentQuery:
+        """为保留现有 planned Router 和 PromptBuilder 行为提供兼容投影。"""
+
+        if self._primary_agent_query is not None:
+            return self._primary_agent_query
+        return PrimaryAgentQuery(
+            query_id=self.query_id,
+            question=self.question,
+            intent=self.intent,
+            required_information=self.required_information,
+            anchor=self.anchor,
+            query_shape=self.query_shape,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class QueryContext:
+    """一次单轮查询共享的受信任图上下文。"""
+
+    schema: GraphSchema
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.schema, GraphSchema):
+            raise TypeError("查询上下文必须包含 GraphSchema")
+
+
+@dataclass(frozen=True, slots=True)
 class PrimaryAgentPlan:
     """Primary Agent 的可审计、单轮自然语言检索计划。"""
 

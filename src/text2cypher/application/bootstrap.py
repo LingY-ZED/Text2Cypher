@@ -28,6 +28,7 @@ from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
+from text2cypher.query_engine.engine import DefaultGraphQueryEngine
 
 from .pipeline import Text2CypherPipeline
 
@@ -66,6 +67,12 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             settings.max_result_rows,
             retry_policy=retry_policy,
         )
+        prompt_builder = DefaultPromptBuilder()
+        read_only_cypher_gateway = DefaultReadOnlyCypherGateway(
+            cypher_parser,
+            cypher_validator,
+            cypher_executor,
+        )
         return Text2CypherPipeline(
             schema_fetcher=Neo4jSchemaFetcher(
                 driver,
@@ -73,15 +80,19 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
                 settings.schema_timeout_seconds,
                 retry_policy=retry_policy,
             ),
-            prompt_builder=DefaultPromptBuilder(),
+            prompt_builder=prompt_builder,
             llm_client=llm_client,
             cypher_parser=cypher_parser,
             cypher_validator=cypher_validator,
             cypher_executor=cypher_executor,
-            read_only_cypher_gateway=DefaultReadOnlyCypherGateway(
-                cypher_parser,
-                cypher_validator,
-                cypher_executor,
+            read_only_cypher_gateway=read_only_cypher_gateway,
+            graph_query_engine=DefaultGraphQueryEngine(
+                prompt_builder=prompt_builder,
+                llm_client=llm_client,
+                read_only_cypher_gateway=read_only_cypher_gateway,
+                few_shot_router=few_shot_router,
+                cypher_corrector=cypher_corrector,
+                recover_empty_results=settings.empty_result_correction_enabled,
             ),
             result_formatter=JsonResultFormatter(),
             result_summarizer=_build_result_summarizer(settings, llm_client),

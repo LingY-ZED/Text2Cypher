@@ -10,10 +10,12 @@ from text2cypher.domain.models import (
     CypherFailureContext,
     ExecutedCypher,
     FewShotExample,
+    GraphQueryRequest,
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
     PrimaryAgentQuery,
+    QueryContext,
     QueryResult,
     QuestionDecomposition,
     ResultSummary,
@@ -142,6 +144,17 @@ class ReadOnlyCypherGateway(Protocol):
     """让候选 Cypher 经过解析、只读准入和执行的唯一入口。"""
 
     def execute_candidate(self, candidate: str) -> ExecutedCypher: ...
+
+
+@runtime_checkable
+class GraphQueryEngine(Protocol):
+    """执行一条独立的图查询翻译、准入和恢复流程。"""
+
+    def query(
+        self,
+        request: GraphQueryRequest,
+        context: QueryContext,
+    ) -> ExecutedCypher: ...
 
 
 @runtime_checkable

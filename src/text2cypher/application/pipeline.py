@@ -2,30 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 
-from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
-from text2cypher.components.recovery_logging import log_correction_event
-from text2cypher.domain.errors import (
-    CypherExecutionError,
-    CypherParseError,
-    CypherValidationError,
-    LLMGenerationError,
-    Neo4jAccessError,
-    Neo4jConnectionError,
-    QuestionValidationError,
-)
+from text2cypher.domain.errors import QuestionValidationError
 from text2cypher.domain.models import (
-    ChatPrompt,
-    CypherFailureContext,
-    CypherFailureKind,
-    CypherFailureSource,
-    FewShotExample,
+    GraphQueryRequest,
     GraphSchema,
     PrimaryAgentPlan,
     PrimaryAgentQuery,
-    QueryResult,
+    QueryContext,
     QuestionDecomposition,
     SubQueryResponse,
     Text2CypherResponse,
@@ -36,9 +21,8 @@ from text2cypher.domain.ports import (
     CypherParser,
     CypherValidator,
     FewShotRouter,
+    GraphQueryEngine,
     LLMClient,
-    PlannedFewShotRouter,
-    PlannedPromptBuilder,
     PrimaryAgent,
     PromptBuilder,
     QuestionDecomposer,
@@ -47,12 +31,8 @@ from text2cypher.domain.ports import (
     ResultSummarizer,
     SchemaFetcher,
 )
-from text2cypher.graph_core.readonly_cypher_gateway import (
-    CandidateExecutionFailure,
-    DefaultReadOnlyCypherGateway,
-)
-
-_LOGGER = logging.getLogger(__name__)
+from text2cypher.graph_core.readonly_cypher_gateway import DefaultReadOnlyCypherGateway
+from text2cypher.query_engine.engine import DefaultGraphQueryEngine
 
 
 class Text2CypherPipeline:
@@ -69,6 +49,7 @@ class Text2CypherPipeline:
         cypher_executor: CypherExecutor,
         result_formatter: ResultFormatter,
         read_only_cypher_gateway: ReadOnlyCypherGateway | None = None,
+        graph_query_engine: GraphQueryEngine | None = None,
         result_summarizer: ResultSummarizer | None = None,
         primary_agent: PrimaryAgent | None = None,
         question_decomposer: QuestionDecomposer | None = None,
@@ -80,9 +61,7 @@ class Text2CypherPipeline:
         if primary_agent is not None and question_decomposer is not None:
             raise ValueError("primary_agent 与 question_decomposer 不能同时注入")
         self._schema_fetcher = schema_fetcher
-        self._prompt_builder = prompt_builder
-        self._llm_client = llm_client
-        self._read_only_cypher_gateway = (
+        read_only_gateway = (
             read_only_cypher_gateway
             or DefaultReadOnlyCypherGateway(
                 cypher_parser,
@@ -90,13 +69,18 @@ class Text2CypherPipeline:
                 cypher_executor,
             )
         )
+        self._graph_query_engine = graph_query_engine or DefaultGraphQueryEngine(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            read_only_cypher_gateway=read_only_gateway,
+            few_shot_router=few_shot_router,
+            cypher_corrector=cypher_corrector,
+            recover_empty_results=recover_empty_results,
+        )
         self._result_formatter = result_formatter
         self._result_summarizer = result_summarizer
         self._primary_agent = primary_agent
         self._question_decomposer = question_decomposer
-        self._few_shot_router = few_shot_router
-        self._cypher_corrector = cypher_corrector
-        self._recover_empty_results = recover_empty_results
         self._close_callback = close_callback
         self._closed = False
 
@@ -175,183 +159,16 @@ class Text2CypherPipeline:
         schema: GraphSchema,
         query: PrimaryAgentQuery,
     ) -> SubQueryResponse:
-        """按固定顺序生成、校验并执行一个独立子问题。"""
+        """委托单次 Graph Query Engine，并投影为现有公开子查询结果。"""
 
-        examples = self._route_examples(query, schema)
-        if isinstance(self._prompt_builder, PlannedPromptBuilder):
-            prompt = self._prompt_builder.build_planned(schema, query, examples)
-        else:
-            prompt = self._prompt_builder.build(
-                schema,
-                query.question,
-                examples,
-            )
-        llm_response = self._llm_client.generate(prompt)
-        try:
-            executed = self._read_only_cypher_gateway.execute_candidate(
-                llm_response.content
-            )
-        except CandidateExecutionFailure as failure:
-            error = failure.error
-            if self._cypher_corrector is None:
-                raise error from None
-            cypher, result = self._correct_and_execute(
-                prompt,
-                failure.candidate,
-                self._failure_context(self._failure_kind(error), error),
-            )
-        else:
-            cypher = executed.cypher
-            result = executed.result
-
-        if (
-            not result.rows
-            and self._recover_empty_results
-            and self._cypher_corrector is not None
-        ):
-            cypher, result = self._recover_empty_result(prompt, cypher, result)
+        executed = self._graph_query_engine.query(
+            GraphQueryRequest.from_primary_agent_query(query),
+            QueryContext(schema),
+        )
         return SubQueryResponse(
             question=query.question,
-            cypher=cypher,
-            result=result,
-        )
-
-    def _route_examples(
-        self,
-        query: PrimaryAgentQuery,
-        schema: GraphSchema,
-    ) -> tuple[FewShotExample, ...]:
-        router = self._few_shot_router
-        if router is None:
-            return ()
-        if isinstance(router, PlannedFewShotRouter):
-            return router.route_planned(query, schema)
-        return router.route(query.question, schema)
-
-    def _correct_and_execute(
-        self,
-        base_prompt: ChatPrompt,
-        failed_candidate: str,
-        failure: CypherFailureContext,
-    ) -> tuple[str, QueryResult]:
-        """仅执行一次修正，并让修正版重新通过完整的安全链路。"""
-
-        corrector = self._cypher_corrector
-        if corrector is None:
-            raise AssertionError("纠错调用前必须注入 CypherCorrector")
-        log_correction_event(
-            _LOGGER,
-            event="cypher_correction_started",
-            reason=failure.kind.value,
-            outcome="started",
-        )
-        try:
-            corrected = corrector.correct(
-                base_prompt,
-                failed_candidate,
-                failure,
-            )
-            executed = self._read_only_cypher_gateway.execute_candidate(
-                corrected.content
-            )
-        except CandidateExecutionFailure as gateway_failure:
-            log_correction_event(
-                _LOGGER,
-                event="cypher_correction_exhausted",
-                reason=failure.kind.value,
-                outcome="failed",
-            )
-            raise gateway_failure.error from None
-        except Exception:
-            log_correction_event(
-                _LOGGER,
-                event="cypher_correction_exhausted",
-                reason=failure.kind.value,
-                outcome="failed",
-            )
-            raise
-        log_correction_event(
-            _LOGGER,
-            event="cypher_correction_succeeded",
-            reason=failure.kind.value,
-            outcome="corrected",
-        )
-        return executed.cypher, executed.result
-
-    def _recover_empty_result(
-        self,
-        base_prompt: ChatPrompt,
-        original_cypher: str,
-        original_result: QueryResult,
-    ) -> tuple[str, QueryResult]:
-        """尽力复核空结果；没有安全的非空改进时保留原结果。"""
-
-        try:
-            corrected_cypher, corrected_result = self._correct_and_execute(
-                base_prompt,
-                original_cypher,
-                CypherFailureContext(
-                    kind=CypherFailureKind.EMPTY_RESULT,
-                    source=CypherFailureSource.RESULT,
-                    message=CypherCorrectionPromptBuilder.fallback_failure(
-                        CypherFailureKind.EMPTY_RESULT
-                    ),
-                ),
-            )
-        except (
-            LLMGenerationError,
-            CypherParseError,
-            CypherValidationError,
-            CypherExecutionError,
-            Neo4jAccessError,
-            Neo4jConnectionError,
-        ):
-            log_correction_event(
-                _LOGGER,
-                event="empty_result_original_kept",
-                reason=CypherFailureKind.EMPTY_RESULT.value,
-                outcome="recovery_failed",
-            )
-            return original_cypher, original_result
-        if corrected_result.rows:
-            return corrected_cypher, corrected_result
-        log_correction_event(
-            _LOGGER,
-            event="empty_result_original_kept",
-            reason=CypherFailureKind.EMPTY_RESULT.value,
-            outcome="no_improvement",
-        )
-        return original_cypher, original_result
-
-    @staticmethod
-    def _failure_kind(
-        error: CypherParseError | CypherValidationError | CypherExecutionError,
-    ) -> CypherFailureKind:
-        """将 Core 保留的原始错误映射回既有恢复阶段。"""
-
-        if isinstance(error, CypherParseError):
-            return CypherFailureKind.PARSE
-        if isinstance(error, CypherValidationError):
-            return CypherFailureKind.VALIDATION
-        return CypherFailureKind.EXECUTION
-
-    @staticmethod
-    def _failure_context(
-        kind: CypherFailureKind,
-        error: CypherParseError | CypherValidationError | CypherExecutionError,
-    ) -> CypherFailureContext:
-        """优先保留适配器提取的 Neo4j 诊断，否则使用本地实际原因。"""
-
-        if isinstance(error, (CypherValidationError, CypherExecutionError)):
-            if error.failure_context is not None:
-                return error.failure_context
-        message = str(error).strip()
-        if not message:
-            message = CypherCorrectionPromptBuilder.fallback_failure(kind)
-        return CypherFailureContext(
-            kind=kind,
-            source=CypherFailureSource.LOCAL,
-            message=message,
+            cypher=executed.cypher,
+            result=executed.result,
         )
 
     def close(self) -> None:
