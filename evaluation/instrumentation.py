@@ -350,3 +350,44 @@ class RecoveryEventHandler(logging.Handler):
                 outcome="degraded",
                 reason=message.rsplit("：", maxsplit=1)[-1],
             )
+
+
+class EvaluationLogObserver:
+    """在评测范围内显式订阅脱敏的结构化业务事件。"""
+
+    _LOGGER_NAMES = (
+        "text2cypher.application.primary_agent",
+        "text2cypher.application.question_decomposer",
+        "text2cypher.application.result_summarizer",
+        "text2cypher.application.few_shot_router",
+        "text2cypher.query_engine.engine",
+    )
+
+    def __init__(self, recorder: EvaluationRecorder) -> None:
+        self._handler = RecoveryEventHandler(recorder)
+        self._loggers = tuple(
+            logging.getLogger(name) for name in self._LOGGER_NAMES
+        )
+        self._previous_levels: tuple[int, ...] = ()
+
+    def __enter__(self) -> EvaluationLogObserver:
+        self._previous_levels = tuple(logger.level for logger in self._loggers)
+        for logger in self._loggers:
+            logger.setLevel(logging.INFO)
+            logger.addHandler(self._handler)
+        return self
+
+    def __exit__(
+        self,
+        exception_type: object,
+        exception: object,
+        traceback: object,
+    ) -> None:
+        del exception_type, exception, traceback
+        for logger, previous_level in zip(
+            self._loggers,
+            self._previous_levels,
+            strict=True,
+        ):
+            logger.removeHandler(self._handler)
+            logger.setLevel(previous_level)

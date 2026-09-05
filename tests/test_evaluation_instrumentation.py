@@ -7,6 +7,7 @@ import json
 import pytest
 
 from evaluation.instrumentation import (
+    EvaluationLogObserver,
     EvaluationRecorder,
     RecordingFewShotRouter,
     RecordingPrimaryAgent,
@@ -311,5 +312,38 @@ def test_summary_info_event_is_visible_when_evaluation_enables_logger() -> None:
             "outcome": "generated",
             "mode": "llm",
             "reason": None,
+        }
+    ]
+
+
+def test_log_observer_scopes_event_capture_and_restores_logger_level() -> None:
+    import logging
+
+    recorder = EvaluationRecorder()
+    logger = logging.getLogger("text2cypher.query_engine.engine")
+    previous_level = logger.level
+
+    with EvaluationLogObserver(recorder):
+        logger.info(
+            "cypher_correction_succeeded",
+            extra={
+                "recovery_event": {
+                    "component": "pipeline",
+                    "stage": "cypher_correction",
+                    "event": "cypher_correction_succeeded",
+                    "reason": "validation",
+                    "outcome": "corrected",
+                }
+            },
+        )
+
+    assert logger.level == previous_level
+    assert recorder.recovery_events == [
+        {
+            "component": "pipeline",
+            "stage": "cypher_correction",
+            "event": "cypher_correction_succeeded",
+            "reason": "validation",
+            "outcome": "corrected",
         }
     ]

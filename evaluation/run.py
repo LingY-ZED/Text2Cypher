@@ -6,7 +6,6 @@ import argparse
 import csv
 import hashlib
 import json
-import logging
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -21,13 +20,13 @@ from typing import Any
 from evaluation.comparator import CaseVerdict, compare_case
 from evaluation.dataset import DEFAULT_CASES_PATH, load_cases
 from evaluation.instrumentation import (
+    EvaluationLogObserver,
     EvaluationRecorder,
     RecordingCypherExecutor,
     RecordingCypherParser,
     RecordingCypherValidator,
     RecordingFewShotRouter,
     RecordingPrimaryAgent,
-    RecoveryEventHandler,
     StageLLMClient,
 )
 from evaluation.metrics import calculate_metrics
@@ -35,6 +34,10 @@ from evaluation.models import EvaluationCase, EvaluationIntent
 from evaluation.probes import run_recovery_probes
 from evaluation.report import render_report
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
+from text2cypher.application.factory import (
+    PipelineComponents,
+    build_pipeline_from_components,
+)
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.pipeline import Text2CypherPipeline
 from text2cypher.application.primary_agent import LLMPrimaryAgent
@@ -136,37 +139,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             retry_policy=retry_policy,
         )
         recorder = EvaluationRecorder()
-        handler = RecoveryEventHandler(recorder)
-        primary_agent_logger = logging.getLogger(
-            "text2cypher.application.primary_agent"
-        )
-        summarizer_logger = logging.getLogger(
-            "text2cypher.application.result_summarizer"
-        )
-        previous_primary_agent_level = primary_agent_logger.level
-        previous_summarizer_level = summarizer_logger.level
-        primary_agent_logger.setLevel(logging.INFO)
-        summarizer_logger.setLevel(logging.INFO)
-        logging.getLogger().addHandler(handler)
         try:
-            pipeline = _build_instrumented_pipeline(
-                settings,
-                provider,
-                llm_client,
-                retry_policy,
-                recorder,
-            )
-            records = _run_cases(
-                cases,
-                args.runs,
-                pipeline,
-                recorder,
-                output / "case-results.jsonl",
-            )
+            with EvaluationLogObserver(recorder):
+                pipeline = _build_instrumented_pipeline(
+                    settings,
+                    provider,
+                    llm_client,
+                    retry_policy,
+                    recorder,
+                )
+                records = _run_cases(
+                    cases,
+                    args.runs,
+                    pipeline,
+                    recorder,
+                    output / "case-results.jsonl",
+                )
         finally:
-            logging.getLogger().removeHandler(handler)
-            primary_agent_logger.setLevel(previous_primary_agent_level)
-            summarizer_logger.setLevel(previous_summarizer_level)
             llm_client.close()
     finally:
         provider.close()
@@ -228,47 +217,49 @@ def _build_instrumented_pipeline(
         ),
         recorder,
     )
-    return Text2CypherPipeline(
-        schema_fetcher=Neo4jSchemaFetcher(
-            driver,
-            settings.neo4j_database,
-            settings.schema_timeout_seconds,
-            retry_policy=retry_policy,
-        ),
-        prompt_builder=DefaultPromptBuilder(),
-        llm_client=StageLLMClient(llm_client, recorder, "generation"),
-        cypher_parser=RecordingCypherParser(DefaultCypherParser(), recorder),
-        cypher_validator=RecordingCypherValidator(
-            Neo4jCypherValidator(
+    return build_pipeline_from_components(
+        PipelineComponents(
+            schema_fetcher=Neo4jSchemaFetcher(
                 driver,
                 settings.neo4j_database,
-                settings.query_timeout_seconds,
+                settings.schema_timeout_seconds,
                 retry_policy=retry_policy,
             ),
-            recorder,
-        ),
-        cypher_executor=RecordingCypherExecutor(
-            Neo4jCypherExecutor(
-                driver,
-                settings.neo4j_database,
-                settings.query_timeout_seconds,
-                settings.max_result_rows,
-                retry_policy=retry_policy,
+            prompt_builder=DefaultPromptBuilder(),
+            llm_client=StageLLMClient(llm_client, recorder, "generation"),
+            cypher_parser=RecordingCypherParser(DefaultCypherParser(), recorder),
+            cypher_validator=RecordingCypherValidator(
+                Neo4jCypherValidator(
+                    driver,
+                    settings.neo4j_database,
+                    settings.query_timeout_seconds,
+                    retry_policy=retry_policy,
+                ),
+                recorder,
             ),
-            recorder,
-        ),
-        result_formatter=JsonResultFormatter(),
-        result_summarizer=LLMResultSummarizer(
-            StageLLMClient(llm_client, recorder, "summarizer"),
-            enabled=settings.natural_language_summary_enabled,
-            max_input_chars=settings.natural_language_summary_max_input_chars,
-        ),
-        primary_agent=primary_agent,
-        few_shot_router=few_shot_router,
-        cypher_corrector=LLMCypherCorrector(
-            StageLLMClient(llm_client, recorder, "corrector")
-        ),
-        recover_empty_results=True,
+            cypher_executor=RecordingCypherExecutor(
+                Neo4jCypherExecutor(
+                    driver,
+                    settings.neo4j_database,
+                    settings.query_timeout_seconds,
+                    settings.max_result_rows,
+                    retry_policy=retry_policy,
+                ),
+                recorder,
+            ),
+            result_formatter=JsonResultFormatter(),
+            result_summarizer=LLMResultSummarizer(
+                StageLLMClient(llm_client, recorder, "summarizer"),
+                enabled=settings.natural_language_summary_enabled,
+                max_input_chars=settings.natural_language_summary_max_input_chars,
+            ),
+            primary_agent=primary_agent,
+            few_shot_router=few_shot_router,
+            cypher_corrector=LLMCypherCorrector(
+                StageLLMClient(llm_client, recorder, "corrector")
+            ),
+            recover_empty_results=True,
+        )
     )
 
 

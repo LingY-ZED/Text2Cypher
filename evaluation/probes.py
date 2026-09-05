@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from text2cypher.application.pipeline import Text2CypherPipeline
+from text2cypher.application.factory import (
+    PipelineComponents,
+    build_pipeline_from_components,
+)
 from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.domain.errors import CypherExecutionError, CypherValidationError
 from text2cypher.domain.models import (
@@ -111,30 +113,24 @@ class _Formatter:
 def run_recovery_probes() -> dict[str, bool]:
     """Run parse, validation, execution, and empty-result probes without I/O."""
 
-    logger = logging.getLogger("text2cypher.application.pipeline")
-    handler = logging.NullHandler()
-    logger.addHandler(handler)
-    try:
-        return {
-            "parse": _run_probe("", CypherFailureKind.PARSE),
-            "validation": _run_probe(
-                "RETURN 0 AS initial",
-                CypherFailureKind.VALIDATION,
-                fail_validation=True,
-            ),
-            "execution": _run_probe(
-                "RETURN 0 AS initial",
-                CypherFailureKind.EXECUTION,
-                fail_execution=True,
-            ),
-            "empty_result": _run_probe(
-                "RETURN 0 AS initial",
-                CypherFailureKind.EMPTY_RESULT,
-                empty_initial=True,
-            ),
-        }
-    finally:
-        logger.removeHandler(handler)
+    return {
+        "parse": _run_probe("", CypherFailureKind.PARSE),
+        "validation": _run_probe(
+            "RETURN 0 AS initial",
+            CypherFailureKind.VALIDATION,
+            fail_validation=True,
+        ),
+        "execution": _run_probe(
+            "RETURN 0 AS initial",
+            CypherFailureKind.EXECUTION,
+            fail_execution=True,
+        ),
+        "empty_result": _run_probe(
+            "RETURN 0 AS initial",
+            CypherFailureKind.EMPTY_RESULT,
+            empty_initial=True,
+        ),
+    }
 
 
 def _run_probe(
@@ -146,7 +142,8 @@ def _run_probe(
     empty_initial: bool = False,
 ) -> bool:
     corrector = _Corrector()
-    pipeline = Text2CypherPipeline(
+    pipeline = build_pipeline_from_components(
+        PipelineComponents(
         schema_fetcher=_SchemaFetcher(),
         prompt_builder=_PromptBuilder(),
         llm_client=_LLM(initial),
@@ -159,6 +156,7 @@ def _run_probe(
         result_formatter=_Formatter(),
         cypher_corrector=corrector,
         recover_empty_results=empty_initial,
+        )
     )
     response = pipeline.run("probe")
     return bool(

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from text2cypher.application.cypher_corrector import LLMCypherCorrector
+from text2cypher.application.factory import (
+    PipelineComponents,
+    build_pipeline_from_components,
+)
 from text2cypher.application.few_shot_router import LLMFewShotRouter
 from text2cypher.application.primary_agent import LLMPrimaryAgent
 from text2cypher.application.question_decomposer import LLMQuestionDecomposer
@@ -19,19 +23,12 @@ from text2cypher.domain.ports import (
     PrimaryAgent,
     QuestionDecomposer,
 )
-from text2cypher.graph_core.readonly_cypher_gateway import (
-    DefaultReadOnlyCypherGateway,
-)
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
-from text2cypher.query_engine.engine import DefaultGraphQueryEngine
-from text2cypher.runtime.single_round import SingleRoundRuntime
-from text2cypher.tools.query_code_graph import QueryCodeGraphTool
-from text2cypher.tools.schema import GetSchemaTool
 
 from .pipeline import Text2CypherPipeline
 
@@ -71,35 +68,30 @@ def build_pipeline(settings: Settings) -> Text2CypherPipeline:
             retry_policy=retry_policy,
         )
         prompt_builder = DefaultPromptBuilder()
-        read_only_cypher_gateway = DefaultReadOnlyCypherGateway(
-            cypher_parser,
-            cypher_validator,
-            cypher_executor,
-        )
-        schema_fetcher = Neo4jSchemaFetcher(
-            driver,
-            settings.neo4j_database,
-            settings.schema_timeout_seconds,
-            retry_policy=retry_policy,
-        )
-        graph_query_engine = DefaultGraphQueryEngine(
-            prompt_builder=prompt_builder,
-            llm_client=llm_client,
-            read_only_cypher_gateway=read_only_cypher_gateway,
-            few_shot_router=few_shot_router,
-            cypher_corrector=cypher_corrector,
-            recover_empty_results=settings.empty_result_correction_enabled,
-        )
-        runtime = SingleRoundRuntime(
-            schema_tool=GetSchemaTool(schema_fetcher),
-            query_code_graph_tool=QueryCodeGraphTool(graph_query_engine),
-            result_summarizer=_build_result_summarizer(settings, llm_client),
-            primary_agent=primary_agent,
-        )
-        return Text2CypherPipeline(
-            result_formatter=JsonResultFormatter(),
-            single_round_runtime=runtime,
-            close_callback=lambda: _close_resources(llm_client, driver_provider),
+        return build_pipeline_from_components(
+            PipelineComponents(
+                schema_fetcher=Neo4jSchemaFetcher(
+                    driver,
+                    settings.neo4j_database,
+                    settings.schema_timeout_seconds,
+                    retry_policy=retry_policy,
+                ),
+                prompt_builder=prompt_builder,
+                llm_client=llm_client,
+                cypher_parser=cypher_parser,
+                cypher_validator=cypher_validator,
+                cypher_executor=cypher_executor,
+                result_formatter=JsonResultFormatter(),
+                result_summarizer=_build_result_summarizer(settings, llm_client),
+                primary_agent=primary_agent,
+                few_shot_router=few_shot_router,
+                cypher_corrector=cypher_corrector,
+                recover_empty_results=settings.empty_result_correction_enabled,
+                close_callback=lambda: _close_resources(
+                    llm_client,
+                    driver_provider,
+                ),
+            )
         )
     except Exception:
         if llm_client is not None:

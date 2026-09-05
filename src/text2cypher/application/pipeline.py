@@ -21,11 +21,7 @@ from text2cypher.domain.ports import (
     ResultSummarizer,
     SchemaFetcher,
 )
-from text2cypher.graph_core.readonly_cypher_gateway import DefaultReadOnlyCypherGateway
-from text2cypher.query_engine.engine import DefaultGraphQueryEngine
 from text2cypher.runtime.single_round import SingleRoundRuntime
-from text2cypher.tools.query_code_graph import QueryCodeGraphTool
-from text2cypher.tools.schema import GetSchemaTool
 
 
 class Text2CypherPipeline:
@@ -95,34 +91,46 @@ class Text2CypherPipeline:
         cypher_corrector: CypherCorrector | None,
         recover_empty_results: bool,
     ) -> SingleRoundRuntime:
-        if (
-            schema_fetcher is None
-            or prompt_builder is None
-            or llm_client is None
-            or cypher_parser is None
-            or cypher_validator is None
-            or cypher_executor is None
+        if any(
+            dependency is None
+            for dependency in (
+                schema_fetcher,
+                prompt_builder,
+                llm_client,
+                cypher_parser,
+                cypher_validator,
+                cypher_executor,
+            )
         ):
             raise ValueError("未注入 Runtime 时必须提供完整的兼容依赖")
-        read_only_gateway = read_only_cypher_gateway or DefaultReadOnlyCypherGateway(
-            cypher_parser,
-            cypher_validator,
-            cypher_executor,
+        assert schema_fetcher is not None
+        assert prompt_builder is not None
+        assert llm_client is not None
+        assert cypher_parser is not None
+        assert cypher_validator is not None
+        assert cypher_executor is not None
+        from text2cypher.application.factory import (
+            PipelineComponents,
+            build_single_round_runtime,
         )
-        query_engine = graph_query_engine or DefaultGraphQueryEngine(
-            prompt_builder=prompt_builder,
-            llm_client=llm_client,
-            read_only_cypher_gateway=read_only_gateway,
-            few_shot_router=few_shot_router,
-            cypher_corrector=cypher_corrector,
-            recover_empty_results=recover_empty_results,
-        )
-        return SingleRoundRuntime(
-            schema_tool=GetSchemaTool(schema_fetcher),
-            query_code_graph_tool=QueryCodeGraphTool(query_engine),
-            result_summarizer=result_summarizer,
-            primary_agent=primary_agent,
-            question_decomposer=question_decomposer,
+
+        return build_single_round_runtime(
+            PipelineComponents(
+                schema_fetcher=schema_fetcher,
+                prompt_builder=prompt_builder,
+                llm_client=llm_client,
+                cypher_parser=cypher_parser,
+                cypher_validator=cypher_validator,
+                cypher_executor=cypher_executor,
+                read_only_cypher_gateway=read_only_cypher_gateway,
+                graph_query_engine=graph_query_engine,
+                few_shot_router=few_shot_router,
+                cypher_corrector=cypher_corrector,
+                recover_empty_results=recover_empty_results,
+                result_summarizer=result_summarizer,
+                primary_agent=primary_agent,
+                question_decomposer=question_decomposer,
+            )
         )
 
     def run(self, question: str) -> Text2CypherResponse:
