@@ -96,6 +96,27 @@ def test_resolve_symbol_falls_back_to_class_suffix_then_method_name() -> None:
     }
 
 
+def test_resolve_entry_api_uses_api_and_service_as_disambiguation() -> None:
+    gateway = _Gateway([QueryResult((), (_method_row(),))])
+
+    resolved = ResolveSymbolTool(gateway).resolve_entry_api(
+        "POST",
+        "/api/sample",
+        service_name="sample-service",
+    )
+
+    assert resolved == (ResolvedMethod(**_method_row()),)
+    statement = gateway.statements[0]
+    assert "WHERE true" in statement.cypher
+    assert statement.parameters == {
+        "anchor": "/api/sample",
+        "graphVersion": None,
+        "serviceName": "sample-service",
+        "httpMethod": "POST",
+        "apiPath": "/api/sample",
+    }
+
+
 def _chain_row(**values: object) -> dict[str, object]:
     row: dict[str, object] = {column: None for column in CALL_CHAIN_RESULT_COLUMNS}
     row.update(

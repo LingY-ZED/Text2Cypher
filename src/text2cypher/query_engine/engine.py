@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from text2cypher.components.cypher_correction import CypherCorrectionPromptBuilder
 from text2cypher.components.recovery_logging import log_correction_event
@@ -15,6 +16,7 @@ from text2cypher.domain.errors import (
     Neo4jConnectionError,
 )
 from text2cypher.domain.models import (
+    CallChainQuerySpec,
     ChatPrompt,
     CypherFailureContext,
     CypherFailureKind,
@@ -29,20 +31,33 @@ from text2cypher.domain.ports import (
     CypherCorrector,
     FewShotRouter,
     LLMClient,
+    ParameterizedReadOnlyCypherGateway,
     PlannedFewShotRouter,
     PlannedPromptBuilder,
     PromptBuilder,
     ReadOnlyCypherGateway,
 )
+from text2cypher.domain.query_shapes import QueryShape
+from text2cypher.graph_core.call_chain import CallChainCypherCompiler
 from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
 )
+from text2cypher.tools.resolve_symbol import ResolveSymbolTool
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class DefaultGraphQueryEngine:
     """保持现有行为地执行一条自然语言到只读图查询的完整链路。"""
+
+    _ENTRY_API = re.compile(
+        r"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(/[^\s，。；！？?]+)",
+        flags=re.IGNORECASE,
+    )
+    _SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
+    _METHOD_REFERENCE = re.compile(
+        r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
+    )
 
     def __init__(
         self,
@@ -69,6 +84,9 @@ class DefaultGraphQueryEngine:
         """生成、准入并执行一条请求，保持既有一次性恢复语义。"""
 
         primary_query = request.as_primary_agent_query()
+        deterministic = self._try_complete_method_call_chain(primary_query)
+        if deterministic is not None:
+            return deterministic
         examples = self._route_examples(primary_query, context)
         prompt = self._build_prompt(primary_query, context, examples)
         response = self._llm_client.generate(prompt)
@@ -93,6 +111,69 @@ class DefaultGraphQueryEngine:
         ):
             executed = self._recover_empty_result(prompt, executed)
         return executed
+
+    def _try_complete_method_call_chain(
+        self,
+        query: PrimaryAgentQuery,
+    ) -> ExecutedCypher | None:
+        """唯一锚点可解析时跳过超长 LLM 模板，否则保持现有回退链路。"""
+
+        if query.effective_query_shape is not QueryShape.FULL_METHOD_CALL_CHAIN:
+            return None
+        gateway = self._read_only_cypher_gateway
+        if not isinstance(gateway, ParameterizedReadOnlyCypherGateway):
+            return None
+
+        resolver = ResolveSymbolTool(gateway)
+        entry_api = self._entry_api_anchor(query.question)
+        if entry_api is not None:
+            http_method, api_path, service_name = entry_api
+            methods = resolver.resolve_entry_api(
+                http_method,
+                api_path,
+                service_name=service_name,
+            )
+        else:
+            anchor = self._method_anchor(query)
+            if anchor is None:
+                return None
+            methods = resolver.resolve_symbol(anchor)
+        if len(methods) != 1:
+            return None
+
+        method = methods[0]
+        statement = CallChainCypherCompiler().compile(
+            CallChainQuerySpec(
+                anchor_qualified_name=method.qualified_name,
+                graph_version=method.graph_version,
+            )
+        )
+        return gateway.execute_statement(statement)
+
+    @classmethod
+    def _entry_api_anchor(
+        cls,
+        question: str,
+    ) -> tuple[str, str, str | None] | None:
+        match = cls._ENTRY_API.search(question)
+        if match is None:
+            return None
+        service_match = cls._SERVICE_NAME.search(question)
+        return (
+            match.group(1).upper(),
+            match.group(2),
+            service_match.group(1) if service_match is not None else None,
+        )
+
+    @classmethod
+    def _method_anchor(cls, query: PrimaryAgentQuery) -> str | None:
+        for value in (query.anchor, query.question):
+            if value is None:
+                continue
+            match = cls._METHOD_REFERENCE.search(value)
+            if match is not None:
+                return match.group(1)
+        return None
 
     def _route_examples(
         self,
