@@ -58,6 +58,7 @@ class DefaultGraphQueryEngine:
     _METHOD_REFERENCE = re.compile(
         r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
     )
+    _SIMPLE_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
     def __init__(
         self,
@@ -138,14 +139,26 @@ class DefaultGraphQueryEngine:
             if anchor is None:
                 return None
             methods = resolver.resolve_symbol(anchor)
-        if len(methods) != 1:
+        if not methods:
             return None
 
-        method = methods[0]
+        ordered_methods = tuple(
+            sorted(
+                methods,
+                key=lambda method: (method.qualified_name, method.graph_version),
+            )
+        )
+        qualified_names = tuple(
+            dict.fromkeys(method.qualified_name for method in ordered_methods)
+        )
+        graph_versions = {method.graph_version for method in ordered_methods}
         statement = CallChainCypherCompiler().compile(
             CallChainQuerySpec(
-                anchor_qualified_name=method.qualified_name,
-                graph_version=method.graph_version,
+                anchor_qualified_name=qualified_names[0],
+                additional_anchor_qualified_names=qualified_names[1:],
+                graph_version=(
+                    next(iter(graph_versions)) if len(graph_versions) == 1 else None
+                ),
             )
         )
         return gateway.execute_statement(statement)
@@ -167,6 +180,11 @@ class DefaultGraphQueryEngine:
 
     @classmethod
     def _method_anchor(cls, query: PrimaryAgentQuery) -> str | None:
+        if (
+            query.anchor is not None
+            and cls._SIMPLE_METHOD_NAME.fullmatch(query.anchor) is not None
+        ):
+            return query.anchor
         for value in (query.anchor, query.question):
             if value is None:
                 continue

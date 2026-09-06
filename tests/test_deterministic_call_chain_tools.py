@@ -156,6 +156,31 @@ class _Resolver:
         )
 
 
+class _MultipleResolver:
+    def resolve_symbol(
+        self,
+        anchor: str,
+        **kwargs: object,
+    ) -> tuple[ResolvedMethod, ...]:
+        del anchor, kwargs
+        return (
+            ResolvedMethod(
+                "first.Service.shared",
+                "shared",
+                "first.Service",
+                "first-service",
+                "v2",
+            ),
+            ResolvedMethod(
+                "second.Service.shared",
+                "shared",
+                "second.Service",
+                "second-service",
+                "v2",
+            ),
+        )
+
+
 def test_find_call_chain_returns_sorted_scalar_segments() -> None:
     gateway = _Gateway(
         [
@@ -219,3 +244,26 @@ def test_find_call_chain_rejects_a_truncated_complete_result() -> None:
 
     with pytest.raises(CypherExecutionError, match="超过安全行数上限"):
         FindCallChainTool(_Resolver(), gateway).find_call_chain("Service.run")
+
+
+def test_find_call_chain_batches_same_name_methods_into_one_statement() -> None:
+    first = _chain_row(**{"根方法": "first.Service.shared"})
+    second = _chain_row(**{"根方法": "second.Service.shared"})
+    gateway = _Gateway(
+        [QueryResult(columns=CALL_CHAIN_RESULT_COLUMNS, rows=(first, second))]
+    )
+
+    segments = FindCallChainTool(_MultipleResolver(), gateway).find_call_chain(
+        "shared"
+    )
+
+    assert [segment.root_method for segment in segments] == [
+        "first.Service.shared",
+        "second.Service.shared",
+    ]
+    assert len(gateway.statements) == 1
+    assert gateway.statements[0].parameters == {
+        "anchorQualifiedName0": "first.Service.shared",
+        "anchorQualifiedName1": "second.Service.shared",
+        "graphVersion": "v2",
+    }

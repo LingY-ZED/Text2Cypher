@@ -593,6 +593,7 @@ class CallChainQuerySpec:
     """完整方法调用链编译器的结构化输入和固定查询预算。"""
 
     anchor_qualified_name: str
+    additional_anchor_qualified_names: tuple[str, ...] = ()
     graph_version: str | None = None
     local_hops: int = 10
     rest_hops: int = 2
@@ -604,6 +605,21 @@ class CallChainQuerySpec:
             "anchor_qualified_name",
             _require_strict_text(self.anchor_qualified_name, "方法全限定名"),
         )
+        if type(self.additional_anchor_qualified_names) is not tuple:
+            raise TypeError("附加方法全限定名必须是元组")
+        additional_names = tuple(
+            _require_strict_text(value, "附加方法全限定名")
+            for value in self.additional_anchor_qualified_names
+        )
+        if self.anchor_qualified_name in additional_names:
+            raise ValueError("附加方法全限定名不能重复根方法全限定名")
+        if len(set(additional_names)) != len(additional_names):
+            raise ValueError("附加方法全限定名不能重复")
+        object.__setattr__(
+            self,
+            "additional_anchor_qualified_names",
+            additional_names,
+        )
         if self.graph_version is not None:
             object.__setattr__(
                 self,
@@ -613,6 +629,15 @@ class CallChainQuerySpec:
         _validate_budget(self.local_hops, "服务内方法跳数", maximum=10)
         _validate_budget(self.rest_hops, "REST 跨服务层数", maximum=2)
         _validate_budget(self.mq_hops, "MQ 发布消费层数", maximum=1)
+
+    @property
+    def anchor_qualified_names(self) -> tuple[str, ...]:
+        """返回稳定去重后的全部方法锚点，供同名方法的单语句查询使用。"""
+
+        return (
+            self.anchor_qualified_name,
+            *self.additional_anchor_qualified_names,
+        )
 
 
 @dataclass(frozen=True, slots=True)

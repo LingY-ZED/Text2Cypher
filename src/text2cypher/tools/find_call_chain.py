@@ -43,22 +43,37 @@ class FindCallChainTool:
             http_method=http_method,
             api_path=api_path,
         )
-        segments: set[CallChainSegment] = set()
-        for method in methods:
-            specification = CallChainQuerySpec(
-                anchor_qualified_name=method.qualified_name,
-                graph_version=graph_version or method.graph_version,
-                local_hops=local_hops,
-                rest_hops=rest_hops,
-                mq_hops=mq_hops,
+        if not methods:
+            return ()
+        ordered_methods = tuple(
+            sorted(
+                methods,
+                key=lambda method: (method.qualified_name, method.graph_version),
             )
-            statement = self._compiler.compile(specification)
-            executed = self._gateway.execute_statement(statement)
-            if executed.result.truncated:
-                raise CypherExecutionError("完整调用链结果超过安全行数上限")
-            segments.update(
-                CallChainSegment.from_row(row) for row in executed.result.rows
-            )
+        )
+        qualified_names = tuple(
+            dict.fromkeys(method.qualified_name for method in ordered_methods)
+        )
+        graph_versions = {method.graph_version for method in ordered_methods}
+        specification = CallChainQuerySpec(
+            anchor_qualified_name=qualified_names[0],
+            additional_anchor_qualified_names=qualified_names[1:],
+            graph_version=(
+                graph_version
+                if graph_version is not None
+                else next(iter(graph_versions)) if len(graph_versions) == 1 else None
+            ),
+            local_hops=local_hops,
+            rest_hops=rest_hops,
+            mq_hops=mq_hops,
+        )
+        statement = self._compiler.compile(specification)
+        executed = self._gateway.execute_statement(statement)
+        if executed.result.truncated:
+            raise CypherExecutionError("完整调用链结果超过安全行数上限")
+        segments = {
+            CallChainSegment.from_row(row) for row in executed.result.rows
+        }
         return tuple(sorted(segments, key=_segment_sort_key))
 
 

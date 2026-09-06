@@ -38,6 +38,29 @@ def test_compiler_produces_identical_statements_for_the_same_spec() -> None:
     assert compiler.compile(specification) == compiler.compile(specification)
 
 
+def test_compiler_keeps_multiple_same_name_methods_in_one_parameterized_statement(
+) -> None:
+    statement = CallChainCypherCompiler().compile(
+        CallChainQuerySpec(
+            anchor_qualified_name="first.Service.shared",
+            additional_anchor_qualified_names=(
+                "second.Service.shared",
+                "third.Service.shared",
+            ),
+        )
+    )
+
+    assert "first.Service.shared" not in statement.cypher
+    assert "second.Service.shared" not in statement.cypher
+    assert statement.parameters == {
+        "anchorQualifiedName0": "first.Service.shared",
+        "anchorQualifiedName1": "second.Service.shared",
+        "anchorQualifiedName2": "third.Service.shared",
+    }
+    assert statement.cypher.count("anchorMethod.全限定名 = $anchorQualifiedName0") == 6
+    assert statement.cypher.count("UNION") == 5
+
+
 def test_compiler_reduces_physical_branches_to_the_requested_budget() -> None:
     statement = CallChainCypherCompiler().compile(
         CallChainQuerySpec(

@@ -98,8 +98,21 @@ class SequenceGateway:
 
 
 class DeterministicGateway:
-    def __init__(self, result: ExecutedCypher) -> None:
+    def __init__(
+        self,
+        result: ExecutedCypher,
+        method_rows: tuple[dict[str, str], ...] | None = None,
+    ) -> None:
         self._result = result
+        self._method_rows = method_rows or (
+            {
+                "qualified_name": "sample.Service.run",
+                "method_name": "run",
+                "class_qualified_name": "sample.Service",
+                "service_name": "sample-service",
+                "graph_version": "v2",
+            },
+        )
         self.statements: list[QueryStatement] = []
 
     def execute_candidate(self, candidate: str) -> ExecutedCypher:
@@ -118,15 +131,7 @@ class DeterministicGateway:
                         "service_name",
                         "graph_version",
                     ),
-                    rows=(
-                        {
-                            "qualified_name": "sample.Service.run",
-                            "method_name": "run",
-                            "class_qualified_name": "sample.Service",
-                            "service_name": "sample-service",
-                            "graph_version": "v2",
-                        },
-                    ),
+                    rows=self._method_rows,
                 ),
             )
         return self._result
@@ -309,5 +314,62 @@ def test_engine_uses_deterministic_compiler_for_a_uniquely_resolved_call_chain(
     assert "sample.Service.run" not in gateway.statements[1].cypher
     assert gateway.statements[1].parameters == {
         "anchorQualifiedName": "sample.Service.run",
+        "graphVersion": "v2",
+    }
+
+
+def test_engine_batches_ambiguous_same_name_methods_without_llm_fallback() -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question="shared 的完整调用链是什么？",
+        intent="查询完整调用链",
+        required_information=("完整调用链表格",),
+        anchor="shared",
+        query_shape=QueryShape.FULL_METHOD_CALL_CHAIN,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled call chain",
+        result=QueryResult(
+            columns=("根方法",),
+            rows=({"根方法": "first.Service.shared"},),
+        ),
+    )
+    gateway = DeterministicGateway(
+        expected,
+        method_rows=(
+            {
+                "qualified_name": "first.Service.shared",
+                "method_name": "shared",
+                "class_qualified_name": "first.Service",
+                "service_name": "first-service",
+                "graph_version": "v2",
+            },
+            {
+                "qualified_name": "second.Service.shared",
+                "method_name": "shared",
+                "class_qualified_name": "second.Service",
+                "service_name": "second-service",
+                "graph_version": "v2",
+            },
+        ),
+    )
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[1].parameters == {
+        "anchorQualifiedName0": "first.Service.shared",
+        "anchorQualifiedName1": "second.Service.shared",
         "graphVersion": "v2",
     }

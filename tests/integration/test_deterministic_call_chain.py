@@ -161,6 +161,54 @@ def test_engine_compiles_entry_api_call_chain_without_llm() -> None:
     assert _fingerprint(result.result.rows) == _fingerprint(expected)
 
 
+def test_engine_batches_all_same_name_method_roots_without_llm() -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        query = PrimaryAgentQuery(
+            query_id="q1",
+            question="getTickets 的完整调用链是什么？",
+            intent="查询完整调用链",
+            required_information=("完整调用链表格",),
+            anchor="getTickets",
+            query_shape=QueryShape.FULL_METHOD_CALL_CHAIN,
+        )
+        result = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        ).query(
+            GraphQueryRequest.from_primary_agent_query(query),
+            QueryContext(GraphSchema()),
+        )
+    finally:
+        provider.close()
+
+    root_column = CALL_CHAIN_RESULT_COLUMNS[0]
+    assert {
+        row[root_column] for row in result.result.rows
+    } == {
+        "travel.service.TravelServiceImpl.getTickets",
+        "travel2.service.TravelServiceImpl.getTickets",
+    }
+    assert result.cypher.count("UNION") == 5
+    assert "getTickets" not in result.cypher
+
+
 def _fingerprint(rows: object) -> tuple[str, ...]:
     return tuple(
         sorted(

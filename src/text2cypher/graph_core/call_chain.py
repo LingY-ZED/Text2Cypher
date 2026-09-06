@@ -40,10 +40,7 @@ class CallChainCypherCompiler:
         if spec.mq_hops == 1:
             selected.extend(branches[4:6])
 
-        predicate = "anchorMethod.全限定名 = $anchorQualifiedName"
-        parameters: dict[str, str] = {
-            "anchorQualifiedName": spec.anchor_qualified_name,
-        }
+        predicate, parameters = _anchor_predicate(spec)
         if spec.graph_version is not None:
             predicate += " AND graphVersion = $graphVersion"
             parameters["graphVersion"] = spec.graph_version
@@ -55,3 +52,22 @@ class CallChainCypherCompiler:
         if "<TARGET_METHOD_FILTER>" in cypher:
             raise ValueError("完整方法调用链模板含有未替换的锚点占位符")
         return QueryStatement(cypher=cypher, parameters=parameters)
+
+
+def _anchor_predicate(spec: CallChainQuerySpec) -> tuple[str, dict[str, str]]:
+    names = spec.anchor_qualified_names
+    if len(names) == 1:
+        return (
+            "anchorMethod.全限定名 = $anchorQualifiedName",
+            {"anchorQualifiedName": names[0]},
+        )
+
+    parameters = {
+        f"anchorQualifiedName{index}": value
+        for index, value in enumerate(names)
+    }
+    predicate = "(" + " OR ".join(
+        f"anchorMethod.全限定名 = ${parameter}"
+        for parameter in parameters
+    ) + ")"
+    return predicate, parameters
