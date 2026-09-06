@@ -165,7 +165,10 @@ class DefaultGraphQueryEngine:
                 ),
             )
         )
-        return gateway.execute_statement(statement)
+        executed = gateway.execute_statement(statement)
+        if executed.result.truncated:
+            raise CypherExecutionError("完整调用链结果超过安全行数上限")
+        return executed
 
     @classmethod
     def _entry_api_anchor(

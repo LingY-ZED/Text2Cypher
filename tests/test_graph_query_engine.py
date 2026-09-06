@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from text2cypher.domain.errors import (
+    CypherExecutionError,
     CypherParseError,
     Neo4jConnectionError,
 )
@@ -426,3 +427,39 @@ def test_engine_extracts_a_simple_method_anchor_from_a_fallback_request() -> Non
     assert gateway.statements[1].parameters["anchorQualifiedName0"] == (
         "first.Service.shared"
     )
+
+
+def test_engine_rejects_a_truncated_complete_call_chain() -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question="sample.Service.run 的完整调用链是什么？",
+        intent="查询完整调用链",
+        required_information=("完整调用链表格",),
+        anchor="sample.Service.run",
+        query_shape=QueryShape.FULL_METHOD_CALL_CHAIN,
+    )
+    gateway = DeterministicGateway(
+        ExecutedCypher(
+            cypher="compiled call chain",
+            result=QueryResult(
+                columns=("根方法",),
+                rows=({"根方法": "sample.Service.run"},),
+                truncated=True,
+            ),
+        )
+    )
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    with pytest.raises(CypherExecutionError, match="超过安全行数上限"):
+        engine.query(
+            GraphQueryRequest.from_primary_agent_query(query),
+            QueryContext(GraphSchema()),
+        )
+
+    assert calls == []
