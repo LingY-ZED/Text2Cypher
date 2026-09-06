@@ -70,7 +70,12 @@ class _Validator:
     def __init__(self, fail_initial: bool = False) -> None:
         self._fail_initial = fail_initial
 
-    def validate(self, cypher: str) -> ValidationReport:
+    def validate(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ValidationReport:
+        del parameters
         if self._fail_initial and "initial" in cypher:
             raise CypherValidationError("injected validation failure")
         return ValidationReport(query_type="r")

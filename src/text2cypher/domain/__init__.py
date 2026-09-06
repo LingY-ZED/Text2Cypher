@@ -2,6 +2,10 @@
 
 from .errors import Text2CypherError
 from .models import (
+    CALL_CHAIN_RESULT_COLUMNS,
+    CallChainLinkType,
+    CallChainQuerySpec,
+    CallChainSegment,
     CypherFailureContext,
     CypherFailureKind,
     CypherFailureSource,
@@ -13,7 +17,9 @@ from .models import (
     PrimaryAgentPlan,
     PrimaryAgentQuery,
     QueryContext,
+    QueryStatement,
     QuestionDecomposition,
+    ResolvedMethod,
     ResultSummary,
     ResultSummaryFallbackReason,
     ResultSummaryMode,
@@ -25,6 +31,10 @@ from .models import (
 )
 
 __all__ = [
+    "CALL_CHAIN_RESULT_COLUMNS",
+    "CallChainLinkType",
+    "CallChainQuerySpec",
+    "CallChainSegment",
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphQueryRequest",
@@ -37,6 +47,8 @@ __all__ = [
     "ExecutedCypher",
     "QuestionDecomposition",
     "QueryContext",
+    "QueryStatement",
+    "ResolvedMethod",
     "ResultSummary",
     "ResultSummaryFallbackReason",
     "ResultSummaryMode",

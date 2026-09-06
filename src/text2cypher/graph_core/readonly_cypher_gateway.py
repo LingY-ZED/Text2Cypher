@@ -7,7 +7,7 @@ from text2cypher.domain.errors import (
     CypherParseError,
     CypherValidationError,
 )
-from text2cypher.domain.models import ExecutedCypher
+from text2cypher.domain.models import ExecutedCypher, QueryStatement
 from text2cypher.domain.ports import CypherExecutor, CypherParser, CypherValidator
 
 
@@ -49,4 +49,14 @@ class DefaultReadOnlyCypherGateway:
             result = self._executor.execute(cypher)
         except (CypherValidationError, CypherExecutionError) as error:
             raise CandidateExecutionFailure(cypher, error) from error
+        return ExecutedCypher(cypher=cypher, result=result)
+
+    def execute_statement(self, statement: QueryStatement) -> ExecutedCypher:
+        """执行受信任编译器生成的参数化语句，仍经过 Parser 和只读准入。"""
+
+        if not isinstance(statement, QueryStatement):
+            raise TypeError("参数化查询必须是 QueryStatement")
+        cypher = self._parser.parse(statement.cypher)
+        self._validator.validate(cypher, statement.parameters)
+        result = self._executor.execute(cypher, statement.parameters)
         return ExecutedCypher(cypher=cypher, result=result)

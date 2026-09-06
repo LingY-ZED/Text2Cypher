@@ -17,6 +17,7 @@ from text2cypher.domain.models import (
     PrimaryAgentQuery,
     QueryContext,
     QueryResult,
+    QueryStatement,
     QuestionDecomposition,
     ResultSummary,
     SubQueryResponse,
@@ -125,7 +126,11 @@ class CypherParser(Protocol):
 class CypherValidator(Protocol):
     """在执行前校验 Cypher 是否安全且只读。"""
 
-    def validate(self, cypher: str) -> ValidationReport: ...
+    def validate(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ValidationReport: ...
 
 
 @runtime_checkable
@@ -144,6 +149,13 @@ class ReadOnlyCypherGateway(Protocol):
     """让候选 Cypher 经过解析、只读准入和执行的唯一入口。"""
 
     def execute_candidate(self, candidate: str) -> ExecutedCypher: ...
+
+
+@runtime_checkable
+class ParameterizedReadOnlyCypherGateway(ReadOnlyCypherGateway, Protocol):
+    """执行由确定性编译器生成的参数化只读语句。"""
+
+    def execute_statement(self, statement: QueryStatement) -> ExecutedCypher: ...
 
 
 @runtime_checkable

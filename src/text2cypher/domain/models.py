@@ -26,6 +26,11 @@ def _require_strict_text(value: object, field_name: str) -> str:
     return _require_text(value, field_name)
 
 
+def _validate_budget(value: object, field_name: str, *, maximum: int) -> None:
+    if type(value) is not int or not 0 <= value <= maximum:
+        raise ValueError(f"{field_name}必须是 0 到 {maximum} 的整数")
+
+
 class CypherFailureKind(StrEnum):
     """可由一次性 Corrector 修正的 Cypher 阶段失败类型。"""
 
@@ -554,6 +559,238 @@ class QueryContext:
     def __post_init__(self) -> None:
         if not isinstance(self.schema, GraphSchema):
             raise TypeError("查询上下文必须包含 GraphSchema")
+
+
+@dataclass(frozen=True, slots=True)
+class QueryStatement:
+    """确定性 Core 将参数与 Cypher 文本一起传递的不可变语句。"""
+
+    cypher: str
+    parameters: Mapping[str, str | int | float | bool | None] = field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "cypher", _require_strict_text(self.cypher, "Cypher"))
+        if not isinstance(self.parameters, Mapping):
+            raise TypeError("查询参数必须是映射")
+        normalized: dict[str, str | int | float | bool | None] = {}
+        for name, value in self.parameters.items():
+            parameter_name = _require_strict_text(name, "查询参数名")
+            if (
+                not parameter_name.replace("_", "").isalnum()
+                or parameter_name[0].isdigit()
+            ):
+                raise ValueError("查询参数名只能包含字母、数字和下划线")
+            if value is not None and type(value) not in {str, int, float, bool}:
+                raise TypeError("查询参数只支持标量或 null")
+            normalized[parameter_name] = value
+        object.__setattr__(self, "parameters", MappingProxyType(normalized))
+
+
+@dataclass(frozen=True, slots=True)
+class CallChainQuerySpec:
+    """完整方法调用链编译器的结构化输入和固定查询预算。"""
+
+    anchor_qualified_name: str
+    graph_version: str | None = None
+    local_hops: int = 10
+    rest_hops: int = 2
+    mq_hops: int = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "anchor_qualified_name",
+            _require_strict_text(self.anchor_qualified_name, "方法全限定名"),
+        )
+        if self.graph_version is not None:
+            object.__setattr__(
+                self,
+                "graph_version",
+                _require_strict_text(self.graph_version, "图谱版本"),
+            )
+        _validate_budget(self.local_hops, "服务内方法跳数", maximum=10)
+        _validate_budget(self.rest_hops, "REST 跨服务层数", maximum=2)
+        _validate_budget(self.mq_hops, "MQ 发布消费层数", maximum=1)
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedMethod:
+    """实体解析后可作为确定性查询锚点的方法标识。"""
+
+    qualified_name: str
+    method_name: str
+    class_qualified_name: str
+    service_name: str
+    graph_version: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "qualified_name",
+            "method_name",
+            "class_qualified_name",
+            "service_name",
+            "graph_version",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                _require_strict_text(getattr(self, name), name),
+            )
+
+
+class CallChainLinkType(StrEnum):
+    """完整调用链稳定表格中的物理分段类型。"""
+
+    LOCAL = "local"
+    REST = "rest"
+    MQ = "mq"
+
+
+CALL_CHAIN_RESULT_COLUMNS = (
+    "根方法",
+    "图谱版本",
+    "层级",
+    "链路类型",
+    "源服务",
+    "源API路径",
+    "源HTTP方法",
+    "源方法",
+    "方法路径",
+    "下游API路径",
+    "目标服务",
+    "目标API路径",
+    "目标HTTP方法",
+    "目标方法",
+    "消息交换机",
+    "消息队列",
+    "路由键",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CallChainSegment:
+    """完整方法调用链表格的一行，不携带 Neo4j Node 或 Path 对象。"""
+
+    root_method: str
+    graph_version: str
+    level: int
+    link_type: CallChainLinkType
+    source_service: str | None
+    source_api_path: str | None
+    source_http_method: str | None
+    source_method: str | None
+    method_path: tuple[str, ...]
+    downstream_api_path: str | None
+    target_service: str | None
+    target_api_path: str | None
+    target_http_method: str | None
+    target_method: str | None
+    message_exchange: str | None
+    message_queue: str | None
+    routing_key: str | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "root_method",
+            _require_strict_text(self.root_method, "根方法"),
+        )
+        object.__setattr__(
+            self,
+            "graph_version",
+            _require_strict_text(self.graph_version, "图谱版本"),
+        )
+        if type(self.level) is not int or self.level < 0:
+            raise ValueError("层级必须是非负整数")
+        if not isinstance(self.link_type, CallChainLinkType):
+            raise TypeError("链路类型必须是 CallChainLinkType")
+        for name in (
+            "source_service",
+            "source_api_path",
+            "source_http_method",
+            "source_method",
+            "downstream_api_path",
+            "target_service",
+            "target_api_path",
+            "target_http_method",
+            "target_method",
+            "message_exchange",
+            "message_queue",
+            "routing_key",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                object.__setattr__(self, name, _require_strict_text(value, name))
+        if type(self.method_path) is not tuple or not self.method_path:
+            raise ValueError("方法路径必须是非空元组")
+        object.__setattr__(
+            self,
+            "method_path",
+            tuple(
+                _require_strict_text(value, "方法路径")
+                for value in self.method_path
+            ),
+        )
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> CallChainSegment:
+        """从固定表格契约的行还原为类型化调用链分段。"""
+
+        if not isinstance(row, Mapping):
+            raise TypeError("调用链结果行必须是映射")
+        if set(row) != set(CALL_CHAIN_RESULT_COLUMNS):
+            raise ValueError("调用链结果行必须包含完整且唯一的表格列")
+        method_path = row["方法路径"]
+        if not isinstance(method_path, (list, tuple)):
+            raise TypeError("方法路径必须是列表或元组")
+        try:
+            link_type = CallChainLinkType(row["链路类型"])
+        except (TypeError, ValueError) as error:
+            raise ValueError("链路类型必须是 local、rest 或 mq") from error
+        return cls(
+            root_method=row["根方法"],
+            graph_version=row["图谱版本"],
+            level=row["层级"],
+            link_type=link_type,
+            source_service=row["源服务"],
+            source_api_path=row["源API路径"],
+            source_http_method=row["源HTTP方法"],
+            source_method=row["源方法"],
+            method_path=tuple(method_path),
+            downstream_api_path=row["下游API路径"],
+            target_service=row["目标服务"],
+            target_api_path=row["目标API路径"],
+            target_http_method=row["目标HTTP方法"],
+            target_method=row["目标方法"],
+            message_exchange=row["消息交换机"],
+            message_queue=row["消息队列"],
+            routing_key=row["路由键"],
+        )
+
+    def to_row(self) -> dict[str, str | int | list[str] | None]:
+        """投影为公共接口可直接 JSON 序列化的稳定表格行。"""
+
+        return {
+            "根方法": self.root_method,
+            "图谱版本": self.graph_version,
+            "层级": self.level,
+            "链路类型": self.link_type.value,
+            "源服务": self.source_service,
+            "源API路径": self.source_api_path,
+            "源HTTP方法": self.source_http_method,
+            "源方法": self.source_method,
+            "方法路径": list(self.method_path),
+            "下游API路径": self.downstream_api_path,
+            "目标服务": self.target_service,
+            "目标API路径": self.target_api_path,
+            "目标HTTP方法": self.target_http_method,
+            "目标方法": self.target_method,
+            "消息交换机": self.message_exchange,
+            "消息队列": self.message_queue,
+            "路由键": self.routing_key,
+        }
 
 
 @dataclass(frozen=True, slots=True)

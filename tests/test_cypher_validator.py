@@ -147,6 +147,18 @@ def test_validator_does_not_retry_neo4j_access_error() -> None:
     assert len(driver.calls) == 1
 
 
+def test_validator_passes_parameters_to_neo4j_explain() -> None:
+    driver = FakeValidatorDriver()
+
+    report = Neo4jCypherValidator(driver, "neo4j", 5).validate(
+        "RETURN $value AS value",
+        {"value": 7},
+    )
+
+    assert report.query_type == "r"
+    assert driver.calls[0][1]["parameters_"] == {"value": 7}
+
+
 def test_validator_preserves_whitelisted_server_error_for_corrector() -> None:
     error = Neo4jError._hydrate_neo4j(
         code="Neo.ClientError.Statement.SyntaxError",

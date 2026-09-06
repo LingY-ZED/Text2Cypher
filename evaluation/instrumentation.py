@@ -237,11 +237,15 @@ class RecordingCypherValidator:
         self._delegate = delegate
         self._recorder = recorder
 
-    def validate(self, cypher: str) -> ValidationReport:
+    def validate(
+        self,
+        cypher: str,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ValidationReport:
         source = self._recorder.last_parsed_stage or "unknown"
         started = perf_counter()
         try:
-            report = self._delegate.validate(cypher)
+            report = self._delegate.validate(cypher, parameters)
         except Exception as error:
             self._recorder.add(
                 component="neo4j",

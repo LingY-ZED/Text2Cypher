@@ -8,7 +8,7 @@ from text2cypher.domain.errors import (
     CypherValidationError,
     Neo4jConnectionError,
 )
-from text2cypher.domain.models import QueryResult, ValidationReport
+from text2cypher.domain.models import QueryResult, QueryStatement, ValidationReport
 from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
     DefaultReadOnlyCypherGateway,
@@ -138,3 +138,43 @@ def test_gateway_preserves_non_repairable_connection_errors() -> None:
         ).execute_candidate("raw candidate")
 
     assert calls == ["parse:raw candidate", "validate:RETURN 1"]
+
+
+def test_gateway_executes_parameterized_statement_through_all_core_guards() -> None:
+    calls: list[str] = []
+
+    class ParameterValidator(RecordingValidator):
+        def validate(
+            self,
+            cypher: str,
+            parameters: dict[str, object] | None = None,
+        ) -> ValidationReport:
+            calls.append(f"parameters:{parameters}")
+            return super().validate(cypher)
+
+    class ParameterExecutor(RecordingExecutor):
+        def execute(
+            self,
+            cypher: str,
+            parameters: dict[str, object] | None = None,
+        ) -> QueryResult:
+            calls.append(f"execute_parameters:{parameters}")
+            return super().execute(cypher)
+
+    gateway = DefaultReadOnlyCypherGateway(
+        RecordingParser(calls),
+        ParameterValidator(calls),
+        ParameterExecutor(calls),
+    )
+    statement = QueryStatement("RETURN $value AS value", {"value": 7})
+
+    executed = gateway.execute_statement(statement)
+
+    assert executed.cypher == "RETURN 1"
+    assert calls == [
+        "parse:RETURN $value AS value",
+        "parameters:{'value': 7}",
+        "validate:RETURN 1",
+        "execute_parameters:{'value': 7}",
+        "execute:RETURN 1",
+    ]
