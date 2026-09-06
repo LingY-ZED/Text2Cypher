@@ -370,8 +370,9 @@ class QueryShapeTemplate:
         if self.query_shape not in {
             QueryShape.FULL_ENTRY_CHAIN,
             QueryShape.FULL_DOWNSTREAM_CHAIN,
+            QueryShape.FULL_METHOD_CALL_CHAIN,
         }:
-            raise ValueError("结构模板只支持完整入口链或完整下游链")
+            raise ValueError("结构模板只支持完整调用链形状")
         object.__setattr__(
             self,
             "template",
