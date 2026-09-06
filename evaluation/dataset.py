@@ -1,4 +1,4 @@
-"""Loading and validation for the frozen version-5 evaluation dataset."""
+"""Loading and validation for the frozen version-6 evaluation dataset."""
 
 from __future__ import annotations
 
@@ -7,6 +7,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from evaluation.call_chain_oracles import (
+    expand_call_chain_snapshot,
+    render_call_chain_oracle,
+)
 from evaluation.models import (
     ComparisonMode,
     DecompositionContract,
@@ -20,10 +24,10 @@ DEFAULT_CASES_PATH = Path(__file__).with_name("cases.json")
 EXPECTED_DIFFICULTIES = {
     Difficulty.SIMPLE: 10,
     Difficulty.MEDIUM: 16,
-    Difficulty.HARD: 14,
+    Difficulty.HARD: 18,
 }
 EXPECTED_CASE_COUNT = sum(EXPECTED_DIFFICULTIES.values())
-EXPECTED_VERSION = 5
+EXPECTED_VERSION = 6
 
 
 def load_cases(path: Path = DEFAULT_CASES_PATH) -> tuple[EvaluationCase, ...]:
@@ -98,6 +102,20 @@ def _parse_intent(value: object) -> EvaluationIntent:
         }
     except ValueError as error:
         raise ValueError("value_normalizers contains an invalid strategy") from error
+    if "oracle_template" in data:
+        if "oracle_cypher" in data:
+            raise ValueError("oracle_template 与 oracle_cypher 不能同时存在")
+        oracle_cypher = render_call_chain_oracle(data["oracle_template"])
+    else:
+        oracle_cypher = _required(data, "oracle_cypher")
+    if "call_chain_snapshot" in data:
+        if "expected_snapshot" in data:
+            raise ValueError(
+                "call_chain_snapshot 与 expected_snapshot 不能同时存在"
+            )
+        snapshot = list(
+            expand_call_chain_snapshot(data["call_chain_snapshot"], columns)
+        )
     if not isinstance(snapshot, list) or not all(
         isinstance(row, dict) for row in snapshot
     ):
@@ -105,7 +123,7 @@ def _parse_intent(value: object) -> EvaluationIntent:
     return EvaluationIntent(
         id=_required(data, "id"),
         label=_required(data, "label"),
-        oracle_cypher=_required(data, "oracle_cypher"),
+        oracle_cypher=oracle_cypher,
         comparison_mode=mode,
         expected_columns=tuple(columns),
         accepted_aliases=parsed_aliases,

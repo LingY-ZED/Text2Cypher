@@ -7,7 +7,7 @@ from evaluation.regrade import regrade_records
 
 
 def test_v5_regrade_contract_produces_seventy_four_matches() -> None:
-    cases = load_cases()
+    cases = load_cases()[:40]
     records: list[dict[str, object]] = []
     index = 0
     for case in cases:

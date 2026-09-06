@@ -6,10 +6,10 @@ from text2cypher.components.code_graph_business_rules import (
     BusinessRuleModule,
     load_code_graph_business_rule_module,
 )
+from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.components.query_shape_templates import (
     JsonQueryShapeTemplateLoader,
 )
-from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.errors import PromptBuildError
 from text2cypher.domain.models import (
     FewShotExample,

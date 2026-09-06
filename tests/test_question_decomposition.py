@@ -74,7 +74,10 @@ def test_decomposition_keeps_complete_call_chain_as_one_intent() -> None:
     )
     assert "不要按返回列、属性或关系端点机械拆分" in prompt.system
     assert "查询完整消息路径及其中需要保持对应的路由条件" in prompt.system
-    assert "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径" in (
+    assert (
+        "完整入口调用链、完整下游调用链、完整方法调用链、"
+        "有序方法路径和完整消息路径"
+    ) in (
         prompt.system
     )
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system

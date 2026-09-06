@@ -57,7 +57,10 @@ def test_primary_agent_prompt_keeps_atomic_correspondence_in_one_query() -> None
         3,
     )
 
-    assert "完整入口调用链、完整下游调用链、完整方法调用链、有序方法路径和完整消息路径" in (
+    assert (
+        "完整入口调用链、完整下游调用链、完整方法调用链、"
+        "有序方法路径和完整消息路径"
+    ) in (
         prompt.system
     )
     assert "同一 API 的请求与响应字段" in prompt.system

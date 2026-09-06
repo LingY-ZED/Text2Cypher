@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "cases": [
     {
       "id": "queue-owner-services",
@@ -2783,6 +2783,148 @@
               "目标入口方法": "security.controller.SecurityController.check"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "travel-left-api-complete-method-call-chain",
+      "difficulty": "hard",
+      "category": "call_chain",
+      "decomposition_contract": "must_preserve",
+      "question": "POST /api/v1/travelservice/trips/left 在 ts-travel-service 中的完整调用链是什么？",
+      "intents": [
+        {
+          "id": "complete-method-call-chain",
+          "label": "入口 API 的完整方法调用链",
+          "oracle_template": {
+            "id": "full_method_call_chain",
+            "anchor": {
+              "kind": "entry_api",
+              "http_method": "POST",
+              "api_path": "/api/v1/travelservice/trips/left",
+              "service_name": "ts-travel-service"
+            }
+          },
+          "comparison_mode": "row_set",
+          "expected_columns": [
+            "根方法", "图谱版本", "层级", "链路类型", "源服务", "源API路径", "源HTTP方法", "源方法", "方法路径", "下游API路径", "目标服务", "目标API路径", "目标HTTP方法", "目标方法", "消息交换机", "消息队列", "路由键"
+          ],
+          "accepted_aliases": {
+            "根方法": ["根方法"], "图谱版本": ["图谱版本"], "层级": ["层级"], "链路类型": ["链路类型"], "源服务": ["源服务"], "源API路径": ["源API路径"], "源HTTP方法": ["源HTTP方法"], "源方法": ["源方法"], "方法路径": ["方法路径"], "下游API路径": ["下游API路径"], "目标服务": ["目标服务"], "目标API路径": ["目标API路径"], "目标HTTP方法": ["目标HTTP方法"], "目标方法": ["目标方法"], "消息交换机": ["消息交换机"], "消息队列": ["消息队列"], "路由键": ["路由键"]
+          },
+          "call_chain_snapshot": {
+            "defaults": {
+              "根方法": "travel.controller.TravelController.queryInfo", "图谱版本": "v1", "层级": null, "链路类型": null, "源服务": null, "源API路径": null, "源HTTP方法": null, "源方法": null, "方法路径": null, "下游API路径": null, "目标服务": null, "目标API路径": null, "目标HTTP方法": null, "目标方法": null, "消息交换机": null, "消息队列": null, "路由键": null
+            },
+            "rows": [
+              {"层级": 0, "链路类型": "local", "源服务": "ts-travel-service", "源API路径": "/api/v1/travelservice/trips/left", "源HTTP方法": "POST", "源方法": "travel.controller.TravelController.queryInfo", "方法路径": ["travel.controller.TravelController.queryInfo"], "目标方法": "travel.controller.TravelController.queryInfo"},
+              {"层级": 0, "链路类型": "local", "源服务": "ts-travel-service", "源API路径": "/api/v1/travelservice/trips/left", "源HTTP方法": "POST", "源方法": "travel.controller.TravelController.queryInfo", "方法路径": ["travel.controller.TravelController.queryInfo", "travel.service.TravelServiceImpl.queryByBatch"], "目标方法": "travel.service.TravelServiceImpl.queryByBatch"},
+              {"层级": 0, "链路类型": "local", "源服务": "ts-travel-service", "源API路径": "/api/v1/travelservice/trips/left", "源HTTP方法": "POST", "源方法": "travel.controller.TravelController.queryInfo", "方法路径": ["travel.controller.TravelController.queryInfo", "travel.service.TravelServiceImpl.queryByBatch", "travel.service.TravelServiceImpl.getTicketsByBatch"], "目标方法": "travel.service.TravelServiceImpl.getTicketsByBatch"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-travel-service", "源API路径": "/api/v1/travelservice/trips/left", "源HTTP方法": "POST", "源方法": "travel.service.TravelServiceImpl.getTicketsByBatch", "方法路径": ["travel.controller.TravelController.queryInfo", "travel.service.TravelServiceImpl.queryByBatch", "travel.service.TravelServiceImpl.getTicketsByBatch"], "下游API路径": "/api/v1/basicservice/basic/travels", "目标服务": "ts-basic-service", "目标API路径": "/api/v1/basicservice/basic/travels", "目标HTTP方法": "POST", "目标方法": "fdse.microservice.controller.BasicController.queryForTravels"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels"], "目标方法": "fdse.microservice.controller.BasicController.queryForTravels"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels"], "目标方法": "fdse.microservice.service.BasicServiceImpl.queryForTravels"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.getRoutesByRouteIds"], "目标方法": "fdse.microservice.service.BasicServiceImpl.getRoutesByRouteIds"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryPriceConfigByRouteIdsAndTrainTypes"], "目标方法": "fdse.microservice.service.BasicServiceImpl.queryPriceConfigByRouteIdsAndTrainTypes"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.checkStationsExists"], "目标方法": "fdse.microservice.service.BasicServiceImpl.checkStationsExists"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.controller.BasicController.queryForTravels", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryTrainTypeByNames"], "目标方法": "fdse.microservice.service.BasicServiceImpl.queryTrainTypeByNames"},
+              {"层级": 2, "链路类型": "rest", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.service.BasicServiceImpl.getRoutesByRouteIds", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.getRoutesByRouteIds"], "下游API路径": "/api/v1/routeservice/routes/byIds/", "目标服务": "ts-route-service", "目标API路径": "/api/v1/routeservice/routes/byIds", "目标HTTP方法": "POST", "目标方法": "route.controller.RouteController.queryByIds"},
+              {"层级": 2, "链路类型": "rest", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.service.BasicServiceImpl.queryPriceConfigByRouteIdsAndTrainTypes", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryPriceConfigByRouteIdsAndTrainTypes"], "下游API路径": "/api/v1/priceservice/prices/byRouteIdsAndTrainTypes", "目标服务": "ts-price-service", "目标API路径": "/api/v1/priceservice/prices/byRouteIdsAndTrainTypes", "目标HTTP方法": "POST", "目标方法": "price.controller.PriceController.query"},
+              {"层级": 2, "链路类型": "rest", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.service.BasicServiceImpl.checkStationsExists", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.checkStationsExists"], "下游API路径": "/api/v1/stationservice/stations/idlist", "目标服务": "ts-station-service", "目标API路径": "/api/v1/stationservice/stations/idlist", "目标HTTP方法": "POST", "目标方法": "fdse.microservice.controller.StationController.queryForIdBatch"},
+              {"层级": 2, "链路类型": "rest", "源服务": "ts-basic-service", "源API路径": "/api/v1/basicservice/basic/travels", "源HTTP方法": "POST", "源方法": "fdse.microservice.service.BasicServiceImpl.queryTrainTypeByNames", "方法路径": ["fdse.microservice.controller.BasicController.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryForTravels", "fdse.microservice.service.BasicServiceImpl.queryTrainTypeByNames"], "下游API路径": "/api/v1/trainservice/trains/byNames", "目标服务": "ts-train-service", "目标API路径": "/api/v1/trainservice/trains/byNames", "目标HTTP方法": "POST", "目标方法": "train.controller.TrainController.retrieveByName"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "inside-payment-pay-complete-method-call-chain",
+      "difficulty": "hard",
+      "category": "call_chain",
+      "decomposition_contract": "must_preserve",
+      "question": "InsidePaymentServiceImpl.pay 的完整调用链是什么？",
+      "intents": [
+        {
+          "id": "complete-method-call-chain",
+          "label": "两层 REST 完整方法调用链",
+          "oracle_template": {"id": "full_method_call_chain", "anchor": {"kind": "method", "qualified_name": "inside_payment.service.InsidePaymentServiceImpl.pay"}},
+          "comparison_mode": "row_set",
+          "expected_columns": ["根方法", "图谱版本", "层级", "链路类型", "源服务", "源API路径", "源HTTP方法", "源方法", "方法路径", "下游API路径", "目标服务", "目标API路径", "目标HTTP方法", "目标方法", "消息交换机", "消息队列", "路由键"],
+          "accepted_aliases": {"根方法": ["根方法"], "图谱版本": ["图谱版本"], "层级": ["层级"], "链路类型": ["链路类型"], "源服务": ["源服务"], "源API路径": ["源API路径"], "源HTTP方法": ["源HTTP方法"], "源方法": ["源方法"], "方法路径": ["方法路径"], "下游API路径": ["下游API路径"], "目标服务": ["目标服务"], "目标API路径": ["目标API路径"], "目标HTTP方法": ["目标HTTP方法"], "目标方法": ["目标方法"], "消息交换机": ["消息交换机"], "消息队列": ["消息队列"], "路由键": ["路由键"]},
+          "call_chain_snapshot": {
+            "defaults": {"根方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "图谱版本": "v1", "层级": null, "链路类型": null, "源服务": null, "源API路径": null, "源HTTP方法": null, "源方法": null, "方法路径": null, "下游API路径": null, "目标服务": null, "目标API路径": null, "目标HTTP方法": null, "目标方法": null, "消息交换机": null, "消息队列": null, "路由键": null},
+            "rows": [
+              {"层级": 0, "链路类型": "local", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "目标方法": "inside_payment.service.InsidePaymentServiceImpl.pay"},
+              {"层级": 0, "链路类型": "local", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "目标方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API路径": "/api/v1/orderOtherService/orderOther/{orderId}", "目标服务": "ts-order-other-service", "目标API路径": "/api/v1/orderOtherService/orderOther/{orderId}", "目标HTTP方法": "GET", "目标方法": "other.controller.OrderOtherController.getOrderById"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API路径": "/api/v1/paymentservice/payment", "目标服务": "ts-payment-service", "目标API路径": "/api/v1/paymentservice/payment", "目标HTTP方法": "POST", "目标方法": "com.trainticket.controller.PaymentController.pay"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.pay", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay"], "下游API路径": "/api/v1/orderservice/order/", "目标服务": "ts-order-service", "目标API路径": "/api/v1/orderservice/order/status/{orderId}/{status}", "目标HTTP方法": "GET", "目标方法": "order.controller.OrderController.modifyOrder"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API路径": "/api/v1/orderOtherService/orderOther/status//", "目标服务": "ts-order-other-service", "目标API路径": "/api/v1/orderOtherService/orderOther", "目标HTTP方法": "GET", "目标方法": "other.controller.OrderOtherController.findAllOrder"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API路径": "/api/v1/orderOtherService/orderOther/status/{orderId}/", "目标服务": "ts-order-other-service", "目标API路径": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}", "目标HTTP方法": "GET", "目标方法": "other.controller.OrderOtherController.modifyOrder"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API路径": "/api/v1/orderservice/order/status//", "目标服务": "ts-order-service", "目标API路径": "/api/v1/orderservice/order", "目标HTTP方法": "GET", "目标方法": "order.controller.OrderController.findAllOrder"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-inside-payment-service", "源方法": "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus", "方法路径": ["inside_payment.service.InsidePaymentServiceImpl.pay", "inside_payment.service.InsidePaymentServiceImpl.setOrderStatus"], "下游API路径": "/api/v1/orderservice/order/status/{orderId}/", "目标服务": "ts-order-service", "目标API路径": "/api/v1/orderservice/order/status/{orderId}/{status}", "目标HTTP方法": "GET", "目标方法": "order.controller.OrderController.modifyOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther/{orderId}", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.getOrderById", "方法路径": ["other.controller.OrderOtherController.getOrderById"], "目标方法": "other.controller.OrderOtherController.getOrderById"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther/{orderId}", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.getOrderById", "方法路径": ["other.controller.OrderOtherController.getOrderById", "other.service.OrderOtherServiceImpl.getOrderById"], "目标方法": "other.service.OrderOtherServiceImpl.getOrderById"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-service", "源API路径": "/api/v1/orderservice/order", "源HTTP方法": "GET", "源方法": "order.controller.OrderController.findAllOrder", "方法路径": ["order.controller.OrderController.findAllOrder"], "目标方法": "order.controller.OrderController.findAllOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-service", "源API路径": "/api/v1/orderservice/order", "源HTTP方法": "GET", "源方法": "order.controller.OrderController.findAllOrder", "方法路径": ["order.controller.OrderController.findAllOrder", "order.service.OrderServiceImpl.getAllOrders"], "目标方法": "order.service.OrderServiceImpl.getAllOrders"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.findAllOrder", "方法路径": ["other.controller.OrderOtherController.findAllOrder"], "目标方法": "other.controller.OrderOtherController.findAllOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.findAllOrder", "方法路径": ["other.controller.OrderOtherController.findAllOrder", "other.service.OrderOtherServiceImpl.getAllOrders"], "目标方法": "other.service.OrderOtherServiceImpl.getAllOrders"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-service", "源API路径": "/api/v1/orderservice/order/status/{orderId}/{status}", "源HTTP方法": "GET", "源方法": "order.controller.OrderController.modifyOrder", "方法路径": ["order.controller.OrderController.modifyOrder"], "目标方法": "order.controller.OrderController.modifyOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-service", "源API路径": "/api/v1/orderservice/order/status/{orderId}/{status}", "源HTTP方法": "GET", "源方法": "order.controller.OrderController.modifyOrder", "方法路径": ["order.controller.OrderController.modifyOrder", "order.service.OrderServiceImpl.modifyOrder"], "目标方法": "order.service.OrderServiceImpl.modifyOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-payment-service", "源API路径": "/api/v1/paymentservice/payment", "源HTTP方法": "POST", "源方法": "com.trainticket.controller.PaymentController.pay", "方法路径": ["com.trainticket.controller.PaymentController.pay"], "目标方法": "com.trainticket.controller.PaymentController.pay"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-payment-service", "源API路径": "/api/v1/paymentservice/payment", "源HTTP方法": "POST", "源方法": "com.trainticket.controller.PaymentController.pay", "方法路径": ["com.trainticket.controller.PaymentController.pay", "com.trainticket.service.PaymentServiceImpl.pay"], "目标方法": "com.trainticket.service.PaymentServiceImpl.pay"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.modifyOrder", "方法路径": ["other.controller.OrderOtherController.modifyOrder"], "目标方法": "other.controller.OrderOtherController.modifyOrder"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-order-other-service", "源API路径": "/api/v1/orderOtherService/orderOther/status/{orderId}/{status}", "源HTTP方法": "GET", "源方法": "other.controller.OrderOtherController.modifyOrder", "方法路径": ["other.controller.OrderOtherController.modifyOrder", "other.service.OrderOtherServiceImpl.modifyOrder"], "目标方法": "other.service.OrderOtherServiceImpl.modifyOrder"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "preserve-rabbit-send-complete-method-call-chain",
+      "difficulty": "hard",
+      "category": "call_chain",
+      "decomposition_contract": "must_preserve",
+      "question": "preserve.mq.RabbitSend.send 的完整调用链是什么？",
+      "intents": [
+        {
+          "id": "complete-method-call-chain",
+          "label": "MQ 消费完整方法调用链",
+          "oracle_template": {"id": "full_method_call_chain", "anchor": {"kind": "method", "qualified_name": "preserve.mq.RabbitSend.send"}},
+          "comparison_mode": "row_set",
+          "expected_columns": ["根方法", "图谱版本", "层级", "链路类型", "源服务", "源API路径", "源HTTP方法", "源方法", "方法路径", "下游API路径", "目标服务", "目标API路径", "目标HTTP方法", "目标方法", "消息交换机", "消息队列", "路由键"],
+          "accepted_aliases": {"根方法": ["根方法"], "图谱版本": ["图谱版本"], "层级": ["层级"], "链路类型": ["链路类型"], "源服务": ["源服务"], "源API路径": ["源API路径"], "源HTTP方法": ["源HTTP方法"], "源方法": ["源方法"], "方法路径": ["方法路径"], "下游API路径": ["下游API路径"], "目标服务": ["目标服务"], "目标API路径": ["目标API路径"], "目标HTTP方法": ["目标HTTP方法"], "目标方法": ["目标方法"], "消息交换机": ["消息交换机"], "消息队列": ["消息队列"], "路由键": ["路由键"]},
+          "call_chain_snapshot": {
+            "defaults": {"根方法": "preserve.mq.RabbitSend.send", "图谱版本": "v1", "层级": null, "链路类型": null, "源服务": null, "源API路径": null, "源HTTP方法": null, "源方法": null, "方法路径": null, "下游API路径": null, "目标服务": null, "目标API路径": null, "目标HTTP方法": null, "目标方法": null, "消息交换机": null, "消息队列": null, "路由键": null},
+            "rows": [
+              {"层级": 0, "链路类型": "local", "源服务": "ts-preserve-service", "源方法": "preserve.mq.RabbitSend.send", "方法路径": ["preserve.mq.RabbitSend.send"], "目标方法": "preserve.mq.RabbitSend.send"},
+              {"层级": 1, "链路类型": "mq", "源服务": "ts-preserve-service", "源方法": "preserve.mq.RabbitSend.send", "方法路径": ["preserve.mq.RabbitSend.send"], "目标服务": "ts-notification-service", "目标方法": "notification.mq.RabbitReceive.void process", "消息交换机": "(default)", "消息队列": "email", "路由键": "email"},
+              {"层级": 1, "链路类型": "local", "源服务": "ts-notification-service", "源方法": "notification.mq.RabbitReceive.void process", "方法路径": ["notification.mq.RabbitReceive.void process"], "目标方法": "notification.mq.RabbitReceive.void process", "消息交换机": "(default)", "消息队列": "email", "路由键": "email"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "poll-thread-complete-method-call-chain-missing-rest-mapping",
+      "difficulty": "hard",
+      "category": "call_chain",
+      "decomposition_contract": "must_preserve",
+      "question": "PollThread.doPreserve 的完整调用链是什么，并保留未映射的 REST 出口？",
+      "intents": [
+        {
+          "id": "complete-method-call-chain",
+          "label": "保留 REST 映射缺失边界",
+          "oracle_template": {"id": "full_method_call_chain", "anchor": {"kind": "method", "qualified_name": "waitorder.utils.PollThread.doPreserve"}},
+          "comparison_mode": "row_set",
+          "expected_columns": ["根方法", "图谱版本", "层级", "链路类型", "源服务", "源API路径", "源HTTP方法", "源方法", "方法路径", "下游API路径", "目标服务", "目标API路径", "目标HTTP方法", "目标方法", "消息交换机", "消息队列", "路由键"],
+          "accepted_aliases": {"根方法": ["根方法"], "图谱版本": ["图谱版本"], "层级": ["层级"], "链路类型": ["链路类型"], "源服务": ["源服务"], "源API路径": ["源API路径"], "源HTTP方法": ["源HTTP方法"], "源方法": ["源方法"], "方法路径": ["方法路径"], "下游API路径": ["下游API路径"], "目标服务": ["目标服务"], "目标API路径": ["目标API路径"], "目标HTTP方法": ["目标HTTP方法"], "目标方法": ["目标方法"], "消息交换机": ["消息交换机"], "消息队列": ["消息队列"], "路由键": ["路由键"]},
+          "call_chain_snapshot": {
+            "defaults": {"根方法": "waitorder.utils.PollThread.doPreserve", "图谱版本": "v1", "层级": null, "链路类型": null, "源服务": null, "源API路径": null, "源HTTP方法": null, "源方法": null, "方法路径": null, "下游API路径": null, "目标服务": null, "目标API路径": null, "目标HTTP方法": null, "目标方法": null, "消息交换机": null, "消息队列": null, "路由键": null},
+            "rows": [
+              {"层级": 0, "链路类型": "local", "源服务": "ts-wait-order-service", "源方法": "waitorder.utils.PollThread.doPreserve", "方法路径": ["waitorder.utils.PollThread.doPreserve"], "目标方法": "waitorder.utils.PollThread.doPreserve"},
+              {"层级": 1, "链路类型": "rest", "源服务": "ts-wait-order-service", "源方法": "waitorder.utils.PollThread.doPreserve", "方法路径": ["waitorder.utils.PollThread.doPreserve"], "下游API路径": "/api/v1/contactservice/preserve"}
+            ]
+          }
         }
       ]
     }
