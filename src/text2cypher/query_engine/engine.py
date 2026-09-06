@@ -59,6 +59,10 @@ class DefaultGraphQueryEngine:
         r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
     )
     _SIMPLE_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+    _SIMPLE_METHOD_REFERENCE = re.compile(
+        r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\s*的?"
+        r"(?:完整|端到端)?调用链",
+    )
 
     def __init__(
         self,
@@ -191,6 +195,9 @@ class DefaultGraphQueryEngine:
             match = cls._METHOD_REFERENCE.search(value)
             if match is not None:
                 return match.group(1)
+        simple_match = cls._SIMPLE_METHOD_REFERENCE.search(query.question)
+        if simple_match is not None:
+            return simple_match.group(1)
         return None
 
     def _route_examples(

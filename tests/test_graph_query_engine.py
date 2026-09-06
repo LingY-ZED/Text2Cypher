@@ -373,3 +373,56 @@ def test_engine_batches_ambiguous_same_name_methods_without_llm_fallback() -> No
         "anchorQualifiedName1": "second.Service.shared",
         "graphVersion": "v2",
     }
+
+
+def test_engine_extracts_a_simple_method_anchor_from_a_fallback_request() -> None:
+    expected = ExecutedCypher(
+        cypher="compiled call chain",
+        result=QueryResult(
+            columns=("根方法",),
+            rows=({"根方法": "first.Service.shared"},),
+        ),
+    )
+    gateway = DeterministicGateway(
+        expected,
+        method_rows=(
+            {
+                "qualified_name": "first.Service.shared",
+                "method_name": "shared",
+                "class_qualified_name": "first.Service",
+                "service_name": "first-service",
+                "graph_version": "v2",
+            },
+            {
+                "qualified_name": "second.Service.shared",
+                "method_name": "shared",
+                "class_qualified_name": "second.Service",
+                "service_name": "second-service",
+                "graph_version": "v2",
+            },
+        ),
+    )
+    calls: list[str] = []
+    query = GraphQueryRequest(
+        query_id="q1",
+        question="shared 的完整调用链是什么？",
+        intent="查询完整调用链",
+        required_information=("完整调用链表格",),
+    )
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(
+            calls,
+            query.as_primary_agent_query(),
+        ),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query.as_primary_agent_query()),
+    )
+
+    result = engine.query(query, QueryContext(GraphSchema()))
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[1].parameters["anchorQualifiedName0"] == (
+        "first.Service.shared"
+    )
