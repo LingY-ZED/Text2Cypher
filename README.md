@@ -57,7 +57,8 @@ python -m pip install -e ".[dev]"
 将 `.env.example` 复制为 `.env`，在本地填写 Neo4j 连接信息和模型 API Key。`.env`
 已被忽略，禁止提交真实密码或 API Key。
 
-DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；
+DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；默认值为
+4096，以容纳完整方法调用链的多分支 Cypher；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 

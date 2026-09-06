@@ -6,6 +6,9 @@ from text2cypher.components.code_graph_business_rules import (
     BusinessRuleModule,
     load_code_graph_business_rule_module,
 )
+from text2cypher.components.query_shape_templates import (
+    JsonQueryShapeTemplateLoader,
+)
 from text2cypher.components.prompt_builder import DefaultPromptBuilder
 from text2cypher.domain.errors import PromptBuildError
 from text2cypher.domain.models import (
@@ -241,6 +244,55 @@ def test_full_entry_plan_uses_canonical_few_shot_without_duplicate_template() ->
         "参考示例："
     )
     assert prompt.user.index("参考示例：") < prompt.user.index("用户问题：")
+
+
+def test_full_method_call_chain_plan_injects_the_schema_compatible_template() -> None:
+    template = next(
+        item
+        for item in JsonQueryShapeTemplateLoader().load()
+        if item.query_shape is QueryShape.FULL_METHOD_CALL_CHAIN
+    )
+    requirements = template.schema_requirements
+    schema = GraphSchema(
+        nodes=tuple(
+            NodeSchema(
+                label,
+                tuple(
+                    PropertySchema(name)
+                    for name in requirements.node_properties[label]
+                ),
+            )
+            for label in requirements.node_labels
+        ),
+        relationships=tuple(
+            RelationshipSchema(
+                relationship_type,
+                tuple(
+                    PropertySchema(name)
+                    for name in requirements.relationship_properties[relationship_type]
+                ),
+            )
+            for relationship_type in requirements.relationship_types
+        ),
+        patterns=requirements.patterns,
+    )
+    query = PrimaryAgentQuery(
+        "q1",
+        "查询 InsidePaymentServiceImpl.pay 的完整调用链。",
+        "查询服务内、REST 与 MQ 的完整分段调用链",
+        ("根方法", "链路类型", "方法路径"),
+        "InsidePaymentServiceImpl.pay",
+        QueryShape.FULL_METHOD_CALL_CHAIN,
+    )
+
+    prompt = DefaultPromptBuilder().build_planned(schema, query)
+
+    assert "查询结构模板：" in prompt.user
+    assert template.id in prompt.user
+    assert template.template in prompt.user
+    assert prompt.user.count("<TARGET_METHOD_FILTER>") == 6
+    assert "UNION" in prompt.user
+    assert load_code_graph_business_rule_module(BusinessRuleModule.MQ) in prompt.system
 
 
 def _template_schema() -> GraphSchema:

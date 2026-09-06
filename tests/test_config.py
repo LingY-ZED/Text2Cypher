@@ -48,6 +48,10 @@ def test_settings_supports_model_output_control() -> None:
     assert settings.llm_disable_thinking is True
 
 
+def test_settings_defaults_to_a_completion_budget_for_complete_call_chains() -> None:
+    assert Settings(**_settings_kwargs()).llm_max_tokens == 4096
+
+
 def test_settings_has_default_retry_policy() -> None:
     settings = Settings(**_settings_kwargs())
 

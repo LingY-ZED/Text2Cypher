@@ -33,7 +33,7 @@ class OpenAICompatibleLLMClient:
         api_key: str,
         model: str,
         timeout_seconds: int,
-        max_tokens: int = 512,
+        max_tokens: int = 4096,
         disable_thinking: bool = False,
         retry_policy: RetryPolicy | None = None,
         client: httpx.Client | None = None,

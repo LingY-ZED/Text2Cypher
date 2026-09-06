@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr
     llm_model: str
     llm_timeout_seconds: int = 60
-    llm_max_tokens: int = 512
+    llm_max_tokens: int = 4096
     llm_disable_thinking: bool = False
     retry_enabled: bool = True
     retry_max_attempts: int = 3

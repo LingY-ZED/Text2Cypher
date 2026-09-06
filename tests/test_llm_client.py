@@ -72,7 +72,7 @@ def test_llm_client_sends_openai_compatible_request_and_extracts_response() -> N
                 {"role": "user", "content": "用户问题"},
             ],
             "temperature": 0,
-            "max_tokens": 512,
+            "max_tokens": 4096,
             "stream": False,
         },
     }
