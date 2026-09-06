@@ -16,6 +16,7 @@ class QueryShape(StrEnum):
     REACHABLE_ENTRY_API = "reachable_entry_api"
     FULL_ENTRY_CHAIN = "full_entry_chain"
     FULL_DOWNSTREAM_CHAIN = "full_downstream_chain"
+    FULL_METHOD_CALL_CHAIN = "full_method_call_chain"
     DIRECT_REST_EGRESS = "direct_rest_egress"
 
 
@@ -44,7 +45,6 @@ def resolve_query_shape(question: str) -> QueryShape:
     )
     has_upstream = has_upstream or "哪些方法调用" in direction_text
     has_downstream = "下游" in compact
-    has_entry_context = "入口" in compact
     has_from_entry = any(cue in compact for cue in ("从入口api", "从入口方法"))
     has_entry_chain = any(cue in compact for cue in ("入口链", "入口调用链"))
     has_full_call_chain = any(
@@ -95,11 +95,12 @@ def resolve_query_shape(question: str) -> QueryShape:
         has_upstream_chain
         or has_full_upstream_chain
         or has_full_entry_chain
-        or (has_full_call_chain and (has_upstream or has_entry_context))
-        or has_from_entry
-        or has_entry_chain
+        or (has_full_call_chain and has_upstream)
+        or ((has_from_entry or has_entry_chain) and not has_full_call_chain)
     ):
         return QueryShape.FULL_ENTRY_CHAIN
+    if has_full_call_chain or "调用链" in compact:
+        return QueryShape.FULL_METHOD_CALL_CHAIN
     if has_ordered:
         return QueryShape.ORDERED_METHOD_PATH
     if has_reachable_entry:

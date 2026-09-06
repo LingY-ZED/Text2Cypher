@@ -92,6 +92,9 @@ def test_policy_preserves_module_selection_and_exposes_skills() -> None:
         "change_impact",
     ]
     assert QueryShape.FULL_DOWNSTREAM_CHAIN in graph_query_skills()[1].query_shapes
+    assert QueryShape.FULL_METHOD_CALL_CHAIN in graph_query_skills()[1].query_shapes
+    assert QueryShape.FULL_METHOD_CALL_CHAIN in graph_query_skills()[2].query_shapes
+    assert QueryShape.FULL_METHOD_CALL_CHAIN in graph_query_skills()[3].query_shapes
 
 
 def test_prompt_knowledge_views_match_the_p3_frozen_rendering() -> None:
@@ -110,5 +113,5 @@ def test_prompt_knowledge_views_match_the_p3_frozen_rendering() -> None:
         "9c10acd53fb8747fd9cbde884ca5e857610b2b738ff7f4d2cbe525f87535b070"
     )
     assert sha256(primary.system.encode()).hexdigest() == (
-        "940d969db0f57ecfd61b35fb8f864718d0120ab0b27d78f4413916271a4436a3"
+        "6b2ad5185dd9c007021e861034a5147a8ee462a98cdfb49dd9a719daa78b75db"
     )

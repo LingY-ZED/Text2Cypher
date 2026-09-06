@@ -110,6 +110,18 @@ def _select(
                 BusinessRuleModule.ORDERED_PATH,
             ),
         ),
+        (
+            "查询 InsidePaymentServiceImpl.pay 的完整调用链。",
+            (
+                BusinessRuleModule.CORE,
+                BusinessRuleModule.ANCHOR_OWNERSHIP,
+                BusinessRuleModule.METHOD_CALL,
+                BusinessRuleModule.ENTRY_API,
+                BusinessRuleModule.REST,
+                BusinessRuleModule.ORDERED_PATH,
+                BusinessRuleModule.MQ,
+            ),
+        ),
     ],
 )
 def test_selects_modules_from_explicit_query_shape(

@@ -38,6 +38,7 @@ _ATOMIC_PATH_SHAPES = {
     QueryShape.ORDERED_METHOD_PATH,
     QueryShape.FULL_ENTRY_CHAIN,
     QueryShape.FULL_DOWNSTREAM_CHAIN,
+    QueryShape.FULL_METHOD_CALL_CHAIN,
 }
 _SERVICE_ANCHOR = re.compile(r"^ts-[a-z0-9-]+-service$", re.IGNORECASE)
 

@@ -34,6 +34,14 @@ from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
             QueryShape.FULL_DOWNSTREAM_CHAIN,
         ),
         (
+            "查询 InsidePaymentServiceImpl.pay 的调用链。",
+            QueryShape.FULL_METHOD_CALL_CHAIN,
+        ),
+        (
+            "从入口 API 开始查询 getTickets 的端到端调用链。",
+            QueryShape.FULL_METHOD_CALL_CHAIN,
+        ),
+        (
             "InsidePaymentServiceImpl.pay 直接调用哪些下游 API 和目标服务？"
             "同时返回目标方法。",
             QueryShape.DIRECT_REST_EGRESS,
@@ -76,6 +84,13 @@ def test_plain_upstream_call_chain_is_full_entry_chain() -> None:
     assert (
         resolve_query_shape("FoodServiceImpl.getAllFood 的上游调用链是什么？")
         is QueryShape.FULL_ENTRY_CHAIN
+    )
+
+
+def test_plain_method_call_chain_is_full_method_call_chain() -> None:
+    assert (
+        resolve_query_shape("FoodServiceImpl.getAllFood 的完整调用链是什么？")
+        is QueryShape.FULL_METHOD_CALL_CHAIN
     )
 
 

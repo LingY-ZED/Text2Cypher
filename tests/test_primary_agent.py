@@ -57,7 +57,7 @@ def test_primary_agent_prompt_keeps_atomic_correspondence_in_one_query() -> None
         3,
     )
 
-    assert "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径" in (
+    assert "完整入口调用链、完整下游调用链、完整方法调用链、有序方法路径和完整消息路径" in (
         prompt.system
     )
     assert "同一 API 的请求与响应字段" in prompt.system
@@ -159,6 +159,15 @@ def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> 
             '"required_information":["API"]},'
             '{"question":"查询 A 的方法路径","intent":"路径",'
             '"required_information":["路径"]}]}',
+            "不得拆分",
+        ),
+        (
+            "查询 A 的完整调用链",
+            '{"analysis_summary":"摘要","queries":['
+            '{"question":"查询 A 的 REST 分段","intent":"REST",'
+            '"required_information":["下游 API"]},'
+            '{"question":"查询 A 的 MQ 分段","intent":"MQ",'
+            '"required_information":["消息队列"]}]}',
             "不得拆分",
         ),
         (

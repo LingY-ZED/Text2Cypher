@@ -27,7 +27,7 @@ _GRAPH_QUERY_SKILLS = (
     ),
     GraphSkillDefinition(
         id=SkillId.CALL_ANALYSIS,
-        version="1",
+        version="2",
         description="直接调用、可达调用、有序路径和完整调用链。",
         query_shapes=(
             QueryShape.UPSTREAM_REACHABILITY,
@@ -36,6 +36,7 @@ _GRAPH_QUERY_SKILLS = (
             QueryShape.ORDERED_METHOD_PATH,
             QueryShape.FULL_ENTRY_CHAIN,
             QueryShape.FULL_DOWNSTREAM_CHAIN,
+            QueryShape.FULL_METHOD_CALL_CHAIN,
         ),
         graph_rule_modules=(
             BusinessRuleModule.METHOD_CALL,
@@ -44,22 +45,24 @@ _GRAPH_QUERY_SKILLS = (
     ),
     GraphSkillDefinition(
         id=SkillId.API_ANALYSIS,
-        version="1",
+        version="2",
         description="服务 API、方法入口、API 契约和入口路径。",
         query_shapes=(
             QueryShape.REACHABLE_ENTRY_API,
             QueryShape.FULL_ENTRY_CHAIN,
             QueryShape.FULL_DOWNSTREAM_CHAIN,
+            QueryShape.FULL_METHOD_CALL_CHAIN,
         ),
         graph_rule_modules=(BusinessRuleModule.ENTRY_API,),
     ),
     GraphSkillDefinition(
         id=SkillId.DEPENDENCY_ANALYSIS,
-        version="1",
+        version="2",
         description="REST、MQ、服务依赖和关联聚合。",
         query_shapes=(
             QueryShape.DIRECT_REST_EGRESS,
             QueryShape.FULL_DOWNSTREAM_CHAIN,
+            QueryShape.FULL_METHOD_CALL_CHAIN,
         ),
         graph_rule_modules=(
             BusinessRuleModule.REST,

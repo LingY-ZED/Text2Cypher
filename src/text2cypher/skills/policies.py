@@ -67,6 +67,15 @@ _SHAPE_MODULES: dict[QueryShape, frozenset[BusinessRuleModule]] = {
             BusinessRuleModule.ORDERED_PATH,
         }
     ),
+    QueryShape.FULL_METHOD_CALL_CHAIN: frozenset(
+        {
+            BusinessRuleModule.METHOD_CALL,
+            BusinessRuleModule.ENTRY_API,
+            BusinessRuleModule.REST,
+            BusinessRuleModule.ORDERED_PATH,
+            BusinessRuleModule.MQ,
+        }
+    ),
     QueryShape.DIRECT_REST_EGRESS: frozenset({BusinessRuleModule.REST}),
 }
 
