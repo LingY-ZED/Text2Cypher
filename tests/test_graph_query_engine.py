@@ -138,6 +138,19 @@ class DeterministicGateway:
         return self._result
 
 
+class DirectStatementGateway:
+    def __init__(self, result: ExecutedCypher) -> None:
+        self._result = result
+        self.statements: list[QueryStatement] = []
+
+    def execute_candidate(self, candidate: str) -> ExecutedCypher:
+        raise AssertionError(f"不应调用 LLM 候选执行：{candidate}")
+
+    def execute_statement(self, statement: QueryStatement) -> ExecutedCypher:
+        self.statements.append(statement)
+        return self._result
+
+
 class RecordingCorrector:
     def __init__(self, response: LLMResponse) -> None:
         self._response = response
@@ -536,3 +549,40 @@ def test_engine_uses_deterministic_compiler_for_resolved_method_shapes(
     assert calls == []
     assert len(gateway.statements) == 2
     assert expected_column in gateway.statements[1].cypher
+
+
+def test_engine_uses_deterministic_service_dependency_matrix() -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question=(
+            "找出通过 MQ 向 ts-notification-service 发送消息的服务，"
+            "并列出每个发送服务的 REST 下游服务"
+        ),
+        intent="查询发送服务及其 REST 下游服务",
+        required_information=("发送服务", "下游服务"),
+        anchor="ts-notification-service",
+        query_shape=QueryShape.GENERAL,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled service dependency",
+        result=QueryResult(columns=("发送服务", "下游服务"), rows=()),
+    )
+    gateway = DirectStatementGateway(expected)
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[0].parameters == {
+        "receiverServiceName": "ts-notification-service"
+    }

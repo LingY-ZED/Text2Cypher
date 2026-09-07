@@ -108,6 +108,53 @@ def test_engine_matches_frozen_legacy_method_oracles_without_llm(
     assert compare_case(case, (result.result.rows,)).matched
 
 
+def test_engine_matches_the_frozen_service_dependency_oracle_without_llm() -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        case = next(
+            item
+            for item in load_cases()
+            if item.id == "notification-senders-rest-matrix"
+        )
+        query = PrimaryAgentQuery(
+            query_id="q1",
+            question=case.question,
+            intent="查询发送服务及其 REST 下游服务",
+            required_information=("发送服务", "下游服务"),
+            anchor="ts-notification-service",
+            query_shape=QueryShape.GENERAL,
+        )
+        result = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        ).query(
+            GraphQueryRequest.from_primary_agent_query(query),
+            QueryContext(GraphSchema()),
+        )
+    finally:
+        provider.close()
+
+    assert "$receiverServiceName" in result.cypher
+    assert "ts-notification-service" not in result.cypher
+    assert compare_case(case, (result.result.rows,)).matched
+
+
 class _UnusedPromptBuilder:
     def build(
         self,

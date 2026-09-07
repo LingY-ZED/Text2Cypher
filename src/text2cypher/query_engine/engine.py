@@ -43,6 +43,7 @@ from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
 from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
 )
+from text2cypher.graph_core.service_dependency import ServiceDependencyCypherCompiler
 from text2cypher.tools.resolve_symbol import ResolveSymbolTool
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,7 +91,9 @@ class DefaultGraphQueryEngine:
         """生成、准入并执行一条请求，保持既有一次性恢复语义。"""
 
         primary_query = request.as_primary_agent_query()
-        deterministic = self._try_deterministic_method_query(primary_query)
+        deterministic = self._try_deterministic_service_dependency(primary_query)
+        if deterministic is None:
+            deterministic = self._try_deterministic_method_query(primary_query)
         if deterministic is not None:
             return deterministic
         examples = self._route_examples(primary_query, context)
@@ -116,6 +119,33 @@ class DefaultGraphQueryEngine:
             and self._cypher_corrector is not None
         ):
             executed = self._recover_empty_result(prompt, executed)
+        return executed
+
+    def _try_deterministic_service_dependency(
+        self,
+        query: PrimaryAgentQuery,
+    ) -> ExecutedCypher | None:
+        """Compile an explicit MQ-sender to REST-target matrix when unambiguous."""
+
+        if query.effective_query_shape is not QueryShape.GENERAL:
+            return None
+        compact = "".join(query.question.lower().split())
+        required_cues = ("mq", "rest", "发送", "下游服务")
+        if not all(cue in compact for cue in required_cues):
+            return None
+        gateway = self._read_only_cypher_gateway
+        if not isinstance(gateway, ParameterizedReadOnlyCypherGateway):
+            return None
+        service_match = self._SERVICE_NAME.search(query.question)
+        if service_match is None:
+            return None
+        executed = gateway.execute_statement(
+            ServiceDependencyCypherCompiler().compile_message_senders_rest_targets(
+                service_match.group(1)
+            )
+        )
+        if executed.result.truncated:
+            raise CypherExecutionError("确定性服务依赖查询结果超过安全行数上限")
         return executed
 
     def _try_deterministic_method_query(
