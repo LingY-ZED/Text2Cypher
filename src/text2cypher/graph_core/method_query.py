@@ -13,6 +13,7 @@ class MethodQueryCypherCompiler:
 
     _SUPPORTED_SHAPES = frozenset(
         {
+            QueryShape.UPSTREAM_REACHABILITY,
             QueryShape.DIRECT_UPSTREAM,
             QueryShape.DIRECT_DOWNSTREAM_METHOD,
             QueryShape.REACHABLE_ENTRY_API,
@@ -43,7 +44,9 @@ class MethodQueryCypherCompiler:
             raise ValueError("确定性方法查询至少需要一个已解析的方法锚点")
 
         predicate, parameters = _anchor_predicate("target", qualified_names)
-        if query_shape is QueryShape.DIRECT_UPSTREAM:
+        if query_shape is QueryShape.UPSTREAM_REACHABILITY:
+            cypher = _upstream_reachability(predicate)
+        elif query_shape is QueryShape.DIRECT_UPSTREAM:
             cypher = _direct_upstream(predicate)
         elif query_shape is QueryShape.DIRECT_DOWNSTREAM_METHOD:
             cypher = _direct_downstream(predicate)
@@ -84,6 +87,25 @@ WHERE {target_filter}
 RETURN DISTINCT target.全限定名 AS 目标方法,
                 caller.全限定名 AS 调用方法
 ORDER BY 调用方法
+""".strip()
+
+
+def _upstream_reachability(target_filter: str) -> str:
+    return f"""
+MATCH (target:方法), (upstream:方法)
+WHERE {target_filter}
+  AND upstream <> target
+  AND upstream.图谱版本 = target.图谱版本
+  AND EXISTS {{
+    MATCH path = (upstream)-[:调用*1..]->(target)
+    WHERE ALL(pathRelation IN relationships(path)
+              WHERE pathRelation.图谱版本 = target.图谱版本)
+      AND ALL(pathNode IN nodes(path)
+              WHERE pathNode.图谱版本 = target.图谱版本)
+  }}
+RETURN DISTINCT target.全限定名 AS 目标方法,
+                upstream.全限定名 AS 上游方法
+ORDER BY 上游方法
 """.strip()
 
 

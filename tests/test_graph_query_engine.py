@@ -482,6 +482,12 @@ def test_engine_rejects_a_truncated_complete_call_chain() -> None:
     ("query_shape", "question", "anchor", "expected_column"),
     (
         (
+            QueryShape.UPSTREAM_REACHABILITY,
+            "哪些上游方法能够调用到 sample.Service.run？",
+            "sample.Service.run",
+            "上游方法",
+        ),
+        (
             QueryShape.DIRECT_UPSTREAM,
             "哪些方法直接调用 sample.Service.run？",
             "sample.Service.run",

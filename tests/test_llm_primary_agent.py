@@ -7,6 +7,7 @@ import pytest
 from text2cypher.application.primary_agent import LLMPrimaryAgent
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import ChatPrompt, LLMResponse
+from text2cypher.domain.query_shapes import QueryShape
 
 
 class StubLLMClient:
@@ -95,6 +96,22 @@ def test_llm_primary_agent_does_not_catch_unexpected_errors() -> None:
 
     with pytest.raises(RuntimeError, match="programming error"):
         LLMPrimaryAgent(client).plan("问题")
+
+
+def test_llm_primary_agent_preserves_impact_views_after_an_invalid_plan() -> None:
+    client = StubLLMClient(LLMResponse(content="not-json"))
+
+    plan = LLMPrimaryAgent(client).plan(
+        "修改 InsidePaymentServiceImpl.pay 后，上游方法、入口 API 和下游服务是什么？"
+    )
+
+    assert plan.decomposed is True
+    assert tuple(query.query_shape for query in plan.queries) == (
+        QueryShape.UPSTREAM_REACHABILITY,
+        QueryShape.REACHABLE_ENTRY_API,
+        QueryShape.DIRECT_REST_EGRESS,
+    )
+    assert all(query.anchor == "InsidePaymentServiceImpl.pay" for query in plan.queries)
 
 
 @pytest.mark.parametrize("max_queries", [1, 4, True])

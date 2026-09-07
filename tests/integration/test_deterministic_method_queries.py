@@ -155,6 +155,69 @@ def test_engine_matches_the_frozen_service_dependency_oracle_without_llm() -> No
     assert compare_case(case, (result.result.rows,)).matched
 
 
+@pytest.mark.parametrize(
+    ("case_id", "anchor"),
+    (
+        ("inside-payment-pay-impact", "InsidePaymentServiceImpl.pay"),
+        ("consign-insert-impact", "ConsignServiceImpl.insertConsignRecord"),
+    ),
+)
+def test_engine_matches_frozen_impact_oracles_without_llm(
+    case_id: str,
+    anchor: str,
+) -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        engine = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        )
+        shapes = (
+            QueryShape.UPSTREAM_REACHABILITY,
+            QueryShape.REACHABLE_ENTRY_API,
+            QueryShape.DIRECT_REST_EGRESS,
+        )
+        results = tuple(
+            engine.query(
+                GraphQueryRequest.from_primary_agent_query(
+                    PrimaryAgentQuery(
+                        query_id=f"q{index}",
+                        question=f"查询 {anchor}",
+                        intent="查询方法变更影响面",
+                        required_information=("冻结 Oracle",),
+                        anchor=anchor,
+                        query_shape=query_shape,
+                    )
+                ),
+                QueryContext(GraphSchema()),
+            )
+            for index, query_shape in enumerate(shapes, start=1)
+        )
+    finally:
+        provider.close()
+
+    case = next(item for item in load_cases() if item.id == case_id)
+    assert all("$anchorQualifiedName" in result.cypher for result in results)
+    assert all(anchor not in result.cypher for result in results)
+    assert compare_case(case, tuple(result.result.rows for result in results)).matched
+
+
 class _UnusedPromptBuilder:
     def build(
         self,

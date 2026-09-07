@@ -12,6 +12,7 @@ from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
 @pytest.mark.parametrize(
     ("query_shape", "expected_column", "expected_unions"),
     (
+        (QueryShape.UPSTREAM_REACHABILITY, "上游方法", 0),
         (QueryShape.DIRECT_UPSTREAM, "调用方法", 0),
         (QueryShape.DIRECT_DOWNSTREAM_METHOD, "被调用方法", 0),
         (QueryShape.REACHABLE_ENTRY_API, "入口API", 0),
