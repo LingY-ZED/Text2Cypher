@@ -648,3 +648,54 @@ def test_engine_uses_deterministic_service_facts(
     assert result == expected
     assert calls == []
     assert gateway.statements[0].parameters == parameter
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_column"),
+    (
+        (
+            "AdminRouteServiceImpl 属于哪个微服务，实现了哪些接口，声明了哪些方法？",
+            "方法全限定名",
+        ),
+        (
+            "AdminRouteServiceImpl 所属微服务对外公开了哪些 API？",
+            "接口路径",
+        ),
+    ),
+)
+def test_engine_uses_deterministic_class_facts(
+    question: str,
+    expected_column: str,
+) -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question=question,
+        intent="查询类结构事实",
+        required_information=(expected_column,),
+        anchor="AdminRouteServiceImpl",
+        query_shape=QueryShape.GENERAL,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled class fact",
+        result=QueryResult(columns=(expected_column,), rows=()),
+    )
+    gateway = DirectStatementGateway(expected)
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[0].parameters == {
+        "classAnchor": "AdminRouteServiceImpl",
+        "classSuffix": ".AdminRouteServiceImpl",
+    }

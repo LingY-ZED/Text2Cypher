@@ -271,6 +271,60 @@ def test_engine_matches_frozen_service_fact_oracles_without_llm(
     assert compare_case(case, (result.result.rows,)).matched
 
 
+def test_engine_matches_frozen_class_fact_oracles_without_llm() -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        case = next(
+            item
+            for item in load_cases()
+            if item.id == "admin-route-implementation-slice"
+        )
+        engine = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        )
+        questions = (
+            "AdminRouteServiceImpl 属于哪个微服务，实现了哪些接口，声明了哪些方法？",
+            "AdminRouteServiceImpl 所属微服务对外公开了哪些 API？",
+        )
+        results = tuple(
+            engine.query(
+                GraphQueryRequest.from_primary_agent_query(
+                    PrimaryAgentQuery(
+                        query_id=f"q{index}",
+                        question=question,
+                        intent="查询确定性类结构事实",
+                        required_information=("冻结 Oracle",),
+                        anchor="AdminRouteServiceImpl",
+                        query_shape=QueryShape.GENERAL,
+                    )
+                ),
+                QueryContext(GraphSchema()),
+            )
+            for index, question in enumerate(questions, start=1)
+        )
+    finally:
+        provider.close()
+
+    assert compare_case(case, tuple(result.result.rows for result in results)).matched
+
+
 class _UnusedPromptBuilder:
     def build(
         self,

@@ -39,6 +39,7 @@ from text2cypher.domain.ports import (
 )
 from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.graph_core.call_chain import CallChainCypherCompiler
+from text2cypher.graph_core.class_facts import ClassFactCypherCompiler
 from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
 from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
@@ -59,6 +60,7 @@ class DefaultGraphQueryEngine:
     )
     _SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
     _QUEUE_NAME = re.compile(r"(?:名为|名叫)\s*([A-Za-z0-9_.-]+)")
+    _IMPLEMENTATION_CLASS = re.compile(r"\b([A-Z][A-Za-z0-9_]*Impl)\b")
     _METHOD_REFERENCE = re.compile(
         r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
     )
@@ -96,6 +98,8 @@ class DefaultGraphQueryEngine:
         deterministic = self._try_deterministic_service_dependency(primary_query)
         if deterministic is None:
             deterministic = self._try_deterministic_service_fact(primary_query)
+        if deterministic is None:
+            deterministic = self._try_deterministic_class_fact(primary_query)
         if deterministic is None:
             deterministic = self._try_deterministic_method_query(primary_query)
         if deterministic is not None:
@@ -162,6 +166,33 @@ class DefaultGraphQueryEngine:
         executed = gateway.execute_statement(statement)
         if executed.result.truncated:
             raise CypherExecutionError("确定性服务事实查询结果超过安全行数上限")
+        return executed
+
+    def _try_deterministic_class_fact(
+        self,
+        query: PrimaryAgentQuery,
+    ) -> ExecutedCypher | None:
+        """Run an explicit class summary or its owning service's API query."""
+
+        if query.effective_query_shape is not QueryShape.GENERAL:
+            return None
+        gateway = self._read_only_cypher_gateway
+        if not isinstance(gateway, ParameterizedReadOnlyCypherGateway):
+            return None
+        class_match = self._IMPLEMENTATION_CLASS.search(query.question)
+        if class_match is None:
+            return None
+        compact = "".join(query.question.lower().split())
+        compiler = ClassFactCypherCompiler()
+        if all(cue in compact for cue in ("实现", "接口", "声明", "方法")):
+            statement = compiler.compile_summary(class_match.group(1))
+        elif "api" in compact and any(cue in compact for cue in ("公开", "对外")):
+            statement = compiler.compile_service_entry_apis(class_match.group(1))
+        else:
+            return None
+        executed = gateway.execute_statement(statement)
+        if executed.result.truncated:
+            raise CypherExecutionError("确定性类事实查询结果超过安全行数上限")
         return executed
 
     def _try_deterministic_service_dependency(
