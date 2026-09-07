@@ -10,11 +10,14 @@ from typing import Any
 
 from text2cypher.domain.models import (
     ChatPrompt,
+    ExecutedCypher,
     FewShotExample,
+    GraphQueryRequest,
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
     PrimaryAgentQuery,
+    QueryContext,
     QueryResult,
     ValidationReport,
 )
@@ -23,6 +26,7 @@ from text2cypher.domain.ports import (
     CypherParser,
     CypherValidator,
     FewShotRouter,
+    GraphQueryEngine,
     LLMClient,
     PlannedFewShotRouter,
     PrimaryAgent,
@@ -39,6 +43,7 @@ class EvaluationRecorder:
     last_candidate_stage: str | None = None
     last_parsed_stage: str | None = None
     current_query_index: int = 0
+    query_index_managed: bool = False
 
     def reset(self) -> None:
         self.events.clear()
@@ -46,6 +51,14 @@ class EvaluationRecorder:
         self.last_candidate_stage = None
         self.last_parsed_stage = None
         self.current_query_index = 0
+        self.query_index_managed = False
+
+    def begin_query(self) -> None:
+        """Assign the next planned-query index before LLM or Core execution."""
+
+        self.current_query_index += 1
+        self.query_index_managed = True
+        self.last_candidate_stage = "deterministic"
 
     def add(self, **event: Any) -> None:
         self.events.append(event)
@@ -65,7 +78,7 @@ class StageLLMClient:
         self._stage = stage
 
     def generate(self, prompt: ChatPrompt) -> LLMResponse:
-        if self._stage == "generation":
+        if self._stage == "generation" and not self._recorder.query_index_managed:
             self._recorder.current_query_index += 1
         started = perf_counter()
         try:
@@ -145,7 +158,11 @@ class RecordingFewShotRouter:
             question=question,
             effective_query_shape=effective_query_shape,
             selected_ids=[example.id for example in selected],
-            query_index=self._recorder.current_query_index + 1,
+            query_index=(
+                self._recorder.current_query_index
+                if self._recorder.query_index_managed
+                else self._recorder.current_query_index + 1
+            ),
         )
 
 
@@ -186,6 +203,26 @@ class RecordingPrimaryAgent:
             ],
         )
         return result
+
+
+class RecordingGraphQueryEngine:
+    """Assign a query index before either deterministic or LLM execution."""
+
+    def __init__(
+        self,
+        delegate: GraphQueryEngine,
+        recorder: EvaluationRecorder,
+    ) -> None:
+        self._delegate = delegate
+        self._recorder = recorder
+
+    def query(
+        self,
+        request: GraphQueryRequest,
+        context: QueryContext,
+    ) -> ExecutedCypher:
+        self._recorder.begin_query()
+        return self._delegate.query(request, context)
 
 
 class RecordingCypherParser:

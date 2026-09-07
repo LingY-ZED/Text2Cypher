@@ -10,15 +10,20 @@ from evaluation.instrumentation import (
     EvaluationLogObserver,
     EvaluationRecorder,
     RecordingFewShotRouter,
+    RecordingGraphQueryEngine,
     RecordingPrimaryAgent,
     RecoveryEventHandler,
     StageLLMClient,
 )
 from text2cypher.domain.models import (
     ChatPrompt,
+    ExecutedCypher,
+    GraphQueryRequest,
     GraphSchema,
     LLMResponse,
     PrimaryAgentPlan,
+    QueryContext,
+    QueryResult,
 )
 
 
@@ -116,6 +121,42 @@ class _Router:
     def route(self, question: str, schema: GraphSchema) -> tuple[object, ...]:
         del question, schema
         return ()
+
+
+class _GraphQueryEngine:
+    def query(
+        self,
+        request: GraphQueryRequest,
+        context: QueryContext,
+    ) -> ExecutedCypher:
+        del request, context
+        return ExecutedCypher(
+            cypher="RETURN 1",
+            result=QueryResult(columns=("value",), rows=({"value": 1},)),
+        )
+
+
+def test_recording_graph_query_engine_assigns_an_index_to_deterministic_work() -> None:
+    recorder = EvaluationRecorder()
+    engine = RecordingGraphQueryEngine(_GraphQueryEngine(), recorder)
+
+    result = engine.query(
+        GraphQueryRequest(
+            query_id="q1",
+            question="查询服务",
+            intent="查询",
+            required_information=("服务",),
+        ),
+        QueryContext(GraphSchema()),
+    )
+    StageLLMClient(_SuccessfulClient(), recorder, "generation").generate(
+        ChatPrompt(system="system", user="user")
+    )
+
+    assert result.result.rows == ({"value": 1},)
+    assert recorder.current_query_index == 1
+    assert recorder.last_candidate_stage == "generation"
+    assert recorder.events[-1]["query_index"] == 1
 
 
 def test_recording_router_records_only_deterministic_effective_shape() -> None:

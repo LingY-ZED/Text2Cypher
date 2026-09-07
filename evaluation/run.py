@@ -26,6 +26,7 @@ from evaluation.instrumentation import (
     RecordingCypherParser,
     RecordingCypherValidator,
     RecordingFewShotRouter,
+    RecordingGraphQueryEngine,
     RecordingPrimaryAgent,
     StageLLMClient,
 )
@@ -48,12 +49,14 @@ from text2cypher.components.result_formatter import JsonResultFormatter
 from text2cypher.components.retry import RetryPolicy
 from text2cypher.config import Settings
 from text2cypher.domain.models import GraphSchema, QueryResult, Text2CypherResponse
+from text2cypher.graph_core.readonly_cypher_gateway import DefaultReadOnlyCypherGateway
 from text2cypher.infrastructure.few_shot import JsonFewShotExampleLoader
 from text2cypher.infrastructure.llm.openai_compatible import OpenAICompatibleLLMClient
 from text2cypher.infrastructure.neo4j.driver import Neo4jDriverProvider
 from text2cypher.infrastructure.neo4j.executor import Neo4jCypherExecutor
 from text2cypher.infrastructure.neo4j.schema_fetcher import Neo4jSchemaFetcher
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
+from text2cypher.query_engine.engine import DefaultGraphQueryEngine
 
 _RESOURCE_PACKAGE = "text2cypher.resources"
 _RESOURCE_FILES = (
@@ -217,6 +220,41 @@ def _build_instrumented_pipeline(
         ),
         recorder,
     )
+    parser = RecordingCypherParser(DefaultCypherParser(), recorder)
+    validator = RecordingCypherValidator(
+        Neo4jCypherValidator(
+            driver,
+            settings.neo4j_database,
+            settings.query_timeout_seconds,
+            retry_policy=retry_policy,
+        ),
+        recorder,
+    )
+    executor = RecordingCypherExecutor(
+        Neo4jCypherExecutor(
+            driver,
+            settings.neo4j_database,
+            settings.query_timeout_seconds,
+            settings.max_result_rows,
+            retry_policy=retry_policy,
+        ),
+        recorder,
+    )
+    gateway = DefaultReadOnlyCypherGateway(parser, validator, executor)
+    generation_client = StageLLMClient(llm_client, recorder, "generation")
+    graph_query_engine = RecordingGraphQueryEngine(
+        DefaultGraphQueryEngine(
+            prompt_builder=DefaultPromptBuilder(),
+            llm_client=generation_client,
+            read_only_cypher_gateway=gateway,
+            few_shot_router=few_shot_router,
+            cypher_corrector=LLMCypherCorrector(
+                StageLLMClient(llm_client, recorder, "corrector")
+            ),
+            recover_empty_results=True,
+        ),
+        recorder,
+    )
     return build_pipeline_from_components(
         PipelineComponents(
             schema_fetcher=Neo4jSchemaFetcher(
@@ -226,27 +264,12 @@ def _build_instrumented_pipeline(
                 retry_policy=retry_policy,
             ),
             prompt_builder=DefaultPromptBuilder(),
-            llm_client=StageLLMClient(llm_client, recorder, "generation"),
-            cypher_parser=RecordingCypherParser(DefaultCypherParser(), recorder),
-            cypher_validator=RecordingCypherValidator(
-                Neo4jCypherValidator(
-                    driver,
-                    settings.neo4j_database,
-                    settings.query_timeout_seconds,
-                    retry_policy=retry_policy,
-                ),
-                recorder,
-            ),
-            cypher_executor=RecordingCypherExecutor(
-                Neo4jCypherExecutor(
-                    driver,
-                    settings.neo4j_database,
-                    settings.query_timeout_seconds,
-                    settings.max_result_rows,
-                    retry_policy=retry_policy,
-                ),
-                recorder,
-            ),
+            llm_client=generation_client,
+            cypher_parser=parser,
+            cypher_validator=validator,
+            cypher_executor=executor,
+            read_only_cypher_gateway=gateway,
+            graph_query_engine=graph_query_engine,
             result_formatter=JsonResultFormatter(),
             result_summarizer=LLMResultSummarizer(
                 StageLLMClient(llm_client, recorder, "summarizer"),
