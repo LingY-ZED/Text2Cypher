@@ -463,3 +463,76 @@ def test_engine_rejects_a_truncated_complete_call_chain() -> None:
         )
 
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("query_shape", "question", "anchor", "expected_column"),
+    (
+        (
+            QueryShape.DIRECT_UPSTREAM,
+            "哪些方法直接调用 sample.Service.run？",
+            "sample.Service.run",
+            "调用方法",
+        ),
+        (
+            QueryShape.DIRECT_DOWNSTREAM_METHOD,
+            "sample.Service.run 直接调用哪些方法？",
+            "sample.Service.run",
+            "被调用方法",
+        ),
+        (
+            QueryShape.REACHABLE_ENTRY_API,
+            "哪些入口 API 可以到达 sample.Service.run？",
+            "sample.Service.run",
+            "入口API",
+        ),
+        (
+            QueryShape.FULL_ENTRY_CHAIN,
+            "sample.Service.run 的上游调用链是什么？",
+            "sample.Service.run",
+            "方法路径",
+        ),
+        (
+            QueryShape.DIRECT_REST_EGRESS,
+            "sample.Service.run 直接下游 API 和服务是什么？",
+            "sample.Service.run",
+            "下游服务",
+        ),
+    ),
+)
+def test_engine_uses_deterministic_compiler_for_resolved_method_shapes(
+    query_shape: QueryShape,
+    question: str,
+    anchor: str,
+    expected_column: str,
+) -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question=question,
+        intent="查询方法图谱事实",
+        required_information=(expected_column,),
+        anchor=anchor,
+        query_shape=query_shape,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled method query",
+        result=QueryResult(columns=(expected_column,), rows=()),
+    )
+    gateway = DeterministicGateway(expected)
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert len(gateway.statements) == 2
+    assert expected_column in gateway.statements[1].cypher

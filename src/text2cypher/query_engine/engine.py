@@ -39,6 +39,7 @@ from text2cypher.domain.ports import (
 )
 from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.graph_core.call_chain import CallChainCypherCompiler
+from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
 from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
 )
@@ -89,7 +90,7 @@ class DefaultGraphQueryEngine:
         """生成、准入并执行一条请求，保持既有一次性恢复语义。"""
 
         primary_query = request.as_primary_agent_query()
-        deterministic = self._try_complete_method_call_chain(primary_query)
+        deterministic = self._try_deterministic_method_query(primary_query)
         if deterministic is not None:
             return deterministic
         examples = self._route_examples(primary_query, context)
@@ -117,13 +118,17 @@ class DefaultGraphQueryEngine:
             executed = self._recover_empty_result(prompt, executed)
         return executed
 
-    def _try_complete_method_call_chain(
+    def _try_deterministic_method_query(
         self,
         query: PrimaryAgentQuery,
     ) -> ExecutedCypher | None:
-        """唯一锚点可解析时跳过超长 LLM 模板，否则保持现有回退链路。"""
+        """Run supported method shapes through the parameterized Core when possible."""
 
-        if query.effective_query_shape is not QueryShape.FULL_METHOD_CALL_CHAIN:
+        query_shape = query.effective_query_shape
+        supported_shapes = MethodQueryCypherCompiler._SUPPORTED_SHAPES | {
+            QueryShape.FULL_METHOD_CALL_CHAIN
+        }
+        if query_shape not in supported_shapes:
             return None
         gateway = self._read_only_cypher_gateway
         if not isinstance(gateway, ParameterizedReadOnlyCypherGateway):
@@ -131,7 +136,7 @@ class DefaultGraphQueryEngine:
 
         resolver = ResolveSymbolTool(gateway)
         entry_api = self._entry_api_anchor(query.question)
-        if entry_api is not None:
+        if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN and entry_api is not None:
             http_method, api_path, service_name = entry_api
             methods = resolver.resolve_entry_api(
                 http_method,
@@ -156,18 +161,24 @@ class DefaultGraphQueryEngine:
             dict.fromkeys(method.qualified_name for method in ordered_methods)
         )
         graph_versions = {method.graph_version for method in ordered_methods}
-        statement = CallChainCypherCompiler().compile(
-            CallChainQuerySpec(
-                anchor_qualified_name=qualified_names[0],
-                additional_anchor_qualified_names=qualified_names[1:],
-                graph_version=(
-                    next(iter(graph_versions)) if len(graph_versions) == 1 else None
-                ),
+        if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN:
+            statement = CallChainCypherCompiler().compile(
+                CallChainQuerySpec(
+                    anchor_qualified_name=qualified_names[0],
+                    additional_anchor_qualified_names=qualified_names[1:],
+                    graph_version=(
+                        next(iter(graph_versions)) if len(graph_versions) == 1 else None
+                    ),
+                )
             )
-        )
+        else:
+            statement = MethodQueryCypherCompiler().compile(
+                query_shape,
+                ordered_methods,
+            )
         executed = gateway.execute_statement(statement)
         if executed.result.truncated:
-            raise CypherExecutionError("完整调用链结果超过安全行数上限")
+            raise CypherExecutionError("确定性方法查询结果超过安全行数上限")
         return executed
 
     @classmethod
