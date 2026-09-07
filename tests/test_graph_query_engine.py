@@ -699,3 +699,57 @@ def test_engine_uses_deterministic_class_facts(
         "classAnchor": "AdminRouteServiceImpl",
         "classSuffix": ".AdminRouteServiceImpl",
     }
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_column"),
+    (
+        (
+            "统计 ts-admin-basic-info-service 所有上游 API 的 HTTP 方法分布。",
+            "API数量",
+        ),
+        (
+            "统计 ts-admin-basic-info-service 直接 REST 调用的每个目标服务的调用次数。",
+            "调用关系数",
+        ),
+        (
+            "查询 ts-admin-basic-info-service 的接口实现类。",
+            "实现类",
+        ),
+    ),
+)
+def test_engine_uses_deterministic_service_aggregates(
+    question: str,
+    expected_column: str,
+) -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question=question,
+        intent="查询服务聚合事实",
+        required_information=(expected_column,),
+        anchor="ts-admin-basic-info-service",
+        query_shape=QueryShape.GENERAL,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled service aggregate",
+        result=QueryResult(columns=(expected_column,), rows=()),
+    )
+    gateway = DirectStatementGateway(expected)
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[0].parameters == {
+        "serviceName": "ts-admin-basic-info-service"
+    }

@@ -161,6 +161,24 @@ class DefaultGraphQueryEngine:
                 and any(cue in compact for cue in ("调用目标", "当作"))
             ):
                 statement = compiler.compile_rest_callers(service_match.group(1))
+            elif service_match is not None:
+                service_name = service_match.group(1)
+                if (
+                    "上游api" in compact
+                    and "http" in compact
+                    and any(cue in compact for cue in ("分布", "每个"))
+                ):
+                    statement = compiler.compile_entry_api_http_distribution(
+                        service_name
+                    )
+                elif (
+                    "rest" in compact
+                    and "目标服务" in compact
+                    and any(cue in compact for cue in ("调用次数", "调用关系数"))
+                ):
+                    statement = compiler.compile_rest_target_call_counts(service_name)
+                elif "接口实现类" in compact:
+                    statement = compiler.compile_implementation_classes(service_name)
         if statement is None:
             return None
         executed = gateway.execute_statement(statement)

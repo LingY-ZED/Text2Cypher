@@ -17,6 +17,21 @@ from text2cypher.graph_core.service_facts import ServiceFactCypherCompiler
             "ts-order-other-service' RETURN 1 //",
             "targetServiceName",
         ),
+        (
+            "compile_entry_api_http_distribution",
+            "ts-admin-basic-info-service' RETURN 1 //",
+            "serviceName",
+        ),
+        (
+            "compile_rest_target_call_counts",
+            "ts-admin-basic-info-service' RETURN 1 //",
+            "serviceName",
+        ),
+        (
+            "compile_implementation_classes",
+            "ts-admin-basic-info-service' RETURN 1 //",
+            "serviceName",
+        ),
     ),
 )
 def test_service_fact_compiler_keeps_entity_values_out_of_cypher(
