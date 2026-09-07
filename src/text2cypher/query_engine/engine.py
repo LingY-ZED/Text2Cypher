@@ -16,7 +16,6 @@ from text2cypher.domain.errors import (
     Neo4jConnectionError,
 )
 from text2cypher.domain.models import (
-    CallChainQuerySpec,
     ChatPrompt,
     CypherFailureContext,
     CypherFailureKind,
@@ -37,8 +36,7 @@ from text2cypher.domain.ports import (
     PromptBuilder,
     ReadOnlyCypherGateway,
 )
-from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
-from text2cypher.graph_core.call_chain import CallChainCypherCompiler
+from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.graph_core.class_facts import ClassFactCypherCompiler
 from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
 from text2cypher.graph_core.readonly_cypher_gateway import (
@@ -54,11 +52,6 @@ _LOGGER = logging.getLogger(__name__)
 class DefaultGraphQueryEngine:
     """保持现有行为地执行一条自然语言到只读图查询的完整链路。"""
 
-    _ENTRY_API = re.compile(
-        r"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(/[^\s，。；！？?]+)",
-        flags=re.IGNORECASE,
-    )
-    _API_PATH = re.compile(r"(?<![A-Za-z0-9_.-])(/[A-Za-z0-9_./{}:-]+)")
     _SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
     _QUEUE_NAME = re.compile(r"(?:名为|名叫)\s*([A-Za-z0-9_.-]+)")
     _IMPLEMENTATION_CLASS = re.compile(r"\b([A-Z][A-Za-z0-9_]*Impl)\b")
@@ -248,19 +241,7 @@ class DefaultGraphQueryEngine:
         """Run supported method shapes through the parameterized Core when possible."""
 
         query_shape = query.effective_query_shape
-        entry_api = self._entry_api_anchor(query.question)
-        if (
-            entry_api is not None
-            and resolve_query_shape(query.question)
-            is QueryShape.FULL_METHOD_CALL_CHAIN
-        ):
-            # The wording is unambiguously a complete call-chain request.  Keep
-            # it out of the LLM Cypher path even if the planning model labels it
-            # as ``general`` and the user provides only an API path.
-            query_shape = QueryShape.FULL_METHOD_CALL_CHAIN
-        supported_shapes = MethodQueryCypherCompiler._SUPPORTED_SHAPES | {
-            QueryShape.FULL_METHOD_CALL_CHAIN
-        }
+        supported_shapes = MethodQueryCypherCompiler._SUPPORTED_SHAPES
         if query_shape not in supported_shapes:
             return None
         gateway = self._read_only_cypher_gateway
@@ -268,18 +249,10 @@ class DefaultGraphQueryEngine:
             return None
 
         resolver = ResolveSymbolTool(gateway)
-        if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN and entry_api is not None:
-            http_method, api_path, service_name = entry_api
-            methods = resolver.resolve_entry_api(
-                http_method,
-                api_path,
-                service_name=service_name,
-            )
-        else:
-            anchor = self._method_anchor(query)
-            if anchor is None:
-                return None
-            methods = resolver.resolve_symbol(anchor)
+        anchor = self._method_anchor(query)
+        if anchor is None:
+            return None
+        methods = resolver.resolve_symbol(anchor)
         if not methods:
             return None
 
@@ -289,53 +262,14 @@ class DefaultGraphQueryEngine:
                 key=lambda method: (method.qualified_name, method.graph_version),
             )
         )
-        qualified_names = tuple(
-            dict.fromkeys(method.qualified_name for method in ordered_methods)
+        statement = MethodQueryCypherCompiler().compile(
+            query_shape,
+            ordered_methods,
         )
-        graph_versions = {method.graph_version for method in ordered_methods}
-        if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN:
-            statement = CallChainCypherCompiler().compile(
-                CallChainQuerySpec(
-                    anchor_qualified_name=qualified_names[0],
-                    additional_anchor_qualified_names=qualified_names[1:],
-                    graph_version=(
-                        next(iter(graph_versions)) if len(graph_versions) == 1 else None
-                    ),
-                )
-            )
-        else:
-            statement = MethodQueryCypherCompiler().compile(
-                query_shape,
-                ordered_methods,
-            )
         executed = gateway.execute_statement(statement)
         if executed.result.truncated:
             raise CypherExecutionError("确定性方法查询结果超过安全行数上限")
         return executed
-
-    @classmethod
-    def _entry_api_anchor(
-        cls,
-        question: str,
-    ) -> tuple[str | None, str, str | None] | None:
-        match = cls._ENTRY_API.search(question)
-        if match is None:
-            path_match = cls._API_PATH.search(question)
-            if path_match is None:
-                return None
-            http_method: str | None = None
-            api_path = path_match.group(1)
-        else:
-            http_method = match.group(1).upper()
-            api_path = match.group(2)
-        if not api_path:
-            return None
-        service_match = cls._SERVICE_NAME.search(question)
-        return (
-            http_method,
-            api_path,
-            service_match.group(1) if service_match is not None else None,
-        )
 
     @classmethod
     def _method_anchor(cls, query: PrimaryAgentQuery) -> str | None:

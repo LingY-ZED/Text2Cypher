@@ -42,7 +42,7 @@ def test_all_evaluation_oracles_match_the_frozen_snapshot() -> None:
             for intent in case.intents:
                 assert validator.validate(intent.oracle_cypher).query_type == "r"
                 result = executor.execute(intent.oracle_cypher)
-                assert result.rows
+                assert bool(result.rows) is bool(intent.expected_snapshot)
                 assert _fingerprint(result.rows) == _fingerprint(
                     intent.expected_snapshot
                 )

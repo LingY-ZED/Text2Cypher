@@ -34,11 +34,12 @@ def test_loads_abstract_semantic_capabilities_from_package_resource() -> None:
     assert "InsidePaymentServiceImpl.pay" in capabilities
     assert "ts-security-service 的公开 API 路径和 HTTP 方法" in capabilities
     assert (
-        "完整入口调用链、完整下游调用链、完整方法调用链、"
-        "有序方法路径和完整消息路径"
+        "完整入口调用链、完整下游调用链、有序方法路径和完整消息路径"
     ) in (
         capabilities
     )
+    assert "完整方法调用链是固定例外" in capabilities
+    assert "服务内、REST、MQ 三种独立视图" in capabilities
     assert "方法-[:服务于]->上游API" not in capabilities
     assert "MATCH" not in capabilities
     assert "Few-shot" not in capabilities

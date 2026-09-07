@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from text2cypher.components.primary_agent import (
@@ -51,18 +53,21 @@ def test_primary_agent_prompt_defines_independent_three_view_splits() -> None:
     assert "三个服务级子问题均使用 `general`" in prompt.system
 
 
-def test_primary_agent_prompt_keeps_atomic_correspondence_in_one_query() -> None:
+def test_primary_agent_prompt_requires_three_independent_call_chain_views() -> None:
     prompt = PrimaryAgentPromptBuilder().build(
-        "查询入口 API 到 InsidePaymentServiceImpl.pay 的完整调用链。",
+        "POST /api/example 在 ts-demo-service 中的完整调用链是什么？",
         3,
     )
 
-    assert (
-        "完整入口调用链、完整下游调用链、完整方法调用链、"
-        "有序方法路径和完整消息路径"
-    ) in (
-        prompt.system
-    )
+    assert "完整方法调用链是固定例外" in prompt.system
+    assert "必须正好输出三个 query_shape=general 的查询" in prompt.user
+    assert "服务内调用明细、REST 跨服务明细、MQ 发布消费明细" in prompt.user
+    assert "逐字包含原问题中的 API 路径或方法锚点" in prompt.user
+    assert "根方法、图谱版本、源服务、源API路径、源HTTP方法" in prompt.user
+    assert "完整 JSON 规划示例" in prompt.user
+    assert prompt.user.count('"query_shape":"general"') == 3
+    assert prompt.user.count("/api/example") >= 4
+    assert prompt.user.count("ts-demo-service") >= 4
     assert "同一 API 的请求与响应字段" in prompt.system
     assert "同一 REST 调用的调用方与目标字段" in prompt.system
     assert "同一分组的维度与聚合值" in prompt.system
@@ -120,6 +125,89 @@ def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> 
     assert plan.queries[0].effective_query_shape.value == "full_entry_chain"
 
 
+def test_primary_agent_parser_accepts_fixed_full_method_split() -> None:
+    question = (
+        "POST /api/example 在 ts-demo-service 中、图谱版本 v2 的完整调用链是什么？"
+    )
+    anchor = "/api/example"
+    qualifiers = "POST /api/example、服务 ts-demo-service、图谱版本 v2"
+    content = json.dumps(
+        {
+            "analysis_summary": "分别查询服务内、REST 和 MQ 调用明细",
+            "queries": [
+                {
+                    "question": f"以 {qualifiers} 为锚点查询服务内调用明细",
+                    "anchor": anchor,
+                    "query_shape": "general",
+                    "intent": "查询服务内有序方法序列",
+                    "required_information": [
+                        "根方法",
+                        "图谱版本",
+                        "源服务",
+                        "源API路径",
+                        "源HTTP方法",
+                        "方法路径",
+                        "叶子方法",
+                    ],
+                },
+                {
+                    "question": f"以 {qualifiers} 为锚点查询 REST 跨服务明细",
+                    "anchor": anchor,
+                    "query_shape": "general",
+                    "intent": "查询最多两层 REST 跨服务调用",
+                    "required_information": [
+                        "根方法",
+                        "图谱版本",
+                        "REST层级",
+                        "源服务",
+                        "源API路径",
+                        "源HTTP方法",
+                        "源方法",
+                        "方法路径",
+                        "下游API路径",
+                        "目标服务",
+                        "目标API路径",
+                        "目标HTTP方法",
+                        "目标方法",
+                    ],
+                },
+                {
+                    "question": f"以 {qualifiers} 为锚点查询 MQ 发布消费明细",
+                    "anchor": anchor,
+                    "query_shape": "general",
+                    "intent": "查询一次 MQ 发布、路由和消费",
+                    "required_information": [
+                        "根方法",
+                        "图谱版本",
+                        "源服务",
+                        "源API路径",
+                        "源HTTP方法",
+                        "发布方法",
+                        "发布方法路径",
+                        "消息交换机",
+                        "消息队列",
+                        "路由键",
+                        "目标服务",
+                        "消费方法",
+                        "消费者方法路径",
+                    ],
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    plan = PrimaryAgentResponseParser().parse(content, question, 3)
+
+    assert plan.decomposed is True
+    assert tuple(query.query_shape.value for query in plan.queries) == (
+        "general",
+        "general",
+        "general",
+    )
+    assert all(query.anchor == anchor for query in plan.queries)
+
+
 @pytest.mark.parametrize(
     ("original_question", "content", "message"),
     [
@@ -171,7 +259,7 @@ def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> 
             '"required_information":["下游 API"]},'
             '{"question":"查询 A 的 MQ 分段","intent":"MQ",'
             '"required_information":["消息队列"]}]}',
-            "不得拆分",
+            "必须拆成三个查询",
         ),
         (
             "查询到达 ts-order-other-service 的 REST 上游跨服务链",

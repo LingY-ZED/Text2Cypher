@@ -64,6 +64,8 @@ def _compare_intent(
     result_sets: Sequence[Sequence[Mapping[str, Any]]],
 ) -> IntentVerdict:
     expected = _canonical_expected(intent)
+    if not intent.expected_snapshot and any(not rows for rows in result_sets):
+        return IntentVerdict(intent.id, True, "结果与空集 Oracle 一致")
     candidates = tuple(
         projection
         for rows in result_sets

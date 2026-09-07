@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections import Counter
 
-from evaluation.call_chain_oracles import CALL_CHAIN_COLUMNS
+from evaluation.call_chain_oracles import (
+    LOCAL_CALL_CHAIN_COLUMNS,
+    MQ_CALL_CHAIN_COLUMNS,
+    REST_CALL_CHAIN_COLUMNS,
+)
 from evaluation.dataset import load_cases
 from evaluation.models import (
     ComparisonMode,
@@ -27,7 +31,7 @@ def test_dataset_has_fixed_size_distribution_and_unique_questions() -> None:
     assert len({case.question for case in cases}) == 44
 
 
-def test_every_intent_has_a_readonly_nonempty_frozen_contract() -> None:
+def test_every_intent_has_a_readonly_frozen_contract() -> None:
     cases = load_cases()
     modes: set[ComparisonMode] = set()
 
@@ -37,7 +41,8 @@ def test_every_intent_has_a_readonly_nonempty_frozen_contract() -> None:
             assert intent.oracle_cypher.startswith(("MATCH", "OPTIONAL MATCH"))
             assert ";" not in intent.oracle_cypher
             assert intent.expected_columns
-            assert intent.expected_snapshot
+            if not intent.expected_snapshot:
+                assert intent.comparison_mode is ComparisonMode.ROW_SET
             assert set(intent.accepted_aliases) == set(intent.expected_columns)
             assert all(
                 column in intent.accepted_aliases[column]
@@ -136,34 +141,37 @@ def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
         case for case in cases.values() if case.category == "call_chain"
     ]
     assert len(call_chain_cases) == 14
-    assert all(
-        case.decomposition_contract is DecompositionContract.MUST_PRESERVE
-        for case in call_chain_cases
-    )
-    assert all(
-        len(case.intents) == 1
-        and case.intents[0].comparison_mode is ComparisonMode.ROW_SET
-        for case in call_chain_cases
-    )
-
     complete_chain_cases = {
         case.id: case
         for case in call_chain_cases
         if "complete-method-call-chain" in case.id
     }
+    assert all(
+        case.decomposition_contract is DecompositionContract.MUST_SPLIT
+        and tuple(intent.id for intent in case.intents)
+        == ("local_call_chain", "rest_call_chain", "mq_call_chain")
+        and tuple(intent.expected_columns for intent in case.intents)
+        == (
+            LOCAL_CALL_CHAIN_COLUMNS,
+            REST_CALL_CHAIN_COLUMNS,
+            MQ_CALL_CHAIN_COLUMNS,
+        )
+        for case in complete_chain_cases.values()
+    )
     assert {
-        case_id: len(case.intents[0].expected_snapshot)
+        case_id: tuple(len(intent.expected_snapshot) for intent in case.intents)
         for case_id, case in complete_chain_cases.items()
     } == {
-        "travel-left-api-complete-method-call-chain": 14,
-        "inside-payment-pay-complete-method-call-chain": 21,
-        "preserve-rabbit-send-complete-method-call-chain": 3,
-        "poll-thread-complete-method-call-chain-missing-rest-mapping": 2,
+        "travel-left-api-complete-method-call-chain": (3, 5, 0),
+        "inside-payment-pay-complete-method-call-chain": (2, 7, 0),
+        "preserve-rabbit-send-complete-method-call-chain": (1, 0, 1),
+        "poll-thread-complete-method-call-chain-missing-rest-mapping": (1, 1, 0),
     }
     assert all(
-        case.intents[0].expected_columns == CALL_CHAIN_COLUMNS
-        and case.decomposition_contract is DecompositionContract.MUST_PRESERVE
-        for case in complete_chain_cases.values()
+        case.decomposition_contract is DecompositionContract.MUST_PRESERVE
+        and len(case.intents) == 1
+        for case in call_chain_cases
+        if case.id not in complete_chain_cases
     )
 
 

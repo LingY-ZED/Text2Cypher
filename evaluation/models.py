@@ -117,8 +117,8 @@ class EvaluationIntent:
             MappingProxyType(normalizers),
         )
         snapshot = tuple(MappingProxyType(dict(row)) for row in self.expected_snapshot)
-        if not snapshot:
-            raise ValueError("expected_snapshot must be non-empty")
+        if not snapshot and self.comparison_mode is not ComparisonMode.ROW_SET:
+            raise ValueError("only row_set intents may use an empty expected_snapshot")
         if any(not set(columns) <= set(row) for row in snapshot):
             raise ValueError("every snapshot row must contain all expected columns")
         object.__setattr__(self, "expected_snapshot", snapshot)

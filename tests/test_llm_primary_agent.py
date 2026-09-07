@@ -114,6 +114,53 @@ def test_llm_primary_agent_preserves_impact_views_after_an_invalid_plan() -> Non
     assert all(query.anchor == "InsidePaymentServiceImpl.pay" for query in plan.queries)
 
 
+def test_llm_primary_agent_falls_back_to_three_call_chain_views() -> None:
+    client = StubLLMClient(LLMResponse(content="not-json"))
+
+    plan = LLMPrimaryAgent(client).plan(
+        "POST /api/v1/travelservice/trips/left "
+        "在 ts-travel-service 中的完整调用链是什么？"
+    )
+
+    assert plan.decomposed is True
+    assert tuple(query.query_shape for query in plan.queries) == (
+        QueryShape.GENERAL,
+        QueryShape.GENERAL,
+        QueryShape.GENERAL,
+    )
+    assert all(
+        query.anchor == "/api/v1/travelservice/trips/left"
+        for query in plan.queries
+    )
+    assert tuple(
+        marker in query.question.lower()
+        for marker, query in zip(("服务内", "rest", "mq"), plan.queries, strict=True)
+    ) == (True, True, True)
+    assert all(
+        "POST /api/v1/travelservice/trips/left" in query.question
+        for query in plan.queries
+    )
+    assert all("ts-travel-service" in query.question for query in plan.queries)
+
+
+def test_call_chain_fallback_does_not_treat_api_version_as_graph_version() -> None:
+    plan = LLMPrimaryAgent(StubLLMClient(LLMResponse(content="not-json"))).plan(
+        "查询 /api/v1/travelservice/trips/left 的调用链"
+    )
+
+    assert len(plan.queries) == 3
+    assert all("图谱版本 v1" not in query.question for query in plan.queries)
+
+
+def test_call_chain_fallback_repeats_missing_rest_mapping_constraint() -> None:
+    plan = LLMPrimaryAgent(StubLLMClient(LLMResponse(content="not-json"))).plan(
+        "PollThread.doPreserve 的完整调用链是什么，并保留未映射的 REST 出口？"
+    )
+
+    assert len(plan.queries) == 3
+    assert all("未映射 REST 出口" in query.question for query in plan.queries)
+
+
 @pytest.mark.parametrize("max_queries", [1, 4, True])
 def test_llm_primary_agent_rejects_invalid_limit(max_queries: int) -> None:
     with pytest.raises(ValueError, match="2 到 3"):

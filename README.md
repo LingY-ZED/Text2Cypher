@@ -58,13 +58,14 @@ python -m pip install -e ".[dev]"
 已被忽略，禁止提交真实密码或 API Key。
 
 DeepSeek V4 Flash 可通过 `TEXT2CYPHER_LLM_MAX_TOKENS` 限制单次输出；默认值为
-4096，以容纳完整方法调用链的多分支 Cypher；
+4096，以容纳包含有序方法路径及跨服务关系的复杂单条 Cypher；
 `TEXT2CYPHER_LLM_DISABLE_THINKING` 是仅在服务商支持时才发送的可选扩展字段。默认
 保留模型自身的思考策略；遇到外部服务响应较慢时，可在本地按需调整超时和该开关。
 
 Primary LLM Agent 默认启用。它只读取原始问题和抽象业务能力，不读取动态物理 Schema，
 不生成 Cypher；它输出简洁分析摘要及一到三个独立的自然语言检索任务。简单问题必须保留
-为原问题单查询，模型失败或计划非法时确定性回退为原问题，不影响既有单查询能力：
+为原问题单查询。完整方法调用链固定拆成服务内、REST、MQ 三个独立查询；这类问题在
+模型失败或计划非法时也确定性回退为相同的三查询，其他问题仍回退为原问题：
 
 ```dotenv
 TEXT2CYPHER_PRIMARY_AGENT_ENABLED=true

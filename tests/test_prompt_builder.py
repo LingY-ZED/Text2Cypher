@@ -246,7 +246,7 @@ def test_full_entry_plan_uses_canonical_few_shot_without_duplicate_template() ->
     assert prompt.user.index("参考示例：") < prompt.user.index("用户问题：")
 
 
-def test_full_method_call_chain_plan_injects_the_schema_compatible_template() -> None:
+def test_full_method_call_chain_plan_does_not_inject_the_long_template() -> None:
     template = next(
         item
         for item in JsonQueryShapeTemplateLoader().load()
@@ -287,11 +287,12 @@ def test_full_method_call_chain_plan_injects_the_schema_compatible_template() ->
 
     prompt = DefaultPromptBuilder().build_planned(schema, query)
 
-    assert "查询结构模板：" in prompt.user
-    assert template.id in prompt.user
-    assert template.template in prompt.user
-    assert prompt.user.count("<TARGET_METHOD_FILTER>") == 6
-    assert "UNION" in prompt.user
+    assert "查询结构模板：" not in prompt.user
+    assert template.id not in prompt.user
+    assert template.template not in prompt.user
+    assert "<TARGET_METHOD_FILTER>" not in prompt.user
+    assert "UNION" not in prompt.user
+    assert "Primary 语义计划：" in prompt.user
     assert load_code_graph_business_rule_module(BusinessRuleModule.MQ) in prompt.system
 
 

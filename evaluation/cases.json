@@ -2790,7 +2790,7 @@
       "id": "travel-left-api-complete-method-call-chain",
       "difficulty": "hard",
       "category": "call_chain",
-      "decomposition_contract": "must_preserve",
+      "decomposition_contract": "must_split",
       "question": "POST /api/v1/travelservice/trips/left 在 ts-travel-service 中的完整调用链是什么？",
       "intents": [
         {
@@ -2840,7 +2840,7 @@
       "id": "inside-payment-pay-complete-method-call-chain",
       "difficulty": "hard",
       "category": "call_chain",
-      "decomposition_contract": "must_preserve",
+      "decomposition_contract": "must_split",
       "question": "InsidePaymentServiceImpl.pay 的完整调用链是什么？",
       "intents": [
         {
@@ -2883,7 +2883,7 @@
       "id": "preserve-rabbit-send-complete-method-call-chain",
       "difficulty": "hard",
       "category": "call_chain",
-      "decomposition_contract": "must_preserve",
+      "decomposition_contract": "must_split",
       "question": "preserve.mq.RabbitSend.send 的完整调用链是什么？",
       "intents": [
         {
@@ -2908,7 +2908,7 @@
       "id": "poll-thread-complete-method-call-chain-missing-rest-mapping",
       "difficulty": "hard",
       "category": "call_chain",
-      "decomposition_contract": "must_preserve",
+      "decomposition_contract": "must_split",
       "question": "PollThread.doPreserve 的完整调用链是什么，并保留未映射的 REST 出口？",
       "intents": [
         {

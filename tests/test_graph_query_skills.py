@@ -107,11 +107,11 @@ def test_prompt_knowledge_views_match_the_p3_frozen_rendering() -> None:
     primary = PrimaryAgentPromptBuilder().build(question, 3)
 
     assert sha256(translator.system.encode()).hexdigest() == (
-        "0a38adb509ca0cbbfc99441666cc42c2b0c4227e2d01b797df3631225d0a70c9"
+        "f7340eaeb2e4b803bc4bd2a338b0f8c1dd1ef91413d7665331444bb57cd6aa28"
     )
     assert sha256(router.system.encode()).hexdigest() == (
         "9c10acd53fb8747fd9cbde884ca5e857610b2b738ff7f4d2cbe525f87535b070"
     )
     assert sha256(primary.system.encode()).hexdigest() == (
-        "6b2ad5185dd9c007021e861034a5147a8ee462a98cdfb49dd9a719daa78b75db"
+        "8f1b3fafe55002ec119160bd892cddf4b72e2a98048bc21246439b3acde7944f"
     )

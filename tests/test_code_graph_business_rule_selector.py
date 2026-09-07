@@ -144,6 +144,48 @@ def test_direct_rest_egress_does_not_pull_method_call_rules() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("question", "expected_scene"),
+    (
+        (
+            "查询服务内调用明细，需要源API路径和有序方法路径",
+            (
+                BusinessRuleModule.METHOD_CALL,
+                BusinessRuleModule.ENTRY_API,
+                BusinessRuleModule.ORDERED_PATH,
+            ),
+        ),
+        (
+            "查询 REST 跨服务明细，需要源API路径、目标API路径和方法路径",
+            (
+                BusinessRuleModule.METHOD_CALL,
+                BusinessRuleModule.ENTRY_API,
+                BusinessRuleModule.REST,
+                BusinessRuleModule.ORDERED_PATH,
+            ),
+        ),
+        (
+            "查询 MQ 发布消费明细，需要源API路径和消费者方法路径",
+            (
+                BusinessRuleModule.METHOD_CALL,
+                BusinessRuleModule.ENTRY_API,
+                BusinessRuleModule.ORDERED_PATH,
+                BusinessRuleModule.MQ,
+            ),
+        ),
+    ),
+)
+def test_general_call_chain_views_select_their_translator_rules(
+    question: str,
+    expected_scene: tuple[BusinessRuleModule, ...],
+) -> None:
+    assert _select(question, query_shape=QueryShape.GENERAL) == (
+        BusinessRuleModule.CORE,
+        BusinessRuleModule.ANCHOR_OWNERSHIP,
+        *expected_scene,
+    )
+
+
 def test_general_rest_aggregation_adds_only_aggregation_dependency() -> None:
     selected = _select(
         "按目标服务分组统计 ts-admin-basic-info-service 的 REST 调用数量。"

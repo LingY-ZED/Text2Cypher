@@ -195,6 +195,78 @@ def test_text2cypher_acceptance(
     assert all(term in sub_query.cypher for term in case.key_terms)
 
 
+def test_complete_api_call_chain_is_split_into_three_independent_queries(
+    pipeline: Text2CypherPipeline,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    question = "查询 /api/v1/travelservice/trips/left 的调用链"
+
+    try:
+        response = pipeline.run(question)
+    except LLMGenerationError as error:
+        pytest.skip(f"外部模型服务暂不可用：{error}")
+
+    _skip_after_primary_agent_transport_failure(caplog)
+    assert response.decomposed is True
+    assert len(response.sub_queries) == 3
+    assert tuple(
+        marker in sub_query.question.lower()
+        for marker, sub_query in zip(
+            ("服务内", "rest", "mq"),
+            response.sub_queries,
+            strict=True,
+        )
+    ) == (True, True, True)
+    expected_columns = (
+        {
+            "根方法",
+            "图谱版本",
+            "源服务",
+            "源API路径",
+            "源HTTP方法",
+            "方法路径",
+            "叶子方法",
+        },
+        {
+            "根方法",
+            "图谱版本",
+            "REST层级",
+            "源服务",
+            "源API路径",
+            "源HTTP方法",
+            "源方法",
+            "方法路径",
+            "下游API路径",
+            "目标服务",
+            "目标API路径",
+            "目标HTTP方法",
+            "目标方法",
+        },
+        {
+            "根方法",
+            "图谱版本",
+            "源服务",
+            "源API路径",
+            "源HTTP方法",
+            "发布方法",
+            "发布方法路径",
+            "消息交换机",
+            "消息队列",
+            "路由键",
+            "目标服务",
+            "消费方法",
+            "消费者方法路径",
+        },
+    )
+    for sub_query, columns in zip(
+        response.sub_queries,
+        expected_columns,
+        strict=True,
+    ):
+        assert columns <= set(sub_query.result.columns)
+        assert ";" not in sub_query.cypher
+
+
 def test_compound_method_impact_acceptance(
     pipeline: Text2CypherPipeline,
     caplog: pytest.LogCaptureFixture,

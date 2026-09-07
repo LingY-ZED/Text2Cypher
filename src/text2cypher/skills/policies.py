@@ -110,6 +110,10 @@ _ENTRY_API_CUES = (
     "响应类型",
     "接口路径",
     "http动词",
+    "源api路径",
+    "源http方法",
+    "目标api路径",
+    "目标http方法",
 )
 _METHOD_CALL_CUES = (
     "上游调用链",

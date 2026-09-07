@@ -13,7 +13,7 @@ from text2cypher.domain.models import (
     PrimaryAgentQuery,
     QueryShapeTemplate,
 )
-from text2cypher.domain.query_shapes import resolve_query_shape
+from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
 from text2cypher.skills.graph_profile import BusinessRuleModule
 from text2cypher.skills.policies import (
     BusinessRulePromptStage,
@@ -123,10 +123,14 @@ class DefaultPromptBuilder:
         user_sections = ["图谱 Schema：", serialized_schema]
         if planned_query is not None:
             user_sections.append(self._render_primary_plan(planned_query))
-        template = self._template_selector.select(
-            query_shape,
-            schema,
-            schema_graph,
+        template = (
+            None
+            if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN
+            else self._template_selector.select(
+                query_shape,
+                schema,
+                schema_graph,
+            )
         )
         if template is not None:
             user_sections.append(self._render_structure_template(template))

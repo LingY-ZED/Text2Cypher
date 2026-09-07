@@ -16,6 +16,7 @@ from text2cypher.domain.models import (
     ResultSummaryMode,
     SubQueryResponse,
 )
+from text2cypher.domain.query_shapes import QueryShape
 from text2cypher.runtime.single_round import SingleRoundRuntime
 from text2cypher.tools.query_code_graph import QueryCodeGraphTool
 from text2cypher.tools.schema import GetSchemaTool
@@ -43,6 +44,45 @@ class _TwoQueryPrimaryAgent:
             queries=(
                 PrimaryAgentQuery("q1", "第一问", "查询第一项", ("第一项",)),
                 PrimaryAgentQuery("q2", "第二问", "查询第二项", ("第二项",)),
+            ),
+        )
+
+
+class _ThreeCallChainPrimaryAgent:
+    def __init__(self, calls: list[str]) -> None:
+        self._calls = calls
+
+    def plan(self, question: str) -> PrimaryAgentPlan:
+        self._calls.append("plan")
+        anchor = "/api/example"
+        return PrimaryAgentPlan(
+            original_question=question,
+            analysis_summary="分别查询服务内、REST 和 MQ 调用明细。",
+            queries=(
+                PrimaryAgentQuery(
+                    "q1",
+                    "以 /api/example 为锚点查询服务内调用明细",
+                    "local",
+                    ("方法路径",),
+                    anchor,
+                    QueryShape.GENERAL,
+                ),
+                PrimaryAgentQuery(
+                    "q2",
+                    "以 /api/example 为锚点查询 REST 跨服务明细",
+                    "rest",
+                    ("下游API路径",),
+                    anchor,
+                    QueryShape.GENERAL,
+                ),
+                PrimaryAgentQuery(
+                    "q3",
+                    "以 /api/example 为锚点查询 MQ 发布消费明细",
+                    "mq",
+                    ("消息队列",),
+                    anchor,
+                    QueryShape.GENERAL,
+                ),
             ),
         )
 
@@ -107,6 +147,27 @@ def test_runtime_uses_tools_once_and_returns_unformatted_structured_run() -> Non
     assert not hasattr(run, "formatted")
     assert [request.query_id for request in engine.requests] == ["q1", "q2"]
     assert all(context.schema is schema for context in engine.contexts)
+
+
+def test_runtime_executes_three_call_chain_views_in_fixed_order() -> None:
+    calls: list[str] = []
+    engine = _RecordingGraphQueryEngine(calls)
+    runtime = SingleRoundRuntime(
+        schema_tool=GetSchemaTool(_RecordingSchemaFetcher(calls, GraphSchema())),
+        query_code_graph_tool=QueryCodeGraphTool(engine),
+        primary_agent=_ThreeCallChainPrimaryAgent(calls),
+    )
+
+    run = runtime.run("查询 /api/example 的调用链")
+
+    assert calls == ["schema", "plan", "query:q1", "query:q2", "query:q3"]
+    assert run.plan.decomposed is True
+    assert len(run.sub_queries) == 3
+    assert tuple(request.intent for request in engine.requests) == (
+        "local",
+        "rest",
+        "mq",
+    )
 
 
 def test_runtime_stops_before_summary_when_a_later_tool_query_fails() -> None:

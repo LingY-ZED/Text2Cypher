@@ -8,8 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.call_chain_oracles import (
+    CALL_CHAIN_VIEW_COLUMNS,
+    CallChainView,
     expand_call_chain_snapshot,
+    project_call_chain_rows,
     render_call_chain_oracle,
+    render_call_chain_view_oracle,
 )
 from evaluation.models import (
     ComparisonMode,
@@ -57,15 +61,62 @@ def _parse_case(value: object) -> EvaluationCase:
         difficulty = Difficulty(data["difficulty"])
     except (KeyError, ValueError) as error:
         raise ValueError("case difficulty is invalid") from error
+    contract = DecompositionContract(
+        data.get("decomposition_contract", DecompositionContract.ANY.value)
+    )
+    parsed_intents = tuple(_parse_intent(item) for item in intents)
+    if (
+        contract is DecompositionContract.MUST_SPLIT
+        and len(intents) == 1
+        and _is_full_method_call_chain_intent(intents[0])
+    ):
+        parsed_intents = _split_call_chain_intents(intents[0], parsed_intents[0])
     return EvaluationCase(
         id=_required(data, "id"),
         difficulty=difficulty,
         category=_required(data, "category"),
         question=_required(data, "question"),
-        intents=tuple(_parse_intent(item) for item in intents),
-        decomposition_contract=DecompositionContract(
-            data.get("decomposition_contract", DecompositionContract.ANY.value)
-        ),
+        intents=parsed_intents,
+        decomposition_contract=contract,
+    )
+
+
+def _is_full_method_call_chain_intent(value: object) -> bool:
+    data = _object(value, "intent")
+    template = data.get("oracle_template")
+    return (
+        isinstance(template, dict)
+        and template.get("id") == "full_method_call_chain"
+    )
+
+
+def _split_call_chain_intents(
+    raw_intent: object,
+    full_intent: EvaluationIntent,
+) -> tuple[EvaluationIntent, ...]:
+    data = _object(raw_intent, "intent")
+    specification = data["oracle_template"]
+    metadata = (
+        (CallChainView.LOCAL, "服务内方法调用明细"),
+        (CallChainView.REST, "REST 跨服务调用明细"),
+        (CallChainView.MQ, "MQ 发布消费明细"),
+    )
+    return tuple(
+        EvaluationIntent(
+            id=f"{view.value}_call_chain",
+            label=label,
+            oracle_cypher=render_call_chain_view_oracle(specification, view),
+            comparison_mode=ComparisonMode.ROW_SET,
+            expected_columns=CALL_CHAIN_VIEW_COLUMNS[view],
+            accepted_aliases={
+                column: (column,) for column in CALL_CHAIN_VIEW_COLUMNS[view]
+            },
+            expected_snapshot=project_call_chain_rows(
+                full_intent.expected_snapshot,
+                view,
+            ),
+        )
+        for view, label in metadata
     )
 
 

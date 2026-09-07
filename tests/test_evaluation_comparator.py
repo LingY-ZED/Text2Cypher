@@ -99,6 +99,13 @@ def test_row_set_requires_exact_row_pairing() -> None:
     assert not verdict.matched
 
 
+def test_row_set_can_match_an_expected_empty_branch() -> None:
+    case = _case(ComparisonMode.ROW_SET, ("消息队列",), ())
+
+    assert compare_case(case, ((), ({"消息队列": "unexpected"},))).matched
+    assert not compare_case(case, (({"消息队列": "unexpected"},),)).matched
+
+
 def test_all_intents_must_match_across_independent_result_sets() -> None:
     first = _case(
         ComparisonMode.VALUE_SET,
