@@ -7,11 +7,13 @@ from .readonly_cypher_gateway import (
     DefaultReadOnlyCypherGateway,
 )
 from .service_dependency import ServiceDependencyCypherCompiler
+from .service_facts import ServiceFactCypherCompiler
 
 __all__ = [
     "CallChainCypherCompiler",
     "MethodQueryCypherCompiler",
     "ServiceDependencyCypherCompiler",
+    "ServiceFactCypherCompiler",
     "CandidateExecutionFailure",
     "DefaultReadOnlyCypherGateway",
 ]

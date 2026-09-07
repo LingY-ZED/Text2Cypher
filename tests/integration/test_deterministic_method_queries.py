@@ -218,6 +218,59 @@ def test_engine_matches_frozen_impact_oracles_without_llm(
     assert compare_case(case, tuple(result.result.rows for result in results)).matched
 
 
+@pytest.mark.parametrize(
+    ("case_id", "anchor"),
+    (
+        ("email-queue-owner-nodes", "email 消息队列"),
+        ("default-exchange-owners", "默认消息交换机"),
+        ("order-other-rest-callers", "ts-order-other-service"),
+    ),
+)
+def test_engine_matches_frozen_service_fact_oracles_without_llm(
+    case_id: str,
+    anchor: str,
+) -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        case = next(item for item in load_cases() if item.id == case_id)
+        result = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        ).query(
+            GraphQueryRequest.from_primary_agent_query(
+                PrimaryAgentQuery(
+                    query_id="q1",
+                    question=case.question,
+                    intent="查询确定性服务事实",
+                    required_information=("冻结 Oracle",),
+                    anchor=anchor,
+                    query_shape=QueryShape.GENERAL,
+                )
+            ),
+            QueryContext(GraphSchema()),
+        )
+    finally:
+        provider.close()
+
+    assert compare_case(case, (result.result.rows,)).matched
+
+
 class _UnusedPromptBuilder:
     def build(
         self,

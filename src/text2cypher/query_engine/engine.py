@@ -44,6 +44,7 @@ from text2cypher.graph_core.readonly_cypher_gateway import (
     CandidateExecutionFailure,
 )
 from text2cypher.graph_core.service_dependency import ServiceDependencyCypherCompiler
+from text2cypher.graph_core.service_facts import ServiceFactCypherCompiler
 from text2cypher.tools.resolve_symbol import ResolveSymbolTool
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class DefaultGraphQueryEngine:
         flags=re.IGNORECASE,
     )
     _SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
+    _QUEUE_NAME = re.compile(r"(?:名为|名叫)\s*([A-Za-z0-9_.-]+)")
     _METHOD_REFERENCE = re.compile(
         r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
     )
@@ -93,6 +95,8 @@ class DefaultGraphQueryEngine:
         primary_query = request.as_primary_agent_query()
         deterministic = self._try_deterministic_service_dependency(primary_query)
         if deterministic is None:
+            deterministic = self._try_deterministic_service_fact(primary_query)
+        if deterministic is None:
             deterministic = self._try_deterministic_method_query(primary_query)
         if deterministic is not None:
             return deterministic
@@ -119,6 +123,45 @@ class DefaultGraphQueryEngine:
             and self._cypher_corrector is not None
         ):
             executed = self._recover_empty_result(prompt, executed)
+        return executed
+
+    def _try_deterministic_service_fact(
+        self,
+        query: PrimaryAgentQuery,
+    ) -> ExecutedCypher | None:
+        """Run a small fact query only when its graph semantics are explicit."""
+
+        if query.effective_query_shape is not QueryShape.GENERAL:
+            return None
+        gateway = self._read_only_cypher_gateway
+        if not isinstance(gateway, ParameterizedReadOnlyCypherGateway):
+            return None
+        compact = "".join(query.question.lower().split())
+        compiler = ServiceFactCypherCompiler()
+        statement = None
+        queue_match = self._QUEUE_NAME.search(query.question)
+        if (
+            queue_match is not None
+            and "消息队列" in compact
+            and any(cue in compact for cue in ("多少", "几个", "数量", "数目"))
+        ):
+            statement = compiler.compile_message_queue_count(queue_match.group(1))
+        elif "默认" in compact and "消息交换机" in compact:
+            statement = compiler.compile_exchange_owners("(default)")
+        else:
+            service_match = self._SERVICE_NAME.search(query.question)
+            if (
+                service_match is not None
+                and "rest" in compact
+                and "哪些微服务" in compact
+                and any(cue in compact for cue in ("调用目标", "当作"))
+            ):
+                statement = compiler.compile_rest_callers(service_match.group(1))
+        if statement is None:
+            return None
+        executed = gateway.execute_statement(statement)
+        if executed.result.truncated:
+            raise CypherExecutionError("确定性服务事实查询结果超过安全行数上限")
         return executed
 
     def _try_deterministic_service_dependency(

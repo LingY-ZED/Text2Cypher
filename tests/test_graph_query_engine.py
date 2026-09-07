@@ -592,3 +592,59 @@ def test_engine_uses_deterministic_service_dependency_matrix() -> None:
     assert gateway.statements[0].parameters == {
         "receiverServiceName": "ts-notification-service"
     }
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_column", "parameter"),
+    (
+        (
+            "图中名为 email 的消息队列节点一共有多少个？",
+            "队列节点数",
+            {"queueName": "email"},
+        ),
+        (
+            "列出各微服务拥有的默认消息交换机及其交换机类型。",
+            "交换机类型",
+            {"exchangeName": "(default)"},
+        ),
+        (
+            "哪些微服务把 ts-order-other-service 当作 REST 调用目标？",
+            "上游服务",
+            {"targetServiceName": "ts-order-other-service"},
+        ),
+    ),
+)
+def test_engine_uses_deterministic_service_facts(
+    question: str,
+    expected_column: str,
+    parameter: dict[str, str],
+) -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question=question,
+        intent="查询服务图谱事实",
+        required_information=(expected_column,),
+        anchor="事实锚点",
+        query_shape=QueryShape.GENERAL,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled service fact",
+        result=QueryResult(columns=(expected_column,), rows=()),
+    )
+    gateway = DirectStatementGateway(expected)
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert gateway.statements[0].parameters == parameter
