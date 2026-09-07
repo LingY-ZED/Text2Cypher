@@ -161,6 +161,54 @@ def test_engine_compiles_entry_api_call_chain_without_llm() -> None:
     assert _fingerprint(result.result.rows) == _fingerprint(expected)
 
 
+def test_engine_compiles_a_path_only_entry_api_call_chain_without_llm() -> None:
+    settings = Settings.from_environment()
+    provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())
+    try:
+        gateway = DefaultReadOnlyCypherGateway(
+            DefaultCypherParser(),
+            Neo4jCypherValidator(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+            ),
+            Neo4jCypherExecutor(
+                provider.driver,
+                settings.neo4j_database,
+                settings.query_timeout_seconds,
+                settings.max_result_rows,
+            ),
+        )
+        query = PrimaryAgentQuery(
+            query_id="q1",
+            question="查询/api/v1/travelservice/trips/left的调用链",
+            intent="查询 API 调用链",
+            required_information=("完整调用链表格",),
+            anchor="/api/v1/travelservice/trips/left",
+            query_shape=QueryShape.GENERAL,
+        )
+        result = DefaultGraphQueryEngine(
+            prompt_builder=_UnusedPromptBuilder(),
+            llm_client=_UnusedLLM(),
+            read_only_cypher_gateway=gateway,
+        ).query(
+            GraphQueryRequest.from_primary_agent_query(query),
+            QueryContext(GraphSchema()),
+        )
+    finally:
+        provider.close()
+
+    expected = next(
+        intent.expected_snapshot
+        for case in load_cases()
+        if case.id == "travel-left-api-complete-method-call-chain"
+        for intent in case.intents
+    )
+    assert "$anchorQualifiedName" in result.cypher
+    assert "/api/v1/travelservice/trips/left" not in result.cypher
+    assert _fingerprint(result.result.rows) == _fingerprint(expected)
+
+
 def test_engine_batches_all_same_name_method_roots_without_llm() -> None:
     settings = Settings.from_environment()
     provider = Neo4jDriverProvider(settings, retry_policy=RetryPolicy())

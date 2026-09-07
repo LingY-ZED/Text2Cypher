@@ -117,6 +117,21 @@ def test_resolve_entry_api_uses_api_and_service_as_disambiguation() -> None:
     }
 
 
+def test_resolve_entry_api_allows_an_api_path_without_an_http_method() -> None:
+    gateway = _Gateway([QueryResult((), (_method_row(),))])
+
+    resolved = ResolveSymbolTool(gateway).resolve_entry_api(None, "/api/sample")
+
+    assert resolved == (ResolvedMethod(**_method_row()),)
+    assert gateway.statements[0].parameters == {
+        "anchor": "/api/sample",
+        "graphVersion": None,
+        "serviceName": None,
+        "httpMethod": None,
+        "apiPath": "/api/sample",
+    }
+
+
 def _chain_row(**values: object) -> dict[str, object]:
     row: dict[str, object] = {column: None for column in CALL_CHAIN_RESULT_COLUMNS}
     row.update(

@@ -88,21 +88,20 @@ ORDER BY qualified_name, graph_version
 
     def resolve_entry_api(
         self,
-        http_method: str,
+        http_method: str | None,
         api_path: str,
         *,
         service_name: str | None = None,
         graph_version: str | None = None,
     ) -> tuple[ResolvedMethod, ...]:
-        """按 HTTP 方法、API 路径和可选服务确定入口方法。"""
+        """按 API 路径、可选 HTTP 方法和服务确定入口方法。"""
 
-        normalized_method = _text(http_method, "http_method")
         normalized_path = _text(api_path, "api_path")
         parameters = {
             "anchor": normalized_path,
             "graphVersion": _optional_text(graph_version, "graph_version"),
             "serviceName": _optional_text(service_name, "service_name"),
-            "httpMethod": normalized_method,
+            "httpMethod": _optional_text(http_method, "http_method"),
             "apiPath": normalized_path,
         }
         return self._resolve("true", parameters)

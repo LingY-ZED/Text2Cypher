@@ -332,6 +332,63 @@ def test_engine_uses_deterministic_compiler_for_a_uniquely_resolved_call_chain(
     }
 
 
+def test_engine_compiles_a_path_only_api_call_chain_despite_a_general_plan() -> None:
+    query = PrimaryAgentQuery(
+        query_id="q1",
+        question="查询/api/v1/travelservice/trips/left的调用链",
+        intent="查询 API 调用链",
+        required_information=("完整调用链表格",),
+        anchor="/api/v1/travelservice/trips/left",
+        query_shape=QueryShape.GENERAL,
+    )
+    expected = ExecutedCypher(
+        cypher="compiled call chain",
+        result=QueryResult(
+            columns=("根方法",),
+            rows=({"根方法": "travel.service.TravelServiceImpl.getTickets"},),
+        ),
+    )
+    gateway = DeterministicGateway(
+        expected,
+        method_rows=(
+            {
+                "qualified_name": "travel.service.TravelServiceImpl.getTickets",
+                "method_name": "getTickets",
+                "class_qualified_name": "travel.service.TravelServiceImpl",
+                "service_name": "ts-travel-service",
+                "graph_version": "v2",
+            },
+        ),
+    )
+    calls: list[str] = []
+    engine = DefaultGraphQueryEngine(
+        prompt_builder=RecordingPromptBuilder(calls, query),
+        llm_client=RecordingLLM(calls, []),
+        read_only_cypher_gateway=gateway,
+        few_shot_router=RecordingRouter(calls, query),
+    )
+
+    result = engine.query(
+        GraphQueryRequest.from_primary_agent_query(query),
+        QueryContext(GraphSchema()),
+    )
+
+    assert result == expected
+    assert calls == []
+    assert len(gateway.statements) == 2
+    assert gateway.statements[0].parameters == {
+        "anchor": "/api/v1/travelservice/trips/left",
+        "graphVersion": None,
+        "serviceName": None,
+        "httpMethod": None,
+        "apiPath": "/api/v1/travelservice/trips/left",
+    }
+    assert gateway.statements[1].parameters == {
+        "anchorQualifiedName": "travel.service.TravelServiceImpl.getTickets",
+        "graphVersion": "v2",
+    }
+
+
 def test_engine_batches_ambiguous_same_name_methods_without_llm_fallback() -> None:
     query = PrimaryAgentQuery(
         query_id="q1",

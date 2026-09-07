@@ -37,7 +37,7 @@ from text2cypher.domain.ports import (
     PromptBuilder,
     ReadOnlyCypherGateway,
 )
-from text2cypher.domain.query_shapes import QueryShape
+from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
 from text2cypher.graph_core.call_chain import CallChainCypherCompiler
 from text2cypher.graph_core.class_facts import ClassFactCypherCompiler
 from text2cypher.graph_core.method_query import MethodQueryCypherCompiler
@@ -58,6 +58,7 @@ class DefaultGraphQueryEngine:
         r"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(/[^\s，。；！？?]+)",
         flags=re.IGNORECASE,
     )
+    _API_PATH = re.compile(r"(?<![A-Za-z0-9_.-])(/[A-Za-z0-9_./{}:-]+)")
     _SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
     _QUEUE_NAME = re.compile(r"(?:名为|名叫)\s*([A-Za-z0-9_.-]+)")
     _IMPLEMENTATION_CLASS = re.compile(r"\b([A-Z][A-Za-z0-9_]*Impl)\b")
@@ -247,6 +248,16 @@ class DefaultGraphQueryEngine:
         """Run supported method shapes through the parameterized Core when possible."""
 
         query_shape = query.effective_query_shape
+        entry_api = self._entry_api_anchor(query.question)
+        if (
+            entry_api is not None
+            and resolve_query_shape(query.question)
+            is QueryShape.FULL_METHOD_CALL_CHAIN
+        ):
+            # The wording is unambiguously a complete call-chain request.  Keep
+            # it out of the LLM Cypher path even if the planning model labels it
+            # as ``general`` and the user provides only an API path.
+            query_shape = QueryShape.FULL_METHOD_CALL_CHAIN
         supported_shapes = MethodQueryCypherCompiler._SUPPORTED_SHAPES | {
             QueryShape.FULL_METHOD_CALL_CHAIN
         }
@@ -257,7 +268,6 @@ class DefaultGraphQueryEngine:
             return None
 
         resolver = ResolveSymbolTool(gateway)
-        entry_api = self._entry_api_anchor(query.question)
         if query_shape is QueryShape.FULL_METHOD_CALL_CHAIN and entry_api is not None:
             http_method, api_path, service_name = entry_api
             methods = resolver.resolve_entry_api(
@@ -307,14 +317,23 @@ class DefaultGraphQueryEngine:
     def _entry_api_anchor(
         cls,
         question: str,
-    ) -> tuple[str, str, str | None] | None:
+    ) -> tuple[str | None, str, str | None] | None:
         match = cls._ENTRY_API.search(question)
         if match is None:
+            path_match = cls._API_PATH.search(question)
+            if path_match is None:
+                return None
+            http_method: str | None = None
+            api_path = path_match.group(1)
+        else:
+            http_method = match.group(1).upper()
+            api_path = match.group(2)
+        if not api_path:
             return None
         service_match = cls._SERVICE_NAME.search(question)
         return (
-            match.group(1).upper(),
-            match.group(2),
+            http_method,
+            api_path,
             service_match.group(1) if service_match is not None else None,
         )
 
