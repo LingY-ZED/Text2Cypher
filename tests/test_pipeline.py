@@ -26,7 +26,6 @@ from text2cypher.domain.models import (
     Text2CypherResponse,
     ValidationReport,
 )
-from text2cypher.domain.query_shapes import QueryShape
 
 
 class FakeSchemaFetcher:
@@ -424,8 +423,6 @@ def test_pipeline_passes_complete_primary_query_to_planned_ports() -> None:
         "查询 FoodServiceImpl.getAllFood 的调用关系",
         "查询全部上游可达方法和距离",
         ("目标方法", "上游方法", "调用距离"),
-        "FoodServiceImpl.getAllFood",
-        QueryShape.UPSTREAM_REACHABILITY,
     )
 
     class PlannedPrimary:
