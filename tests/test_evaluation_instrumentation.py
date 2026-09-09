@@ -9,12 +9,14 @@ import pytest
 from evaluation.instrumentation import (
     EvaluationLogObserver,
     EvaluationRecorder,
+    RecordingCypherParser,
     RecordingFewShotRouter,
     RecordingGraphQueryEngine,
     RecordingPrimaryAgent,
     RecoveryEventHandler,
     StageLLMClient,
 )
+from text2cypher.components.cypher_parser import DefaultCypherParser
 from text2cypher.domain.models import (
     ChatPrompt,
     ExecutedCypher,
@@ -25,6 +27,15 @@ from text2cypher.domain.models import (
     QueryContext,
     QueryResult,
 )
+
+
+def test_runtime_core_execution_gets_a_query_index_without_engine():
+    recorder = EvaluationRecorder()
+    parser = RecordingCypherParser(DefaultCypherParser(), recorder)
+    parser.parse("RETURN $anchor")
+    parser.parse("RETURN $method")
+    assert [event["query_index"] for event in recorder.events] == [1, 1]
+    assert all(event["source"] == "deterministic" for event in recorder.events)
 
 
 class _SuccessfulClient:

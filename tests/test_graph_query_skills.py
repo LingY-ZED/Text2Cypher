@@ -113,5 +113,5 @@ def test_prompt_knowledge_views_match_the_p3_frozen_rendering() -> None:
         "9c10acd53fb8747fd9cbde884ca5e857610b2b738ff7f4d2cbe525f87535b070"
     )
     assert sha256(primary.system.encode()).hexdigest() == (
-        "8f1b3fafe55002ec119160bd892cddf4b72e2a98048bc21246439b3acde7944f"
+        "f65f292fd9c95a7de5c997163465845b5a35d1361bc8d8541224030096321022"
     )

@@ -38,8 +38,8 @@ def test_loads_abstract_semantic_capabilities_from_package_resource() -> None:
     ) in (
         capabilities
     )
-    assert "完整方法调用链是固定例外" in capabilities
-    assert "服务内、REST、MQ 三种独立视图" in capabilities
+    assert "完整方法调用链同样保留单个查询" in capabilities
+    assert "确定性工具展开" in capabilities
     assert "方法-[:服务于]->上游API" not in capabilities
     assert "MATCH" not in capabilities
     assert "Few-shot" not in capabilities

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -8,7 +10,45 @@ from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable
 
 from text2cypher.components.retry import RetryPolicy
 from text2cypher.domain.errors import CypherValidationError, Neo4jAccessError
+from text2cypher.domain.models import CypherFailureKind
+from text2cypher.infrastructure.neo4j.failure_context import neo4j_error_context
 from text2cypher.infrastructure.neo4j.validator import Neo4jCypherValidator
+from text2cypher.interfaces.logging import JsonLogFormatter
+
+
+def test_explain_diagnostics_reach_json_logs(caplog):
+    status = FakeStatus(
+        "01N52", "unknown property", {"_position": {"line": 3, "column": 9}}
+    )
+    validator = Neo4jCypherValidator(
+        FakeValidatorDriver(statuses=(status,)), "neo4j", 30
+    )
+    with pytest.raises(CypherValidationError):
+        validator.validate("MATCH (n) RETURN n.missing")
+    record = next(r for r in caplog.records if r.getMessage() == "neo4j_explain_failed")
+    payload = json.loads(JsonLogFormatter().format(record))
+    assert {
+        key: payload[key] for key in ("code", "gql_status", "line", "column", "message")
+    } == {
+        "code": None,
+        "gql_status": "01N52",
+        "line": 3,
+        "column": 9,
+        "message": "unknown property",
+    }
+
+
+def test_exception_diagnostic_position_is_extracted():
+    error = SimpleNamespace(
+        message="syntax error",
+        code="Neo.ClientError.Statement.SyntaxError",
+        gql_status="42001",
+        diagnostic_record={"_position": {"line": 2, "column": 7}},
+    )
+    context = neo4j_error_context(
+        CypherFailureKind.VALIDATION, error, fallback_message="failed"
+    )
+    assert (context.line, context.column, context.gql_status) == (2, 7, "42001")
 
 
 @dataclass
@@ -159,7 +199,7 @@ def test_validator_passes_parameters_to_neo4j_explain() -> None:
     assert driver.calls[0][1]["parameters_"] == {"value": 7}
 
 
-def test_validator_preserves_whitelisted_server_error_for_corrector() -> None:
+def test_validator_preserves_whitelisted_server_error_for_corrector(caplog) -> None:
     error = Neo4jError._hydrate_neo4j(
         code="Neo.ClientError.Statement.SyntaxError",
         message="Invalid input 'RETURN': expected ')'",
@@ -178,6 +218,10 @@ def test_validator_preserves_whitelisted_server_error_for_corrector() -> None:
     assert context.gql_status == "50N42"
     assert context.classification == "ClientError"
     assert (context.line, context.column, context.offset) == (1, 18, 17)
+    payload = json.loads(JsonLogFormatter().format(caplog.records[-1]))
+    assert payload["code"] == context.code
+    assert payload["message"] == context.message
+    assert (payload["line"], payload["column"]) == (1, 18)
 
 
 def test_validator_preserves_unknown_property_explain_status_for_corrector() -> None:
@@ -186,9 +230,7 @@ def test_validator_preserves_unknown_property_explain_status_for_corrector() -> 
             FakeStatus(
                 gql_status="01N52",
                 status_description="Unknown property `missing`",
-                diagnostic_record={
-                    "_position": {"line": 1, "column": 8, "offset": 7}
-                },
+                diagnostic_record={"_position": {"line": 1, "column": 8, "offset": 7}},
             ),
         )
     )

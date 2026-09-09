@@ -114,33 +114,15 @@ def test_llm_primary_agent_preserves_impact_views_after_an_invalid_plan() -> Non
     assert all(query.anchor == "InsidePaymentServiceImpl.pay" for query in plan.queries)
 
 
-def test_llm_primary_agent_falls_back_to_three_call_chain_views() -> None:
-    client = StubLLMClient(LLMResponse(content="not-json"))
-
-    plan = LLMPrimaryAgent(client).plan(
-        "POST /api/v1/travelservice/trips/left "
-        "在 ts-travel-service 中的完整调用链是什么？"
+def test_llm_primary_agent_falls_back_to_one_call_chain() -> None:
+    question = "POST /api/example 在 ts-demo-service 图谱版本 v2 的完整调用链"
+    plan = LLMPrimaryAgent(StubLLMClient(LLMResponse(content="not-json"))).plan(
+        question
     )
-
-    assert plan.decomposed is True
-    assert tuple(query.query_shape for query in plan.queries) == (
-        QueryShape.GENERAL,
-        QueryShape.GENERAL,
-        QueryShape.GENERAL,
-    )
-    assert all(
-        query.anchor == "/api/v1/travelservice/trips/left"
-        for query in plan.queries
-    )
-    assert tuple(
-        marker in query.question.lower()
-        for marker, query in zip(("服务内", "rest", "mq"), plan.queries, strict=True)
-    ) == (True, True, True)
-    assert all(
-        "POST /api/v1/travelservice/trips/left" in query.question
-        for query in plan.queries
-    )
-    assert all("ts-travel-service" in query.question for query in plan.queries)
+    assert not plan.decomposed
+    assert plan.queries[0].query_shape is QueryShape.FULL_METHOD_CALL_CHAIN
+    assert plan.queries[0].question == question
+    assert plan.queries[0].anchor == "/api/example"
 
 
 def test_call_chain_fallback_does_not_treat_api_version_as_graph_version() -> None:
@@ -148,7 +130,7 @@ def test_call_chain_fallback_does_not_treat_api_version_as_graph_version() -> No
         "查询 /api/v1/travelservice/trips/left 的调用链"
     )
 
-    assert len(plan.queries) == 3
+    assert len(plan.queries) == 1
     assert all("图谱版本 v1" not in query.question for query in plan.queries)
 
 
@@ -157,8 +139,8 @@ def test_call_chain_fallback_repeats_missing_rest_mapping_constraint() -> None:
         "PollThread.doPreserve 的完整调用链是什么，并保留未映射的 REST 出口？"
     )
 
-    assert len(plan.queries) == 3
-    assert all("未映射 REST 出口" in query.question for query in plan.queries)
+    assert len(plan.queries) == 1
+    assert all("保留未映射的 REST 出口" in query.question for query in plan.queries)
 
 
 @pytest.mark.parametrize("max_queries", [1, 4, True])

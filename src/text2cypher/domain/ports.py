@@ -208,3 +208,9 @@ class ResultSummarizer(Protocol):
         question: str,
         sub_queries: tuple[SubQueryResponse, ...],
     ) -> ResultSummary: ...
+
+
+class CallChainTool(Protocol):
+    """执行完整调用链，None 表示能力未命中。"""
+
+    def query(self, query: PrimaryAgentQuery) -> ExecutedCypher | None: ...

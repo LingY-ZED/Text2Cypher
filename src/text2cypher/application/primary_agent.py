@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
+from text2cypher.components.call_chain_anchor import build_call_chain_plan
 from text2cypher.components.primary_agent import (
     PrimaryAgentPlanError,
     PrimaryAgentPromptBuilder,
@@ -14,22 +15,11 @@ from text2cypher.components.primary_agent import (
 from text2cypher.domain.errors import LLMGenerationError
 from text2cypher.domain.models import PrimaryAgentPlan, PrimaryAgentQuery
 from text2cypher.domain.ports import LLMClient
-from text2cypher.domain.query_shapes import QueryShape, resolve_query_shape
+from text2cypher.domain.query_shapes import QueryShape
 
 _LOGGER = logging.getLogger(__name__)
 _METHOD_REFERENCE = re.compile(
     r"(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)"
-)
-_ENTRY_API = re.compile(
-    r"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(/[^\s，。；！？?]+)",
-    re.IGNORECASE,
-)
-_API_PATH = re.compile(r"(?<![A-Za-z0-9_.-])(/[A-Za-z0-9_./{}:-]+)")
-_SERVICE_NAME = re.compile(r"\b(ts-[A-Za-z0-9-]+-service)\b")
-_GRAPH_VERSION = re.compile(r"图谱版本\s*(?:为|=|：|:)?\s*(v\d+)\b", re.IGNORECASE)
-_SIMPLE_METHOD_REFERENCE = re.compile(
-    r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\s*的?"
-    r"(?:完整|端到端)?调用链",
 )
 
 
@@ -103,7 +93,7 @@ class LLMPrimaryAgent:
     def _fallback_plan(question: str) -> PrimaryAgentPlan:
         """Retain independent impact views when a malformed LLM plan is rejected."""
 
-        call_chain = _call_chain_fallback_plan(question)
+        call_chain = build_call_chain_plan(question)
         if call_chain is not None:
             return call_chain
         anchor = _impact_anchor(question)
@@ -174,126 +164,3 @@ def _impact_anchor(question: str) -> str | None:
         return None
     match = _METHOD_REFERENCE.search(question)
     return match.group(1) if match is not None else None
-
-
-def _call_chain_fallback_plan(question: str) -> PrimaryAgentPlan | None:
-    """Build the three self-contained call-chain views without model output."""
-
-    if resolve_query_shape(question) is not QueryShape.FULL_METHOD_CALL_CHAIN:
-        return None
-    anchor, descriptor = _call_chain_anchor_and_descriptor(question)
-    if anchor is None or descriptor is None:
-        return None
-    return PrimaryAgentPlan(
-        original_question=question,
-        analysis_summary="分别查询服务内、REST 和 MQ 三类调用明细",
-        queries=(
-            PrimaryAgentQuery(
-                query_id="q1",
-                question=(
-                    f"以 {descriptor} 为固定锚点，查询服务内调用明细，"
-                    "服务内方法最多 10 跳。"
-                ),
-                intent="查询根服务内按路径签名和位置索引连续的有序方法路径",
-                required_information=(
-                    "根方法",
-                    "图谱版本",
-                    "源服务",
-                    "源API路径",
-                    "源HTTP方法",
-                    "方法路径",
-                    "叶子方法",
-                ),
-                anchor=anchor,
-                query_shape=QueryShape.GENERAL,
-            ),
-            PrimaryAgentQuery(
-                query_id="q2",
-                question=(
-                    f"以 {descriptor} 为固定锚点，查询 REST 跨服务明细，"
-                    "REST 最多跨两层。"
-                ),
-                intent=(
-                    "从根服务内有序方法路径展开 REST 出口、目标服务、"
-                    "目标 API 和目标入口方法"
-                ),
-                required_information=(
-                    "根方法",
-                    "图谱版本",
-                    "REST层级",
-                    "源服务",
-                    "源API路径",
-                    "源HTTP方法",
-                    "源方法",
-                    "方法路径",
-                    "下游API路径",
-                    "目标服务",
-                    "目标API路径",
-                    "目标HTTP方法",
-                    "目标方法",
-                ),
-                anchor=anchor,
-                query_shape=QueryShape.GENERAL,
-            ),
-            PrimaryAgentQuery(
-                query_id="q3",
-                question=(
-                    f"以 {descriptor} 为固定锚点，查询 MQ 发布消费明细，"
-                    "MQ 最多跨一层。"
-                ),
-                intent=(
-                    "从根服务内有序方法路径展开 MQ 发布、路由、消费及"
-                    "消费者后续方法路径"
-                ),
-                required_information=(
-                    "根方法",
-                    "图谱版本",
-                    "源服务",
-                    "源API路径",
-                    "源HTTP方法",
-                    "发布方法",
-                    "发布方法路径",
-                    "消息交换机",
-                    "消息队列",
-                    "路由键",
-                    "目标服务",
-                    "消费方法",
-                    "消费者方法路径",
-                ),
-                anchor=anchor,
-                query_shape=QueryShape.GENERAL,
-            ),
-        ),
-    )
-
-
-def _call_chain_anchor_and_descriptor(
-    question: str,
-) -> tuple[str | None, str | None]:
-    entry_match = _ENTRY_API.search(question)
-    path_match = _API_PATH.search(question)
-    method_match = _METHOD_REFERENCE.search(question)
-    simple_match = _SIMPLE_METHOD_REFERENCE.search(question)
-    if entry_match is not None:
-        anchor = entry_match.group(2)
-        parts = [f"{entry_match.group(1).upper()} {anchor}"]
-    elif path_match is not None:
-        anchor = path_match.group(1)
-        parts = [anchor]
-    elif method_match is not None:
-        anchor = method_match.group(1)
-        parts = [anchor]
-    elif simple_match is not None:
-        anchor = simple_match.group(1)
-        parts = [anchor]
-    else:
-        return None, None
-    service_match = _SERVICE_NAME.search(question)
-    if service_match is not None:
-        parts.append(f"服务 {service_match.group(1)}")
-    version_match = _GRAPH_VERSION.search(question)
-    if version_match is not None:
-        parts.append(f"图谱版本 {version_match.group(1)}")
-    if "未映射" in question or "映射缺失" in question:
-        parts.append("保留未映射 REST 出口")
-    return anchor, "、".join(parts)

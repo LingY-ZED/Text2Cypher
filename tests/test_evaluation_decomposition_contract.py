@@ -10,6 +10,25 @@ from evaluation.models import (
     EvaluationIntent,
 )
 from evaluation.run import _decomposition_contract_passed
+from text2cypher.domain.models import QueryResult, SubQueryResponse, Text2CypherResponse
+
+
+def test_runtime_response_does_not_require_a_primary_llm_event():
+    response = Text2CypherResponse(
+        question="question",
+        formatted="result",
+        sub_queries=(SubQueryResponse("question", "RETURN 1", QueryResult((), ())),),
+    )
+    assert _decomposition_contract_passed(
+        _case(DecompositionContract.MUST_PRESERVE),
+        [],
+        response,
+    )
+    assert not _decomposition_contract_passed(
+        _case(DecompositionContract.MUST_SPLIT),
+        [],
+        response,
+    )
 
 
 def _case(contract: DecompositionContract) -> EvaluationCase:

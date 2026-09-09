@@ -14,6 +14,7 @@ from text2cypher.domain.ports import (
     FewShotRouter,
     GraphQueryEngine,
     LLMClient,
+    ParameterizedReadOnlyCypherGateway,
     PrimaryAgent,
     PromptBuilder,
     QuestionDecomposer,
@@ -25,7 +26,9 @@ from text2cypher.domain.ports import (
 from text2cypher.graph_core.readonly_cypher_gateway import DefaultReadOnlyCypherGateway
 from text2cypher.query_engine.engine import DefaultGraphQueryEngine
 from text2cypher.runtime.single_round import SingleRoundRuntime
+from text2cypher.tools.find_call_chain import FindCallChainTool
 from text2cypher.tools.query_code_graph import QueryCodeGraphTool
+from text2cypher.tools.resolve_symbol import ResolveSymbolTool
 from text2cypher.tools.schema import GetSchemaTool
 
 
@@ -72,6 +75,11 @@ def build_single_round_runtime(components: PipelineComponents) -> SingleRoundRun
     )
     return SingleRoundRuntime(
         schema_tool=GetSchemaTool(components.schema_fetcher),
+        call_chain_tool=(
+            FindCallChainTool(ResolveSymbolTool(read_only_gateway), read_only_gateway)
+            if isinstance(read_only_gateway, ParameterizedReadOnlyCypherGateway)
+            else None
+        ),
         query_code_graph_tool=QueryCodeGraphTool(query_engine),
         result_summarizer=components.result_summarizer,
         primary_agent=components.primary_agent,

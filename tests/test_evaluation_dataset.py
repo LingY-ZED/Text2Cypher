@@ -1,14 +1,11 @@
+
 """Tests for the frozen version-6 evaluation dataset."""
 
 from __future__ import annotations
 
 from collections import Counter
 
-from evaluation.call_chain_oracles import (
-    LOCAL_CALL_CHAIN_COLUMNS,
-    MQ_CALL_CHAIN_COLUMNS,
-    REST_CALL_CHAIN_COLUMNS,
-)
+from evaluation.call_chain_oracles import CALL_CHAIN_COLUMNS
 from evaluation.dataset import load_cases
 from evaluation.models import (
     ComparisonMode,
@@ -147,26 +144,12 @@ def test_decomposition_contracts_and_local_aliases_are_explicit() -> None:
         if "complete-method-call-chain" in case.id
     }
     assert all(
-        case.decomposition_contract is DecompositionContract.MUST_SPLIT
-        and tuple(intent.id for intent in case.intents)
-        == ("local_call_chain", "rest_call_chain", "mq_call_chain")
-        and tuple(intent.expected_columns for intent in case.intents)
-        == (
-            LOCAL_CALL_CHAIN_COLUMNS,
-            REST_CALL_CHAIN_COLUMNS,
-            MQ_CALL_CHAIN_COLUMNS,
-        )
+        case.decomposition_contract is DecompositionContract.MUST_PRESERVE
+        and len(case.intents) == 1
+        and case.intents[0].expected_columns == CALL_CHAIN_COLUMNS
+        and case.intents[0].expected_snapshot
         for case in complete_chain_cases.values()
     )
-    assert {
-        case_id: tuple(len(intent.expected_snapshot) for intent in case.intents)
-        for case_id, case in complete_chain_cases.items()
-    } == {
-        "travel-left-api-complete-method-call-chain": (3, 5, 0),
-        "inside-payment-pay-complete-method-call-chain": (2, 7, 0),
-        "preserve-rabbit-send-complete-method-call-chain": (1, 0, 1),
-        "poll-thread-complete-method-call-chain-missing-rest-mapping": (1, 1, 0),
-    }
     assert all(
         case.decomposition_contract is DecompositionContract.MUST_PRESERVE
         and len(case.intents) == 1

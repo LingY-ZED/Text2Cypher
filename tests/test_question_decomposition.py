@@ -80,8 +80,8 @@ def test_decomposition_preserves_directional_paths_and_splits_full_method(
     ) in (
         prompt.system
     )
-    assert "完整方法调用链是固定例外" in prompt.system
-    assert "服务内、REST、MQ 三种独立视图" in prompt.system
+    assert "完整方法调用链同样保留单个查询" in prompt.system
+    assert "确定性工具展开" in prompt.system
     assert "资源子问题必须重复 A 锚点并独立推导 B" in prompt.system
 
 

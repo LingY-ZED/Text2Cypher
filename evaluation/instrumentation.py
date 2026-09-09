@@ -237,6 +237,9 @@ class RecordingCypherParser:
         self._recorder = recorder
 
     def parse(self, text: str) -> str:
+        # Runtime tools can reach Core without entering GraphQueryEngine.
+        if self._recorder.current_query_index == 0:
+            self._recorder.begin_query()
         source = self._recorder.last_candidate_stage or "unknown"
         try:
             cypher = self._delegate.parse(text)

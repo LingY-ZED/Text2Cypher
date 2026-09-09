@@ -18,7 +18,11 @@ from text2cypher.domain.errors import (
     Neo4jAccessError,
     Neo4jConnectionError,
 )
-from text2cypher.domain.models import CypherFailureKind, ValidationReport
+from text2cypher.domain.models import (
+    CypherFailureContext,
+    CypherFailureKind,
+    ValidationReport,
+)
 from text2cypher.infrastructure.neo4j.failure_context import (
     neo4j_error_context,
     neo4j_status_context,
@@ -108,17 +112,19 @@ class Neo4jCypherValidator:
                 ),
             )
         except (DriverError, Neo4jError) as error:
+            context = neo4j_error_context(
+                CypherFailureKind.VALIDATION,
+                error,
+                fallback_message="Neo4j EXPLAIN 未通过校验。",
+            )
+            _log_explain_failure(context)
             if is_neo4j_access_error(error):
                 raise Neo4jAccessError("Neo4j 拒绝执行 EXPLAIN 查询") from None
             if is_transient_neo4j_error(error):
                 raise Neo4jConnectionError("Neo4j 暂时无法执行 EXPLAIN 查询") from None
             raise CypherValidationError(
                 "Cypher 未通过 Neo4j EXPLAIN 校验",
-                failure_context=neo4j_error_context(
-                    CypherFailureKind.VALIDATION,
-                    error,
-                    fallback_message="Neo4j EXPLAIN 未通过校验。",
-                ),
+                failure_context=context,
             ) from None
 
         summary = self._summary(result)
@@ -135,13 +141,15 @@ class Neo4jCypherValidator:
             ),
             None,
         ):
+            context = neo4j_status_context(
+                CypherFailureKind.VALIDATION,
+                unknown_property_status,
+                fallback_message="Neo4j EXPLAIN 指出 Cypher 使用了不存在的属性。",
+            )
+            _log_explain_failure(context)
             raise CypherValidationError(
                 "Cypher 使用了当前 Schema 中不存在的属性",
-                failure_context=neo4j_status_context(
-                    CypherFailureKind.VALIDATION,
-                    unknown_property_status,
-                    fallback_message="Neo4j EXPLAIN 指出 Cypher 使用了不存在的属性。",
-                ),
+                failure_context=context,
             )
         return ValidationReport(
             query_type=query_type,
@@ -219,11 +227,26 @@ class Neo4jCypherValidator:
     @staticmethod
     def _ensure_single_statement(sanitized: str) -> None:
         semicolons = [
-            index
-            for index, character in enumerate(sanitized)
-            if character == ";"
+            index for index, character in enumerate(sanitized) if character == ";"
         ]
         if not semicolons:
             return
         if len(semicolons) != 1 or sanitized[semicolons[0] + 1 :].strip():
             raise CypherValidationError("Cypher 不允许包含多个语句")
+
+
+def _log_explain_failure(context: CypherFailureContext) -> None:
+    _LOGGER.warning(
+        "neo4j_explain_failed",
+        extra={
+            "neo4j_event": {
+                "event": "neo4j_explain_failed",
+                "stage": "explain",
+                "code": context.code,
+                "gql_status": context.gql_status,
+                "line": context.line,
+                "column": context.column,
+                "message": context.message,
+            }
+        },
+    )

@@ -16,6 +16,9 @@ class JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        neo4j_event = getattr(record, "neo4j_event", None)
+        if isinstance(neo4j_event, dict):
+            payload.update(neo4j_event)
         recovery_event = getattr(record, "recovery_event", None)
         if isinstance(recovery_event, dict):
             payload.update(recovery_event)

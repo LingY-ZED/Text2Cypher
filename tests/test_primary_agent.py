@@ -53,25 +53,15 @@ def test_primary_agent_prompt_defines_independent_three_view_splits() -> None:
     assert "三个服务级子问题均使用 `general`" in prompt.system
 
 
-def test_primary_agent_prompt_requires_three_independent_call_chain_views() -> None:
+def test_primary_agent_prompt_preserves_complete_call_chain() -> None:
     prompt = PrimaryAgentPromptBuilder().build(
         "POST /api/example 在 ts-demo-service 中的完整调用链是什么？",
         3,
     )
 
-    assert "完整方法调用链是固定例外" in prompt.system
-    assert "必须正好输出三个 query_shape=general 的查询" in prompt.user
-    assert "服务内调用明细、REST 跨服务明细、MQ 发布消费明细" in prompt.user
-    assert "逐字包含原问题中的 API 路径或方法锚点" in prompt.user
-    assert "根方法、图谱版本、源服务、源API路径、源HTTP方法" in prompt.user
-    assert "完整 JSON 规划示例" in prompt.user
-    assert prompt.user.count('"query_shape":"general"') == 3
-    assert prompt.user.count("/api/example") >= 4
-    assert prompt.user.count("ts-demo-service") >= 4
-    assert "同一 API 的请求与响应字段" in prompt.system
-    assert "同一 REST 调用的调用方与目标字段" in prompt.system
-    assert "同一分组的维度与聚合值" in prompt.system
-    assert "MATCH" not in prompt.system
+    assert "完整调用链保留单个查询，由确定性工具展开" in prompt.system
+    assert "三个 query_shape=general" not in prompt.user
+    assert "完整 JSON 规划示例" not in prompt.user
 
 
 @pytest.mark.parametrize(
@@ -125,7 +115,7 @@ def test_primary_agent_parser_accepts_and_validates_explicit_semantic_plan() -> 
     assert plan.queries[0].effective_query_shape.value == "full_entry_chain"
 
 
-def test_primary_agent_parser_accepts_fixed_full_method_split() -> None:
+def test_primary_agent_parser_rejects_fixed_full_method_split() -> None:
     question = (
         "POST /api/example 在 ts-demo-service 中、图谱版本 v2 的完整调用链是什么？"
     )
@@ -197,15 +187,49 @@ def test_primary_agent_parser_accepts_fixed_full_method_split() -> None:
         ensure_ascii=False,
     )
 
-    plan = PrimaryAgentResponseParser().parse(content, question, 3)
+    with pytest.raises(PrimaryAgentPlanError, match="不得拆分"):
+        PrimaryAgentResponseParser().parse(content, question, 3)
 
-    assert plan.decomposed is True
-    assert tuple(query.query_shape.value for query in plan.queries) == (
-        "general",
-        "general",
-        "general",
+
+@pytest.mark.parametrize("anchor", ["/api/example", "Service.run"])
+def test_primary_agent_accepts_single_complete_chain(anchor):
+    question = f"{anchor} 的完整调用链"
+    content = json.dumps(
+        {
+            "analysis_summary": "查询完整调用链",
+            "queries": [
+                {
+                    "question": question,
+                    "anchor": anchor,
+                    "query_shape": "full_method_call_chain",
+                    "intent": "查询调用链",
+                    "required_information": ["调用链分段"],
+                }
+            ],
+        }
     )
-    assert all(query.anchor == anchor for query in plan.queries)
+    plan = PrimaryAgentResponseParser().parse(content, question, 3)
+    assert not plan.decomposed
+    assert plan.queries[0].query_shape.value == "full_method_call_chain"
+
+
+def test_primary_agent_rejects_single_general_downgrade():
+    content = json.dumps(
+        {
+            "analysis_summary": "查询",
+            "queries": [
+                {
+                    "question": "查询 Service.run 的调用明细",
+                    "anchor": "Service.run",
+                    "query_shape": "general",
+                    "intent": "查询",
+                    "required_information": ["明细"],
+                }
+            ],
+        }
+    )
+    with pytest.raises(PrimaryAgentPlanError, match="原查询形状"):
+        PrimaryAgentResponseParser().parse(content, "Service.run 的完整调用链", 3)
 
 
 @pytest.mark.parametrize(
@@ -259,7 +283,7 @@ def test_primary_agent_parser_accepts_fixed_full_method_split() -> None:
             '"required_information":["下游 API"]},'
             '{"question":"查询 A 的 MQ 分段","intent":"MQ",'
             '"required_information":["消息队列"]}]}',
-            "必须拆成三个查询",
+            "不得拆分",
         ),
         (
             "查询到达 ts-order-other-service 的 REST 上游跨服务链",

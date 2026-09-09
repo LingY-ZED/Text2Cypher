@@ -21,13 +21,18 @@ def neo4j_error_context(
     """从服务端异常提取有限诊断，不保留任意 metadata。"""
 
     metadata = _mapping(getattr(error, "metadata", None))
+    diagnostic = _mapping(getattr(error, "diagnostic_record", None))
+    position = (
+        _mapping(metadata.get("position"))
+        or _mapping(diagnostic.get("_position") or diagnostic.get("position"))
+    )
     return _context(
         kind,
         message=_text(getattr(error, "message", None)) or fallback_message,
         code=_text(getattr(error, "code", None)),
         gql_status=_text(getattr(error, "gql_status", None)),
         classification=_text(getattr(error, "classification", None)),
-        position=_mapping(metadata.get("position")),
+        position=position,
     )
 
 

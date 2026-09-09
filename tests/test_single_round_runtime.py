@@ -149,7 +149,7 @@ def test_runtime_uses_tools_once_and_returns_unformatted_structured_run() -> Non
     assert all(context.schema is schema for context in engine.contexts)
 
 
-def test_runtime_executes_three_call_chain_views_in_fixed_order() -> None:
+def test_runtime_falls_back_to_one_query_when_tool_unavailable() -> None:
     calls: list[str] = []
     engine = _RecordingGraphQueryEngine(calls)
     runtime = SingleRoundRuntime(
@@ -160,14 +160,10 @@ def test_runtime_executes_three_call_chain_views_in_fixed_order() -> None:
 
     run = runtime.run("查询 /api/example 的调用链")
 
-    assert calls == ["schema", "plan", "query:q1", "query:q2", "query:q3"]
-    assert run.plan.decomposed is True
-    assert len(run.sub_queries) == 3
-    assert tuple(request.intent for request in engine.requests) == (
-        "local",
-        "rest",
-        "mq",
-    )
+    assert calls == ["schema", "query:q1"]
+    assert not run.plan.decomposed
+    assert len(run.sub_queries) == 1
+    assert engine.requests[0].query_shape is QueryShape.GENERAL
 
 
 def test_runtime_stops_before_summary_when_a_later_tool_query_fails() -> None:

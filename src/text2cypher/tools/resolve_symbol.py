@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from text2cypher.domain.errors import CypherExecutionError
 from text2cypher.domain.models import QueryStatement, ResolvedMethod
 from text2cypher.domain.ports import ParameterizedReadOnlyCypherGateway
 
@@ -116,6 +117,8 @@ ORDER BY qualified_name, graph_version
             parameters=parameters,
         )
         executed = self._gateway.execute_statement(statement)
+        if executed.result.truncated:
+            raise CypherExecutionError("实体解析结果超过安全行数上限")
         return tuple(
             ResolvedMethod(
                 qualified_name=_row_value(row, "qualified_name"),

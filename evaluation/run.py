@@ -404,7 +404,7 @@ def _case_record(
     initial_syntax = all(
         any(
             event.get("stage") == "explain"
-            and event.get("source") == "generation"
+            and event.get("source") in {"generation", "deterministic"}
             and event.get("outcome") == "succeeded"
             for event in events
         )
@@ -413,7 +413,7 @@ def _case_record(
     initial_execution = all(
         any(
             event.get("stage") == "execute"
-            and event.get("source") == "generation"
+            and event.get("source") in {"generation", "deterministic"}
             and event.get("outcome") == "succeeded"
             for event in events
         )
@@ -423,6 +423,7 @@ def _case_record(
     decomposition_contract_passed = _decomposition_contract_passed(
         case,
         recorder.events,
+        response,
     )
     decomposition = _decomposition_observation(recorder.events)
     sub_queries = _response_payload(response)
@@ -458,7 +459,10 @@ def _case_record(
             if error is not None
             else None
         ),
-        "decomposed": decomposition[0] if decomposition is not None else None,
+        "decomposed": (
+            response.decomposed if response is not None
+            else decomposition[0] if decomposition is not None else None
+        ),
         "sub_queries": sub_queries,
         "selected_example_ids": [
             event.get("selected_ids", [])
@@ -526,10 +530,14 @@ def _semantic_verdict(
 def _decomposition_contract_passed(
     case: EvaluationCase,
     events: Sequence[Mapping[str, Any]],
+    response: Text2CypherResponse | None = None,
 ) -> bool:
     if case.decomposition_contract.value == "any":
         return True
-    observation = _decomposition_observation(events)
+    observation = (
+        (response.decomposed, len(response.sub_queries))
+        if response is not None else _decomposition_observation(events)
+    )
     if observation is None:
         return False
     decomposed, sub_question_count = observation
