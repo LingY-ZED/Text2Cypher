@@ -30,6 +30,12 @@ def _non_negative_int(value: object, field_name: str) -> int:
     return value
 
 
+def _bounded_int(value: object, field_name: str, *, maximum: int) -> int:
+    if type(value) is not int or not 0 <= value <= maximum:
+        raise ValueError(f"{field_name}必须是0到{maximum}的整数")
+    return value
+
+
 def _texts(values: object, field_name: str, *, allow_empty: bool) -> tuple[str, ...]:
     if type(values) is not tuple:
         raise TypeError(f"{field_name}必须是元组")
@@ -121,9 +127,9 @@ class FindCallChainActionInput:
 
     def __post_init__(self) -> None:
         _validate_action_values(self)
-        _positive_int(self.local_hops, "local_hops")
-        _positive_int(self.rest_hops, "rest_hops")
-        _positive_int(self.mq_hops, "mq_hops")
+        _bounded_int(self.local_hops, "local_hops", maximum=10)
+        _bounded_int(self.rest_hops, "rest_hops", maximum=2)
+        _bounded_int(self.mq_hops, "mq_hops", maximum=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +166,8 @@ class QueryCodeGraphActionInput:
             raise TypeError("query_shape必须是QueryShape或None")
         if self.query_shape is QueryShape.FULL_METHOD_CALL_CHAIN:
             raise ValueError("完整调用链必须使用find_call_chain Tool")
+        if (self.anchor is None) is not (self.query_shape is None):
+            raise ValueError("anchor和query_shape必须同时提供或同时省略")
 
 
 type RuntimeActionInput = (

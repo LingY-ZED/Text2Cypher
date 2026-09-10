@@ -235,13 +235,13 @@ class IterativePlannerResponseParser:
                     raw_input.get("graph_version"), "graph_version"
                 ),
                 local_hops=self._parse_positive_int(
-                    raw_input.get("local_hops", 10), "local_hops"
+                    raw_input.get("local_hops", 10), "local_hops", maximum=10
                 ),
                 rest_hops=self._parse_positive_int(
-                    raw_input.get("rest_hops", 2), "rest_hops"
+                    raw_input.get("rest_hops", 2), "rest_hops", maximum=2
                 ),
                 mq_hops=self._parse_positive_int(
-                    raw_input.get("mq_hops", 1), "mq_hops"
+                    raw_input.get("mq_hops", 1), "mq_hops", maximum=1
                 ),
                 service_name=self._parse_optional_action_value(
                     raw_input.get("service_name"), "service_name"
@@ -376,9 +376,16 @@ class IterativePlannerResponseParser:
         return tuple(cls._parse_text(item, field_name) for item in value)
 
     @staticmethod
-    def _parse_positive_int(value: object, field_name: str) -> int:
-        if type(value) is not int or value <= 0:
-            raise IterativePlannerResponseError(f"{field_name}必须是正整数")
+    def _parse_positive_int(
+        value: object,
+        field_name: str,
+        *,
+        maximum: int,
+    ) -> int:
+        if type(value) is not int or not 0 <= value <= maximum:
+            raise IterativePlannerResponseError(
+                f"{field_name}必须是0到{maximum}的整数"
+            )
         return value
 
     @staticmethod
