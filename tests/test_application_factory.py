@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import pytest
 
+from text2cypher import IterativeRuntime as PublicIterativeRuntime
 from text2cypher.application.factory import (
     PipelineComponents,
+    build_iterative_runtime,
     build_pipeline_from_components,
+)
+from text2cypher.domain.iterative import (
+    IterativePlan,
+    PlanDecision,
+    QueryCodeGraphActionInput,
+    RuntimeAction,
+    RuntimeToolName,
 )
 from text2cypher.domain.models import (
     ExecutedCypher,
@@ -12,6 +21,9 @@ from text2cypher.domain.models import (
     GraphSchema,
     QueryContext,
     QueryResult,
+    ResultSummary,
+    ResultSummaryFallbackReason,
+    ResultSummaryMode,
     SubQueryResponse,
 )
 
@@ -34,7 +46,7 @@ class _GraphQueryEngine:
         request: GraphQueryRequest,
         context: QueryContext,
     ) -> ExecutedCypher:
-        assert request.query_id == "q1"
+        assert request.query_id in {"q1", "r1a1"}
         assert context.schema == GraphSchema()
         self._calls.append("engine")
         return ExecutedCypher("RETURN 1", QueryResult(("value",), ({"value": 1},)))
@@ -87,3 +99,52 @@ def test_factory_builds_the_pipeline_from_explicit_components() -> None:
 def test_factory_rejects_a_missing_interface_formatter() -> None:
     with pytest.raises(ValueError, match="ResultFormatter"):
         build_pipeline_from_components(_components([]))
+
+
+def test_factory_builds_explicit_iterative_runtime_without_changing_pipeline() -> None:
+    calls: list[str] = []
+
+    class _Planner:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, context):  # type: ignore[no-untyped-def]
+            del context
+            self.calls += 1
+            if self.calls == 1:
+                return IterativePlan(
+                    PlanDecision.CONTINUE,
+                    (),
+                    ("服务",),
+                    (
+                        RuntimeAction(
+                            "r1a1",
+                            RuntimeToolName.QUERY_CODE_GRAPH,
+                            "查询服务",
+                            ("服务",),
+                            QueryCodeGraphActionInput("查询服务"),
+                        ),
+                    ),
+                )
+            return IterativePlan(PlanDecision.COMPLETE, ("服务",), (), ())
+
+    class _Answerer:
+        def answer(self, context):  # type: ignore[no-untyped-def]
+            assert context.stop_reason.value == "complete"
+            return ResultSummary(
+                "答案",
+                ResultSummaryMode.TEMPLATE,
+                ResultSummaryFallbackReason.DISABLED,
+            )
+
+    runtime = build_iterative_runtime(
+        _components(calls),
+        planner=_Planner(),
+        answerer=_Answerer(),
+    )
+
+    run = runtime.run("问题")
+
+    assert isinstance(runtime, PublicIterativeRuntime)
+    assert run.stop_reason.value == "complete"
+    assert calls == ["schema", "engine"]

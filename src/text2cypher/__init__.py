@@ -19,6 +19,7 @@ from text2cypher.domain.models import (
     SubQueryResponse,
     Text2CypherResponse,
 )
+from text2cypher.runtime import IterativeRuntime
 
 __all__ = [
     "ChatPrompt",
@@ -28,6 +29,7 @@ __all__ = [
     "FewShotExample",
     "FewShotSchemaRequirements",
     "GraphSchema",
+    "IterativeRuntime",
     "LLMResponse",
     "PrimaryAgentPlan",
     "PrimaryAgentQuery",

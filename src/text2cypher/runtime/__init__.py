@@ -1,5 +1,6 @@
-"""当前兼容模式的单轮 Agent Runtime。"""
+"""单轮兼容 Runtime 与显式 IterativeRuntime。"""
 
+from .iterative import IterativeRuntime
 from .single_round import SingleRoundRuntime
 
-__all__ = ["SingleRoundRuntime"]
+__all__ = ["IterativeRuntime", "SingleRoundRuntime"]
