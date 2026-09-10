@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
+from text2cypher.domain.iterative import (
+    IterativeAnswerContext,
+    IterativePlan,
+    IterativePlanningContext,
+)
 from text2cypher.domain.models import (
     ChatPrompt,
     CypherFailureContext,
@@ -19,6 +24,7 @@ from text2cypher.domain.models import (
     QueryResult,
     QueryStatement,
     QuestionDecomposition,
+    ResolvedMethod,
     ResultSummary,
     SubQueryResponse,
     ValidationReport,
@@ -214,3 +220,50 @@ class CallChainTool(Protocol):
     """执行完整调用链，None 表示能力未命中。"""
 
     def query(self, query: PrimaryAgentQuery) -> ExecutedCypher | None: ...
+
+
+@runtime_checkable
+class SymbolResolverTool(Protocol):
+    """为 IterativeRuntime 解析稳定方法实体。"""
+
+    def resolve_symbol(
+        self,
+        anchor: str,
+        *,
+        graph_version: str | None = None,
+        service_name: str | None = None,
+        http_method: str | None = None,
+        api_path: str | None = None,
+    ) -> tuple[ResolvedMethod, ...]: ...
+
+
+@runtime_checkable
+class CallChainLookupTool(Protocol):
+    """为 IterativeRuntime 执行结构化完整调用链查询。"""
+
+    def execute(
+        self,
+        anchor: str,
+        *,
+        graph_version: str | None = None,
+        local_hops: int = 10,
+        rest_hops: int = 2,
+        mq_hops: int = 1,
+        service_name: str | None = None,
+        http_method: str | None = None,
+        api_path: str | None = None,
+    ) -> ExecutedCypher | None: ...
+
+
+@runtime_checkable
+class IterativePlanner(Protocol):
+    """基于历史 Observation 判断充分性并规划下一批 Action。"""
+
+    def plan(self, context: IterativePlanningContext) -> IterativePlan: ...
+
+
+@runtime_checkable
+class IterativeAnswerer(Protocol):
+    """根据紧凑终态生成一次最终答案。"""
+
+    def answer(self, context: IterativeAnswerContext) -> ResultSummary: ...
