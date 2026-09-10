@@ -351,3 +351,32 @@ def test_iterative_runtime_records_invalid_binding_without_calling_tool() -> Non
     assert chain_tool.anchors == []
     assert run.observations[0].status is ObservationStatus.FAILED
     assert run.observations[0].error_type == "BindingResolutionError"
+
+
+def test_query_tool_internal_recovery_remains_one_outer_action() -> None:
+    class _RecoveringQueryTool(_QueryTool):
+        def __init__(self) -> None:
+            super().__init__()
+            self.recovery_attempts = 0
+
+        def query(
+            self,
+            request: GraphQueryRequest,
+            context: QueryContext,
+        ) -> ExecutedCypher:
+            self.recovery_attempts += 2
+            return super().query(request, context)
+
+    planner = _SequencePlanner(
+        (_continue(_query_action("r1a1")), _complete())
+    )
+    answerer = _Answerer()
+    query_tool = _RecoveringQueryTool()
+
+    run = _runtime(planner, answerer, query_tool=query_tool).run("查询服务")
+
+    assert query_tool.recovery_attempts == 2
+    assert len(query_tool.requests) == 1
+    assert run.actions_consumed == 1
+    assert run.rounds_executed == 1
+    assert run.stop_reason is IterativeStopReason.COMPLETE
